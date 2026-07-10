@@ -1,0 +1,16 @@
+{
+  "name": "smart-work-schedule",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Локальный сайт для регистрации сотрудников и ведения графиков работ по торговым точкам.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test tests/run-tests.js",
+    "smoke": "node tests/smoke.js",
+    "migrate:supabase": "node scripts/migrate-to-supabase.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

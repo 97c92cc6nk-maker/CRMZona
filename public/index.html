@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Умный график работ</title>
+    <link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="auth-screen" id="authScreen">
+      <section class="auth-panel" aria-labelledby="authTitle">
+        <div class="brand">
+          <img src="/assets/mark.svg" alt="" width="48" height="48">
+          <div>
+            <h1 id="authTitle">Умный график работ</h1>
+            <p>Торговые точки и смены</p>
+          </div>
+        </div>
+
+        <div class="segmented" role="tablist" aria-label="Авторизация">
+          <button class="segment is-active" type="button" id="showLogin" aria-selected="true">Вход</button>
+          <button class="segment" type="button" id="showRegister" aria-selected="false">Регистрация</button>
+        </div>
+
+        <form class="auth-form is-active" id="loginForm">
+          <label>
+            Email
+            <input name="email" type="email" autocomplete="email" required>
+          </label>
+          <label>
+            Пароль
+            <input name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <div class="auth-actions">
+            <button class="primary" type="submit">Войти</button>
+            <button class="ghost" type="button" id="showForgot">Забыли пароль?</button>
+          </div>
+        </form>
+
+        <form class="auth-form" id="forgotPasswordForm">
+          <label>
+            Email
+            <input name="email" type="email" autocomplete="email" required maxlength="180">
+          </label>
+          <div class="auth-actions">
+            <button class="primary" type="submit">Сбросить пароль</button>
+            <button class="secondary" type="button" id="cancelForgot">Назад</button>
+          </div>
+        </form>
+
+        <form class="auth-form" id="registerForm">
+          <label>
+            ФИО
+            <input name="fullName" type="text" autocomplete="name" required maxlength="120">
+          </label>
+          <label>
+            Номер телефона
+            <input name="phone" type="tel" autocomplete="tel" required maxlength="32">
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" autocomplete="email" required maxlength="180">
+          </label>
+          <button class="primary" type="submit">Зарегистрироваться</button>
+        </form>
+
+        <div class="notice" id="authNotice" role="status" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <main class="app-shell is-hidden" id="appShell">
+      <header class="topbar">
+        <div class="brand compact">
+          <img src="/assets/mark.svg" alt="" width="38" height="38">
+          <div>
+            <h1>Умный график работ</h1>
+            <p id="currentUserLine"></p>
+          </div>
+        </div>
+        <nav class="tabs" aria-label="Разделы">
+          <button class="tab is-active" type="button" data-view="profileView">Личный кабинет</button>
+          <button class="tab is-hidden" type="button" data-view="employeesView" id="employeesTab">Сотрудники</button>
+          <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
+          <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
+        </nav>
+        <button class="ghost" type="button" id="logoutButton">Выйти</button>
+      </header>
+
+      <section class="view is-active" id="profileView" aria-labelledby="profileTitle">
+        <div class="section-head">
+          <h2 id="profileTitle">Личный кабинет</h2>
+          <span class="pill" id="rolePill"></span>
+        </div>
+
+        <div class="profile-grid">
+          <section class="panel" aria-labelledby="accountTitle">
+            <h3 id="accountTitle">Профиль</h3>
+            <dl class="details">
+              <div><dt>ФИО</dt><dd id="profileName"></dd></div>
+              <div><dt>Телефон</dt><dd id="profilePhone"></dd></div>
+              <div><dt>Email</dt><dd id="profileEmail"></dd></div>
+              <div><dt>Доступ</dt><dd id="profileRole"></dd></div>
+            </dl>
+          </section>
+
+          <section class="panel" aria-labelledby="passwordTitle">
+            <h3 id="passwordTitle">Смена пароля</h3>
+            <form class="inline-form" id="passwordForm">
+              <label>
+                Текущий пароль
+                <input name="currentPassword" type="password" autocomplete="current-password" required>
+              </label>
+              <label>
+                Новый пароль
+                <input name="newPassword" type="password" autocomplete="new-password" minlength="10" required>
+              </label>
+              <button class="primary" type="submit">Обновить</button>
+            </form>
+          </section>
+        </div>
+
+        <section class="panel is-hidden" id="usersPanel" aria-labelledby="usersTitle">
+          <div class="panel-head">
+            <h3 id="usersTitle">Пользователи</h3>
+            <button class="secondary" type="button" id="refreshUsers">Обновить</button>
+          </div>
+          <div class="table-wrap">
+            <table class="users-table">
+              <thead>
+                <tr>
+                  <th>ФИО</th>
+                  <th>Телефон</th>
+                  <th>Email</th>
+                  <th>Доступ</th>
+                </tr>
+              </thead>
+              <tbody id="usersBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel is-hidden" id="auditPanel" aria-labelledby="auditTitle">
+          <div class="panel-head">
+            <h3 id="auditTitle">Важные действия</h3>
+            <button class="secondary" type="button" id="refreshAudit">Обновить</button>
+          </div>
+          <ol class="audit-list" id="auditList"></ol>
+        </section>
+
+        <div class="notice" id="profileNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="employeesView" aria-labelledby="employeesTitle">
+        <div class="section-head">
+          <h2 id="employeesTitle">Сотрудники</h2>
+          <button class="secondary" type="button" id="refreshEmployees">Обновить</button>
+        </div>
+
+        <section class="panel is-hidden" id="employeeAddPanel" aria-labelledby="employeeAddTitle">
+          <h3 id="employeeAddTitle">Добавить сотрудника</h3>
+          <form class="employee-form" id="employeeForm">
+            <label>
+              ФИО
+              <input name="fullName" type="text" autocomplete="name" required maxlength="120">
+            </label>
+            <label>
+              Номер телефона
+              <input name="phone" type="tel" autocomplete="tel" required maxlength="32">
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" autocomplete="email" required maxlength="180">
+            </label>
+            <label>
+              Должность
+              <input name="position" type="text" maxlength="120">
+            </label>
+            <label>
+              Дата начала работы
+              <input name="hireDate" type="date">
+            </label>
+            <label>
+              Тип учетной записи
+              <select name="role" required>
+                <option value="employee">Сотрудник</option>
+                <option value="admin">Администратор</option>
+              </select>
+            </label>
+            <label class="check-row">
+              <input name="officialEmployment" type="checkbox" value="true">
+              <span>Официальное трудоустройство</span>
+            </label>
+            <button class="primary" type="submit">Добавить</button>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="employeesListTitle">
+          <h3 id="employeesListTitle">Список сотрудников</h3>
+          <div class="table-wrap employees-wrap">
+            <table class="employees-table">
+              <thead>
+                <tr>
+                  <th>ФИО</th>
+                  <th>Телефон</th>
+                  <th>Email</th>
+                  <th>Должность</th>
+                  <th>Дата начала</th>
+                  <th>Оф.</th>
+                  <th>Тип учетной записи</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="employeesBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="notice" id="employeesNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="scheduleView" aria-labelledby="scheduleTitle">
+        <div class="section-head">
+          <h2 id="scheduleTitle">Графики работ</h2>
+          <div class="toolbar">
+            <label>
+              Торговая точка
+              <select id="pointSelect"></select>
+            </label>
+            <label>
+              Месяц
+              <input id="monthInput" type="month" required>
+            </label>
+            <button class="secondary" type="button" id="loadSchedule">Открыть</button>
+          </div>
+        </div>
+
+        <section class="schedule-area" aria-label="Табель графика">
+          <div class="schedule-actions">
+            <div>
+              <strong id="scheduleCaption"></strong>
+              <span id="scheduleUpdated"></span>
+            </div>
+            <div class="action-row">
+              <button class="secondary" type="button" id="addRowButton">Добавить строку</button>
+              <button class="primary" type="button" id="saveScheduleButton">Сохранить</button>
+            </div>
+          </div>
+
+          <div class="table-wrap schedule-wrap">
+            <table class="schedule-table" id="scheduleTable"></table>
+          </div>
+
+          <div class="summary-block">
+            <h3>Итоги</h3>
+            <div class="table-wrap summary-wrap">
+              <table class="summary-table" id="summaryTable">
+                <thead>
+                  <tr>
+                    <th>Сотрудник</th>
+                    <th>Выдано</th>
+                    <th>Ставка 1-15</th>
+                    <th>Аванс на карту</th>
+                    <th>Ставка 16+</th>
+                    <th>ЗП на карту</th>
+                    <th>Бонус</th>
+                    <th>Премия</th>
+                    <th>Претензии</th>
+                    <th>Итого аванс</th>
+                    <th>Итого ЗП</th>
+                    <th>Фонд оплаты</th>
+                  </tr>
+                </thead>
+                <tbody id="summaryBody"></tbody>
+                <tfoot id="summaryFooter"></tfoot>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <div class="notice" id="scheduleNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="repairsView" aria-labelledby="repairsTitle">
+        <div class="section-head">
+          <h2 id="repairsTitle">Заявки на ремонт</h2>
+          <button class="secondary" type="button" id="refreshRepairs">Обновить</button>
+        </div>
+
+        <section class="panel" aria-labelledby="repairCreateTitle">
+          <h3 id="repairCreateTitle">Новая заявка</h3>
+          <form class="repair-form" id="repairForm">
+            <label>
+              Торговая точка
+              <select name="pointId" id="repairPointSelect" required></select>
+            </label>
+            <label>
+              Срочность
+              <select name="priority" required>
+                <option value="normal">Обычная</option>
+                <option value="high">Срочная</option>
+                <option value="critical">Критичная</option>
+              </select>
+            </label>
+            <label>
+              Тема
+              <input name="title" type="text" maxlength="120" required>
+            </label>
+            <label class="repair-description-field">
+              Описание
+              <textarea name="description" maxlength="1000" required></textarea>
+            </label>
+            <button class="primary" type="submit">Создать заявку</button>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="repairsListTitle">
+          <h3 id="repairsListTitle">Список заявок</h3>
+          <div class="table-wrap">
+            <table class="repairs-table">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Точка</th>
+                  <th>Тема</th>
+                  <th>Срочность</th>
+                  <th>Статус</th>
+                  <th>Автор</th>
+                  <th>Описание</th>
+                </tr>
+              </thead>
+              <tbody id="repairsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="notice" id="repairsNotice" role="status" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

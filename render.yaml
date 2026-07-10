@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: smart-work-schedule
+    runtime: node
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: smart-work-schedule-data
+      mountPath: /var/data
+      sizeGB: 1
