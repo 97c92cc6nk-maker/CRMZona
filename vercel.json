@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/health",
-      "destination": "/api/health"
+      "destination": "/health.html"
     }
   ]
 }

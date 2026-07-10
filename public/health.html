@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CRMZona Health</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #f6f7f9;
+        color: #17202a;
+      }
+
+      main {
+        max-width: 920px;
+        margin: 40px auto;
+        padding: 24px;
+        background: #fff;
+        border: 1px solid #d9dee7;
+      }
+
+      pre {
+        overflow: auto;
+        padding: 16px;
+        background: #111827;
+        color: #d1fae5;
+        white-space: pre-wrap;
+      }
+
+      .status {
+        margin: 12px 0 18px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>CRMZona Health</h1>
+      <div id="status" class="status">Проверка API...</div>
+      <pre id="result">Загрузка...</pre>
+    </main>
+    <script>
+      const statusNode = document.getElementById('status');
+      const resultNode = document.getElementById('result');
+
+      fetch('/api/health', { cache: 'no-store' })
+        .then(async (response) => {
+          const text = await response.text();
+          statusNode.textContent = `API ответил: HTTP ${response.status}`;
+          try {
+            resultNode.textContent = JSON.stringify(JSON.parse(text), null, 2);
+          } catch {
+            resultNode.textContent = text || '(пустой ответ)';
+          }
+        })
+        .catch((error) => {
+          statusNode.textContent = 'API недоступен';
+          resultNode.textContent = error.message;
+        });
+    </script>
+  </body>
+</html>
