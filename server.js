@@ -620,6 +620,10 @@ function createRequestHandler(store = new Store()) {
     const requestUrl = new URL(req.url, 'http://localhost');
 
     try {
+      if (req.method === 'GET' && requestUrl.pathname === '/health') {
+        sendJson(res, 200, { ok: true, storage: await maybeAwait(store.storageStatus()) });
+        return;
+      }
       if (requestUrl.pathname.startsWith('/api/')) {
         await handleApi(req, res, requestUrl, store);
         return;
