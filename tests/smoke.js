@@ -8,6 +8,8 @@ const path = require('path');
 
 process.env.SMTP_HOST = '';
 process.env.SMTP_PORT = '';
+process.env.GOOGLE_DRIVE_ACCESS_TOKEN = '';
+process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = '';
 
 const { Store, createRequestHandler } = require('../lib/app');
 
@@ -148,6 +150,36 @@ async function main() {
       body: { status: 'in_progress' },
     });
     assert.equal(updatedRepair.repair.status, 'in_progress');
+
+    const createdExpense = await jsonFetch(`${baseUrl}/api/expenses`, {
+      method: 'POST',
+      headers: { Cookie: cookie },
+      body: {
+        pointId: 'moscow_6231',
+        amount: '321,50',
+        paymentMethod: 'corp_card',
+        receipt: {
+          fileName: 'receipt.jpg',
+          dataUrl: `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64')}`,
+        },
+      },
+    });
+    assert.equal(createdExpense.expense.amount, '321.5');
+    assert.equal(createdExpense.expense.paymentMethod, 'corp_card');
+    assert.equal(createdExpense.expense.googleDrive.status, 'unavailable');
+
+    const expenses = await jsonFetch(`${baseUrl}/api/expenses`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(expenses.expenses.length, 1);
+    assert.equal(expenses.canManage, true);
+
+    const receiptResponse = await fetch(`${baseUrl}${createdExpense.expense.receiptUrl}`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(receiptResponse.status, 200);
+    assert.equal(receiptResponse.headers.get('content-type'), 'image/jpeg');
+    assert.deepEqual([...new Uint8Array(await receiptResponse.arrayBuffer())], [0xff, 0xd8, 0xff, 0xd9]);
 
     const scheduleRows = [{
       employeeId: createdEmployee.user.id,

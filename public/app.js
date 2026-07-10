@@ -8,8 +8,10 @@ const state = {
   points: [],
   users: [],
   repairs: [],
+  expenses: [],
   repairStatuses: [],
   repairPriorities: [],
+  expensePaymentMethods: [],
   schedule: null,
   canEditSchedule: false,
   canManageAllSchedule: false,
@@ -70,6 +72,12 @@ function bindElements() {
     refreshRepairs: document.getElementById('refreshRepairs'),
     repairsBody: document.getElementById('repairsBody'),
     repairsNotice: document.getElementById('repairsNotice'),
+    expenseForm: document.getElementById('expenseForm'),
+    expensePointSelect: document.getElementById('expensePointSelect'),
+    expensePaymentMethod: document.getElementById('expensePaymentMethod'),
+    refreshExpenses: document.getElementById('refreshExpenses'),
+    expensesBody: document.getElementById('expensesBody'),
+    expensesNotice: document.getElementById('expensesNotice'),
     pointSelect: document.getElementById('pointSelect'),
     monthInput: document.getElementById('monthInput'),
     loadSchedule: document.getElementById('loadSchedule'),
@@ -107,6 +115,8 @@ function bindEvents() {
   els.repairForm.addEventListener('submit', handleRepairCreate);
   els.refreshRepairs.addEventListener('click', loadRepairs);
   els.repairsBody.addEventListener('change', handleRepairStatusChange);
+  els.expenseForm.addEventListener('submit', handleExpenseCreate);
+  els.refreshExpenses.addEventListener('click', loadExpenses);
   els.loadSchedule.addEventListener('click', loadSchedule);
   els.pointSelect.addEventListener('change', loadSchedule);
   els.monthInput.addEventListener('change', loadSchedule);
@@ -158,6 +168,11 @@ async function loadAppData() {
     await loadRepairs();
   } else {
     renderRepairs();
+  }
+  if (state.permissions.canViewExpenses) {
+    await loadExpenses();
+  } else {
+    renderExpenses();
   }
   if (state.permissions.canViewSchedule) {
     await loadSchedule();
@@ -281,6 +296,7 @@ async function handleLogout() {
     state.sections = [];
     state.points = [];
     state.schedule = null;
+    state.expenses = [];
     state.selectedEmployeeId = null;
     showAuth();
   }, els.profileNotice);
@@ -319,6 +335,7 @@ function renderProfile() {
   els.employeesTab.classList.toggle('is-hidden', !state.permissions.canViewUsers);
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('repairsView', Boolean(state.permissions.canViewRepairs));
+  setTabVisibility('expensesView', Boolean(state.permissions.canViewExpenses));
   els.employeeAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRoles);
   if (els.usersPanel) {
     els.usersPanel.classList.add('is-hidden');
@@ -344,6 +361,7 @@ async function loadPoints() {
   state.points = data.points;
   fillPointSelect(els.pointSelect);
   fillPointSelect(els.repairPointSelect);
+  fillPointSelect(els.expensePointSelect);
   renderEmployeeFormAccessControls();
 }
 
@@ -480,6 +498,199 @@ async function handleRepairStatusChange(event) {
   } finally {
     select.disabled = false;
   }
+}
+
+async function loadExpenses() {
+  if (!state.permissions.canViewExpenses) return;
+  await runWithButton(els.refreshExpenses, async () => {
+    const data = await api('/api/expenses');
+    state.expenses = data.expenses;
+    state.expensePaymentMethods = data.paymentMethods || [];
+    state.permissions.canManageExpenses = data.canManage;
+    renderExpenses();
+  }, els.expensesNotice);
+}
+
+function renderExpenses() {
+  els.expensesBody.replaceChildren();
+  fillExpensePaymentMethods();
+  const expensesAllowed = Boolean(state.permissions.canManageExpenses && state.points.length);
+  Array.from(els.expenseForm.elements).forEach((field) => {
+    field.disabled = !expensesAllowed;
+  });
+
+  if (!state.expenses.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty-state';
+    cell.textContent = 'Хозрасходов пока нет.';
+    row.append(cell);
+    els.expensesBody.append(row);
+    return;
+  }
+
+  for (const expense of state.expenses) {
+    els.expensesBody.append(buildExpenseRow(expense));
+  }
+}
+
+function fillExpensePaymentMethods() {
+  const methods = state.expensePaymentMethods.length
+    ? state.expensePaymentMethods
+    : [
+        { value: 'corp_card', label: 'корп.карта' },
+        { value: 'cash', label: 'наличные' },
+        { value: 'card', label: 'карта' },
+      ];
+  els.expensePaymentMethod.replaceChildren(...methods.map((method) => {
+    const option = document.createElement('option');
+    option.value = method.value;
+    option.textContent = method.label;
+    return option;
+  }));
+}
+
+function buildExpenseRow(expense) {
+  const row = document.createElement('tr');
+  appendCell(row, formatDateTime(expense.createdAt));
+  appendCell(row, expense.pointName);
+  appendCell(row, formatMoney(expense.amount), 'numeric-cell');
+  appendCell(row, expense.paymentMethodLabel);
+  appendCell(row, expense.createdByName || '');
+
+  const receiptCell = document.createElement('td');
+  if (expense.receiptUrl) {
+    const link = document.createElement('a');
+    link.href = expense.receiptUrl;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'Открыть чек';
+    receiptCell.append(link);
+  } else {
+    receiptCell.textContent = 'Недоступен';
+  }
+  row.append(receiptCell);
+
+  const driveCell = document.createElement('td');
+  const drive = expense.googleDrive || {};
+  if (drive.status === 'uploaded' && drive.webViewLink) {
+    const link = document.createElement('a');
+    link.href = drive.webViewLink;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'В архиве';
+    driveCell.append(link);
+  } else {
+    driveCell.textContent = drive.reason || 'Не загружен';
+  }
+  row.append(driveCell);
+  return row;
+}
+
+async function handleExpenseCreate(event) {
+  event.preventDefault();
+  if (!state.permissions.canManageExpenses || !state.points.length) {
+    showNotice(els.expensesNotice, 'Нет прав на внесение хозрасходов или доступных торговых точек.', 'warning');
+    return;
+  }
+  const button = event.submitter;
+  await runWithButton(button, async () => {
+    const values = formValues(els.expenseForm);
+    const file = els.expenseForm.elements.receipt.files[0];
+    const receipt = await receiptPayloadFromFile(file);
+    const data = await api('/api/expenses', {
+      method: 'POST',
+      body: { ...values, receipt },
+    });
+    state.expenses = [data.expense, ...state.expenses];
+    els.expenseForm.reset();
+    if (state.points[0]) {
+      els.expensePointSelect.value = state.points[0].id;
+    }
+    fillExpensePaymentMethods();
+    renderExpenses();
+    await loadAudit();
+    const storageWarning = storageWarningText(data.storage);
+    const driveWarning = expenseDriveWarning(data.expense.googleDrive);
+    showNotice(
+      els.expensesNotice,
+      ['Хозрасход сохранен.', driveWarning, storageWarning].filter(Boolean).join(' '),
+      driveWarning || storageWarning ? 'warning' : 'success',
+    );
+  }, els.expensesNotice);
+}
+
+function expenseDriveWarning(googleDrive) {
+  if (googleDrive?.status === 'uploaded') return '';
+  return `Google Drive: ${googleDrive?.reason || 'чек не удалось отправить в архив.'}`;
+}
+
+async function receiptPayloadFromFile(file) {
+  if (!file) throw new Error('Приложите фотографию чека.');
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    throw new Error('Поддерживаются только JPG, PNG или WebP.');
+  }
+
+  const compressed = await compressReceiptImage(file);
+  return {
+    fileName: file.name,
+    mimeType: compressed.mimeType,
+    size: compressed.size,
+    dataUrl: compressed.dataUrl,
+  };
+}
+
+async function compressReceiptImage(file) {
+  const originalDataUrl = await readFileAsDataUrl(file);
+  try {
+    const image = await loadImage(originalDataUrl);
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.width * scale));
+    canvas.height = Math.max(1, Math.round(image.height * scale));
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    let dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+    if (dataUrlByteSize(dataUrl) > 2.5 * 1024 * 1024) {
+      dataUrl = canvas.toDataURL('image/jpeg', 0.68);
+    }
+    return {
+      dataUrl,
+      mimeType: 'image/jpeg',
+      size: dataUrlByteSize(dataUrl),
+    };
+  } catch {
+    return {
+      dataUrl: originalDataUrl,
+      mimeType: file.type,
+      size: file.size,
+    };
+  }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Не удалось прочитать фото чека.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Не удалось обработать фото чека.'));
+    image.src = src;
+  });
+}
+
+function dataUrlByteSize(dataUrl) {
+  const base64 = String(dataUrl).split(',')[1] || '';
+  return Math.floor((base64.length * 3) / 4);
 }
 
 async function loadUsers() {

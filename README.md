@@ -95,6 +95,17 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 npm run migrate:supabase
 ```
 
+## Google Drive для чеков
+
+Хозрасходы сохраняют фото чека на сайте. Для дополнительного архива на Google Drive задайте переменные окружения:
+
+```text
+GOOGLE_DRIVE_FOLDER_ID=your-google-drive-folder-id
+GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+```
+
+Папку `GOOGLE_DRIVE_FOLDER_ID` нужно расшарить на `client_email` сервисного аккаунта. Если Google Drive не настроен или недоступен, расход и чек всё равно сохраняются на сайте, а в записи расхода будет явно указана причина.
+
 ## Проверка
 
 ```powershell

@@ -271,6 +271,7 @@ h3 {
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -282,6 +283,7 @@ h3 {
   background: transparent;
   color: var(--muted);
   padding-inline: 12px;
+  white-space: normal;
 }
 
 .tab.is-active {
@@ -479,6 +481,14 @@ h3 {
   margin-top: 16px;
 }
 
+.expense-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(140px, 0.7fr) minmax(150px, 0.7fr) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+  margin-top: 16px;
+}
+
 .repair-description-field {
   grid-column: 1 / -1;
 }
@@ -545,6 +555,10 @@ tbody tr:last-child td {
 
 .repairs-table {
   min-width: 1120px;
+}
+
+.expenses-table {
+  min-width: 1060px;
 }
 
 .employees-table th,
@@ -850,12 +864,13 @@ tbody tr:last-child td {
 
   .tabs {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .profile-grid,
   .inline-form,
   .employee-form,
+  .expense-form,
   .repair-form {
     grid-template-columns: 1fr;
   }

@@ -83,6 +83,7 @@
           <button class="tab is-hidden" type="button" data-view="employeesView" id="employeesTab">Сотрудники</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
+          <button class="tab" type="button" data-view="expensesView">Хозрасходы</button>
         </nav>
         <button class="ghost" type="button" id="logoutButton">Выйти</button>
       </header>
@@ -407,6 +408,58 @@
         </section>
 
         <div class="notice" id="repairsNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="expensesView" aria-labelledby="expensesTitle">
+        <div class="section-head">
+          <h2 id="expensesTitle">Хозрасходы</h2>
+          <button class="secondary" type="button" id="refreshExpenses">Обновить</button>
+        </div>
+
+        <section class="panel" aria-labelledby="expenseCreateTitle">
+          <h3 id="expenseCreateTitle">Новый расход</h3>
+          <form class="expense-form" id="expenseForm">
+            <label>
+              Торговая точка
+              <select name="pointId" id="expensePointSelect" required></select>
+            </label>
+            <label>
+              Сумма расхода
+              <input name="amount" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16" required>
+            </label>
+            <label>
+              Способ оплаты
+              <select name="paymentMethod" id="expensePaymentMethod" required></select>
+            </label>
+            <label>
+              Фото чека
+              <input name="receipt" type="file" accept="image/jpeg,image/png,image/webp" required>
+            </label>
+            <button class="primary" type="submit">Сохранить расход</button>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="expensesListTitle">
+          <h3 id="expensesListTitle">Список расходов</h3>
+          <div class="table-wrap">
+            <table class="expenses-table">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Точка</th>
+                  <th>Сумма</th>
+                  <th>Оплата</th>
+                  <th>Автор</th>
+                  <th>Чек</th>
+                  <th>Google Drive</th>
+                </tr>
+              </thead>
+              <tbody id="expensesBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="notice" id="expensesNotice" role="status" aria-live="polite"></div>
       </section>
     </main>
 

@@ -409,6 +409,90 @@ test('employee premium is assigned to the point with the most worked days', () =
   assert.equal(krasnogorsk.rows.find((row) => row.employeeId === employee.id).bonusExtra, '5000');
 });
 
+test('admin can create housekeeping expense with receipt and drive fallback', async () => {
+  const store = createTempStore();
+  store.createUser({
+    ...validateRegistration({
+      fullName: 'Анна Владелец',
+      phone: '+79990000045',
+      email: 'owner-expenses@example.com',
+    }),
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Иван Администратор',
+    phone: '+79990000046',
+    email: 'admin-expenses@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['expenses'],
+    allowedPoints: ['moscow_6231'],
+  });
+  const employee = store.createUser({
+    fullName: 'Петр Сотрудник',
+    phone: '+79990000047',
+    email: 'employee-expenses@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['expenses'],
+    allowedPoints: ['moscow_6231'],
+  });
+
+  const previousDriveToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  const previousDriveAccount = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
+  delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  delete process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
+
+  try {
+    const receipt = {
+      fileName: 'check.jpg',
+      dataUrl: `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64')}`,
+    };
+
+    const expense = await store.createExpense(admin, {
+      pointId: 'moscow_6231',
+      amount: '123,45',
+      paymentMethod: 'cash',
+      receipt,
+    });
+
+    assert.equal(expense.amount, '123.45');
+    assert.equal(expense.paymentMethodLabel, 'наличные');
+    assert.equal(expense.googleDrive.status, 'unavailable');
+    assert.equal(expense.googleDrive.sourceUnavailable, true);
+    assert.match(expense.receiptUrl, /^\/api\/receipts\//);
+
+    const file = await store.readReceiptFile(expense.receipt);
+    assert.equal(file.mimeType, 'image/jpeg');
+    assert.deepEqual([...file.buffer], [0xff, 0xd8, 0xff, 0xd9]);
+
+    const list = store.listExpenses(admin);
+    assert.equal(list.length, 1);
+    assert.equal(store.getExpenseByReceiptId(admin, expense.receipt.id).id, expense.id);
+
+    await assert.rejects(
+      () => store.createExpense(employee, {
+        pointId: 'moscow_6231',
+        amount: '100',
+        paymentMethod: 'cash',
+        receipt,
+      }),
+      (error) => error instanceof ApiError && error.status === 403,
+    );
+  } finally {
+    if (previousDriveToken === undefined) {
+      delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    } else {
+      process.env.GOOGLE_DRIVE_ACCESS_TOKEN = previousDriveToken;
+    }
+    if (previousDriveAccount === undefined) {
+      delete process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
+    } else {
+      process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = previousDriveAccount;
+    }
+  }
+});
+
 test('owner can maintain employee directory records', () => {
   const store = createTempStore();
   const owner = store.createUser({
