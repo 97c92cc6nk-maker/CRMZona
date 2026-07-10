@@ -1,12 +1,5 @@
 {
   "framework": null,
   "installCommand": "echo \"No install required\"",
-  "buildCommand": "echo \"No build required\"",
-  "outputDirectory": "public",
-  "rewrites": [
-    {
-      "source": "/health",
-      "destination": "/health.html"
-    }
-  ]
+  "buildCommand": "echo \"No build required\""
 }
