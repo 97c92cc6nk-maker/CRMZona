@@ -40,42 +40,6 @@ git push -u origin main
 git pull origin main --allow-unrelated-histories
 ```
 
-### Vercel + Supabase
-
-Для публичного онлайн-доступа используйте Vercel как хостинг и Supabase как постоянную базу данных.
-
-1. Создайте проект в Supabase.
-2. Откройте SQL Editor и выполните скрипт `supabase/schema.sql`.
-3. В Vercel создайте проект из GitHub-репозитория.
-4. В Vercel Project Settings -> Environment Variables добавьте:
-
-```text
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-SMTP_HOST=smtp.example.com
-SMTP_PORT=465
-SMTP_SECURE=true
-SMTP_USER=mailbox@example.com
-SMTP_PASS=mail-password
-SMTP_FROM=mailbox@example.com
-```
-
-`SUPABASE_SERVICE_ROLE_KEY` должен быть только на сервере Vercel. Не добавляйте его в `public/` и не коммитьте в GitHub.
-
-Vercel использует `vercel.json`: статические файлы берутся из `public/`, а `/api/*` и `/health` обрабатываются serverless-функцией `api/index.js`.
-
-Если нужно перенести локальные данные из `data/` в Supabase, после настройки `.env` выполните:
-
-```powershell
-npm run migrate:supabase
-```
-
-Для размещения на Render также оставлен `render.yaml`. Команда запуска: `npm start`. Health check: `/health`.
-
-Проект не требует npm-зависимостей. Скрипт запуска использует обычный `node`, а если он недоступен, пробует bundled Node из Codex Runtime.
-
-Если сайт запущен из in-app browser/Codex-сессии и Windows запрещает процессу запись в папку проекта, приложение переключится на резервное дисковое хранилище `%TEMP%\smart-schedule-data`, а письма попадут в `%TEMP%\smart-schedule-data\outbox`. Для хранения строго в папке проекта запускайте `.\start.ps1` в обычном PowerShell-окне.
-
 ## Первый вход
 
 1. Зарегистрируйте первого пользователя через форму регистрации.

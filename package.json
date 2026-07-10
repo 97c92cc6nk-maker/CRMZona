@@ -7,8 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/run-tests.js",
-    "smoke": "node tests/smoke.js",
-    "migrate:supabase": "node scripts/migrate-to-supabase.js"
+    "smoke": "node tests/smoke.js"
   },
   "engines": {
     "node": ">=20"
