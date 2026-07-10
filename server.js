@@ -20,7 +20,7 @@ const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const DEFAULT_DATA_DIR = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
   : path.join(ROOT_DIR, 'data');
-const PORT = Number(process.env.PORT || 8080);
+const PORT = process.env.PORT || 8080;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const BODY_LIMIT_BYTES = 800 * 1024;
 
