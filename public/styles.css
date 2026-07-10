@@ -389,6 +389,57 @@ h3 {
   margin-top: 16px;
 }
 
+.access-fieldset {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.access-fieldset legend {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  padding: 0 4px;
+}
+
+.access-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.access-options.compact {
+  min-width: 210px;
+}
+
+.mini-check {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mini-check input {
+  width: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+}
+
+.muted-inline {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .repair-form {
   display: grid;
   grid-template-columns: minmax(180px, 0.9fr) minmax(150px, 0.7fr) minmax(240px, 1.3fr) auto;
@@ -458,7 +509,7 @@ tbody tr:last-child td {
 }
 
 .employees-table {
-  min-width: 1180px;
+  min-width: 1680px;
 }
 
 .repairs-table {

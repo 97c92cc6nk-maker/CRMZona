@@ -4,6 +4,7 @@ const state = {
   user: null,
   permissions: {},
   roles: [],
+  sections: [],
   points: [],
   users: [],
   repairs: [],
@@ -124,11 +125,14 @@ async function loadSession() {
   state.user = data.user;
   state.permissions = data.permissions;
   state.roles = data.roles;
+  state.sections = data.sections || [];
+  state.points = data.points || [];
 }
 
 async function loadAppData() {
   await loadPoints();
   renderProfile();
+  renderEmployeeFormAccessControls();
 
   if (state.permissions.canViewUsers) {
     await loadUsers();
@@ -136,8 +140,16 @@ async function loadAppData() {
   if (state.permissions.canViewAudit) {
     await loadAudit();
   }
-  await loadRepairs();
-  await loadSchedule();
+  if (state.permissions.canViewRepairs) {
+    await loadRepairs();
+  } else {
+    renderRepairs();
+  }
+  if (state.permissions.canViewSchedule) {
+    await loadSchedule();
+  } else {
+    renderUnavailableSchedule();
+  }
 }
 
 function showAuth() {
@@ -252,6 +264,8 @@ async function handleLogout() {
     await api('/api/logout', { method: 'POST', body: {} });
     state.user = null;
     state.permissions = {};
+    state.sections = [];
+    state.points = [];
     state.schedule = null;
     showAuth();
   }, els.profileNotice);
@@ -288,31 +302,48 @@ function renderProfile() {
   els.profileEmail.textContent = user.email;
   els.profileRole.textContent = user.roleLabel;
   els.employeesTab.classList.toggle('is-hidden', !state.permissions.canViewUsers);
+  setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
+  setTabVisibility('repairsView', Boolean(state.permissions.canViewRepairs));
   els.employeeAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRoles);
   if (els.usersPanel) {
     els.usersPanel.classList.add('is-hidden');
   }
   els.auditPanel.classList.toggle('is-hidden', !state.permissions.canViewAudit);
+  ensureActiveTabVisible();
+}
+
+function setTabVisibility(viewId, visible) {
+  const tab = document.querySelector(`.tab[data-view="${viewId}"]`);
+  if (tab) tab.classList.toggle('is-hidden', !visible);
+}
+
+function ensureActiveTabVisible() {
+  const active = document.querySelector('.tab.is-active');
+  if (!active || active.classList.contains('is-hidden')) {
+    activateView('profileView');
+  }
 }
 
 async function loadPoints() {
   const data = await api('/api/points');
   state.points = data.points;
-  els.pointSelect.replaceChildren(...state.points.map((point) => {
+  fillPointSelect(els.pointSelect);
+  fillPointSelect(els.repairPointSelect);
+  renderEmployeeFormAccessControls();
+}
+
+function fillPointSelect(select) {
+  select.replaceChildren(...state.points.map((point) => {
     const option = document.createElement('option');
     option.value = point.id;
     option.textContent = point.name;
     return option;
   }));
-  els.repairPointSelect.replaceChildren(...state.points.map((point) => {
-    const option = document.createElement('option');
-    option.value = point.id;
-    option.textContent = point.name;
-    return option;
-  }));
+  select.disabled = !state.points.length;
 }
 
 async function loadRepairs() {
+  if (!state.permissions.canViewRepairs) return;
   await runWithButton(els.refreshRepairs, async () => {
     const data = await api('/api/repairs');
     state.repairs = data.repairs;
@@ -325,6 +356,10 @@ async function loadRepairs() {
 
 function renderRepairs() {
   els.repairsBody.replaceChildren();
+  const repairsAllowed = Boolean(state.permissions.canViewRepairs && state.points.length);
+  Array.from(els.repairForm.elements).forEach((field) => {
+    field.disabled = !repairsAllowed;
+  });
 
   if (!state.repairs.length) {
     const row = document.createElement('tr');
@@ -378,6 +413,10 @@ function repairStatusCell(repair) {
 
 async function handleRepairCreate(event) {
   event.preventDefault();
+  if (!state.permissions.canViewRepairs || !state.points.length) {
+    showNotice(els.repairsNotice, 'Нет доступа к заявкам или торговым точкам.', 'warning');
+    return;
+  }
   const button = event.submitter;
   await runWithButton(button, async () => {
     const data = await api('/api/repairs', {
@@ -434,6 +473,9 @@ async function loadUsers() {
     const data = await api('/api/users');
     state.users = data.users;
     state.roles = data.roles;
+    state.sections = data.sections || state.sections;
+    state.points = data.points || state.points;
+    renderEmployeeFormAccessControls();
     renderEmployees();
   }, els.employeesNotice);
 }
@@ -444,7 +486,7 @@ function renderEmployees() {
   if (!state.users.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = 10;
     cell.className = 'empty-state';
     cell.textContent = 'Нет сотрудников.';
     row.append(cell);
@@ -469,6 +511,8 @@ function buildEmployeeRow(user) {
   row.append(employeeTextInputCell(user, 'hireDate', editable, 'date'));
   row.append(employeeOfficialCell(user, editable));
   row.append(employeeRoleCell(user, editable));
+  row.append(employeeAccessCell(user, editable, 'allowedSections', state.sections));
+  row.append(employeeAccessCell(user, editable, 'allowedPoints', state.points.map((point) => ({ id: point.id, label: point.name }))));
   row.append(employeeActionsCell(user, editable));
   return row;
 }
@@ -523,6 +567,63 @@ function employeeRoleCell(user, editable) {
   }
   cell.append(select);
   return cell;
+}
+
+function employeeAccessCell(user, editable, field, options) {
+  const cell = document.createElement('td');
+  const selected = new Set(user[field] || []);
+
+  if (!editable) {
+    const labels = options
+      .filter((option) => selected.has(option.id))
+      .map((option) => option.label);
+    cell.textContent = user.role === 'owner' ? 'Все' : (labels.join(', ') || 'Нет');
+    return cell;
+  }
+
+  cell.append(buildAccessCheckboxes(field, options, selected));
+  return cell;
+}
+
+function buildAccessCheckboxes(field, options, selected = new Set()) {
+  const wrap = document.createElement('div');
+  wrap.className = 'access-options compact';
+
+  if (!options.length) {
+    const empty = document.createElement('span');
+    empty.className = 'muted-inline';
+    empty.textContent = 'Нет';
+    wrap.append(empty);
+    return wrap;
+  }
+
+  for (const option of options) {
+    const label = document.createElement('label');
+    label.className = 'mini-check';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.name = field;
+    input.value = option.id;
+    input.checked = selected.has(option.id);
+    const text = document.createElement('span');
+    text.textContent = option.label;
+    label.append(input, text);
+    wrap.append(label);
+  }
+
+  return wrap;
+}
+
+function renderEmployeeFormAccessControls() {
+  const sectionTarget = document.querySelector('[data-access-form="sections"]');
+  const pointTarget = document.querySelector('[data-access-form="points"]');
+  if (sectionTarget) {
+    sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections));
+  }
+  if (pointTarget) {
+    const pointOptions = state.points.map((point) => ({ id: point.id, label: point.name }));
+    pointTarget.replaceChildren(buildAccessCheckboxes('allowedPoints', pointOptions));
+  }
 }
 
 function employeeActionsCell(user, editable) {
@@ -597,15 +698,28 @@ async function deleteEmployee(userId, button) {
 function employeePayloadFromForm(form) {
   const values = formValues(form);
   values.officialEmployment = form.elements.officialEmployment.checked;
+  values.allowedSections = formArrayValues(form, 'allowedSections');
+  values.allowedPoints = formArrayValues(form, 'allowedPoints');
   return values;
 }
 
 function employeePayloadFromRow(row) {
   const payload = {};
   row.querySelectorAll('input, select').forEach((field) => {
+    if (field.name === 'allowedSections' || field.name === 'allowedPoints') return;
     payload[field.name] = field.type === 'checkbox' ? field.checked : field.value;
   });
+  payload.allowedSections = checkedValues(row, 'allowedSections');
+  payload.allowedPoints = checkedValues(row, 'allowedPoints');
   return payload;
+}
+
+function formArrayValues(form, name) {
+  return Array.from(form.querySelectorAll(`input[name="${name}"]:checked`)).map((input) => input.value);
+}
+
+function checkedValues(root, name) {
+  return Array.from(root.querySelectorAll(`input[name="${name}"]:checked`)).map((input) => input.value);
 }
 
 function showEmployeeDelivery(data, fallbackMessage) {
@@ -653,6 +767,14 @@ function renderAudit(events) {
 }
 
 async function loadSchedule() {
+  if (!state.permissions.canViewSchedule) {
+    renderUnavailableSchedule();
+    return;
+  }
+  if (!state.points.length) {
+    renderUnavailableSchedule('Нет доступных торговых точек.');
+    return;
+  }
   if (!els.pointSelect.value || !els.monthInput.value) return;
   await runWithButton(els.loadSchedule, async () => {
     const query = new URLSearchParams({
@@ -667,6 +789,23 @@ async function loadSchedule() {
     renderSchedule();
     showNotice(els.scheduleNotice, '');
   }, els.scheduleNotice);
+}
+
+function renderUnavailableSchedule(message = 'Нет доступа к графикам работ.') {
+  state.schedule = null;
+  state.canEditSchedule = false;
+  state.canManageAllSchedule = false;
+  state.employeeOptions = [];
+  els.scheduleCaption.textContent = '';
+  els.scheduleUpdated.textContent = '';
+  els.addRowButton.classList.add('is-hidden');
+  els.saveScheduleButton.classList.add('is-hidden');
+  els.scheduleTable.style.minWidth = '';
+  els.summaryTable.style.minWidth = '';
+  els.scheduleTable.replaceChildren();
+  els.summaryBody.replaceChildren();
+  els.summaryFooter.replaceChildren();
+  showNotice(els.scheduleNotice, message, 'warning');
 }
 
 function renderSchedule() {

@@ -14,6 +14,12 @@ const { Store, createRequestHandler } = require('../lib/app');
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-smoke-'));
   const store = new Store(dataDir);
+  store.createUser({
+    fullName: 'Тестовый Владелец',
+    phone: '+79990000009',
+    email: 'owner-smoke@example.com',
+    password: 'OwnerPass123',
+  });
   const server = http.createServer(createRequestHandler(store));
 
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -23,44 +29,64 @@ async function main() {
     const registration = await jsonFetch(`${baseUrl}/api/register`, {
       method: 'POST',
       body: {
-        fullName: 'Тестовый Владелец',
+        fullName: 'Тестовый Сотрудник',
         phone: '+79990000010',
-        email: 'owner-smoke@example.com',
+        email: 'registered-smoke@example.com',
       },
     });
-    assert.equal(registration.user.role, 'owner');
+    assert.equal(registration.user.role, 'employee');
+    assert.deepEqual(registration.user.allowedSections, []);
+    assert.deepEqual(registration.user.allowedPoints, []);
     assert.equal(registration.emailDelivery.status, 'outbox');
 
-    const password = readPasswordFromOutbox(dataDir, 'owner-smoke@example.com');
+    const password = readPasswordFromOutbox(dataDir, 'registered-smoke@example.com');
     assert.ok(password.length >= 10);
 
     const reset = await jsonFetch(`${baseUrl}/api/forgot-password`, {
       method: 'POST',
       body: {
-        email: 'owner-smoke@example.com',
+        email: 'registered-smoke@example.com',
       },
     });
     assert.equal(reset.emailDelivery.status, 'outbox');
-    const resetPassword = readPasswordFromOutbox(dataDir, 'owner-smoke@example.com');
+    const resetPassword = readPasswordFromOutbox(dataDir, 'registered-smoke@example.com');
     assert.ok(resetPassword.length >= 10);
     assert.notEqual(resetPassword, password);
 
     await assert.rejects(
       () => jsonFetch(`${baseUrl}/api/login`, {
-        method: 'POST',
-        body: {
-          email: 'owner-smoke@example.com',
+      method: 'POST',
+      body: {
+          email: 'registered-smoke@example.com',
           password,
         },
       }),
       /401/,
     );
 
+    const employeeLogin = await jsonFetch(`${baseUrl}/api/login`, {
+      method: 'POST',
+      body: {
+        email: 'registered-smoke@example.com',
+        password: resetPassword,
+      },
+      includeHeaders: true,
+    });
+    const employeeCookie = employeeLogin.headers.get('set-cookie').split(';')[0];
+    assert.equal(employeeLogin.body.user.role, 'employee');
+
+    const employeeMe = await jsonFetch(`${baseUrl}/api/me`, {
+      headers: { Cookie: employeeCookie },
+    });
+    assert.equal(employeeMe.permissions.canViewSchedule, false);
+    assert.equal(employeeMe.permissions.canViewRepairs, false);
+    assert.equal(employeeMe.permissions.canViewUsers, false);
+
     const login = await jsonFetch(`${baseUrl}/api/login`, {
       method: 'POST',
       body: {
         email: 'owner-smoke@example.com',
-        password: resetPassword,
+        password: 'OwnerPass123',
       },
       includeHeaders: true,
     });
@@ -91,7 +117,7 @@ async function main() {
     const users = await jsonFetch(`${baseUrl}/api/users`, {
       headers: { Cookie: cookie },
     });
-    assert.equal(users.users.length, 2);
+    assert.equal(users.users.length, 3);
 
     const createdRepair = await jsonFetch(`${baseUrl}/api/repairs`, {
       method: 'POST',
@@ -165,7 +191,7 @@ async function main() {
     const afterDelete = await jsonFetch(`${baseUrl}/api/users`, {
       headers: { Cookie: cookie },
     });
-    assert.equal(afterDelete.users.length, 1);
+    assert.equal(afterDelete.users.length, 2);
 
     console.log(`Smoke OK: ${baseUrl}`);
   } finally {

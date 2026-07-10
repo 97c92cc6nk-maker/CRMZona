@@ -185,8 +185,18 @@
               <select name="role" required>
                 <option value="employee">Сотрудник</option>
                 <option value="admin">Администратор</option>
+                <option value="installer">Монтажник</option>
+                <option value="partner">Партнер</option>
               </select>
             </label>
+            <fieldset class="access-fieldset" id="employeeFormSections">
+              <legend>Разделы</legend>
+              <div class="access-options" data-access-form="sections"></div>
+            </fieldset>
+            <fieldset class="access-fieldset" id="employeeFormPoints">
+              <legend>Торговые точки</legend>
+              <div class="access-options" data-access-form="points"></div>
+            </fieldset>
             <label class="check-row">
               <input name="officialEmployment" type="checkbox" value="true">
               <span>Официальное трудоустройство</span>
@@ -208,6 +218,8 @@
                   <th>Дата начала</th>
                   <th>Оф.</th>
                   <th>Тип учетной записи</th>
+                  <th>Разделы</th>
+                  <th>Точки</th>
                   <th></th>
                 </tr>
               </thead>

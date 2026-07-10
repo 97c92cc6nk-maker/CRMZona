@@ -62,6 +62,54 @@ test('first user becomes owner and next users become employees', () => {
   assert.equal(employee.role, 'employee');
 });
 
+test('self-registered user can be created as employee without access rights', () => {
+  const store = createTempStore();
+  const user = store.createUser({
+    ...validateRegistration({
+      fullName: 'Новый Пользователь',
+      phone: '+79990000009',
+      email: 'fresh@example.com',
+    }),
+    password: 'FreshPass123',
+    role: 'employee',
+    allowInitialOwner: false,
+  });
+
+  assert.equal(user.role, 'employee');
+  assert.deepEqual(user.allowedSections, []);
+  assert.deepEqual(user.allowedPoints, []);
+});
+
+test('new account types are available', () => {
+  const store = createTempStore();
+  store.createUser({
+    ...validateRegistration({
+      fullName: 'Анна Владелец',
+      phone: '+79990000031',
+      email: 'owner-roles@example.com',
+    }),
+    password: 'OwnerPass123',
+  });
+
+  const installer = store.createUser({
+    fullName: 'Иван Монтажник',
+    phone: '+79990000032',
+    email: 'installer@example.com',
+    password: 'InstallerPass123',
+    role: 'installer',
+  });
+  const partner = store.createUser({
+    fullName: 'Петр Партнер',
+    phone: '+79990000033',
+    email: 'partner@example.com',
+    password: 'PartnerPass123',
+    role: 'partner',
+  });
+
+  assert.equal(installer.roleLabel, 'Монтажник');
+  assert.equal(partner.roleLabel, 'Партнер');
+});
+
 test('email is unique and password is stored as a hash', () => {
   const store = createTempStore();
   store.createUser({
@@ -182,6 +230,8 @@ test('employee can save only own schedule row without overwriting others', () =>
       email: 'employee-schedule@example.com',
     }),
     password: 'EmployeePass123',
+    allowedSections: ['schedule'],
+    allowedPoints: ['moscow_6231'],
   });
 
   store.saveSchedule(owner, 'moscow_6231', '2026-06', [{
