@@ -13,7 +13,7 @@ const {
   validateRegistration,
   validateScheduleRows,
   verifyPassword,
-} = require('../src/server');
+} = require('../lib/app');
 
 function createTempStore() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-'));

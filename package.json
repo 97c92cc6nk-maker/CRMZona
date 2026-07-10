@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Локальный сайт для регистрации сотрудников и ведения графиков работ по торговым точкам.",
-  "main": "src/server.js",
+  "main": "lib/app.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node lib/app.js",
     "test": "node --test tests/run-tests.js",
     "smoke": "node tests/smoke.js"
   },

@@ -12,4 +12,4 @@ if (Test-Path -LiteralPath $bundledNode) {
 }
 
 Set-Location -LiteralPath $projectRoot
-& $node "src\server.js"
+& $node "lib\app.js"

@@ -13,7 +13,7 @@ let handler = null;
 let bootError = null;
 
 try {
-  const { createRequestHandler } = require('../src/server');
+  const { createRequestHandler } = require('../lib/app');
   handler = createRequestHandler();
 } catch (error) {
   bootError = error;
