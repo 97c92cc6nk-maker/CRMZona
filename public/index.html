@@ -201,6 +201,18 @@
               <input name="officialEmployment" type="checkbox" value="true">
               <span>Официальное трудоустройство</span>
             </label>
+            <label class="check-row">
+              <input name="premiumEnabled" type="checkbox" value="true">
+              <span>Премия активна</span>
+            </label>
+            <label>
+              Размер премии
+              <input name="premiumAmount" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16">
+            </label>
+            <label>
+              Дата начала премии
+              <input name="premiumStartDate" type="date">
+            </label>
             <button class="primary" type="submit">Добавить</button>
           </form>
         </section>
@@ -217,6 +229,9 @@
                   <th>Должность</th>
                   <th>Дата начала</th>
                   <th>Оф.</th>
+                  <th>Премия</th>
+                  <th>Сумма премии</th>
+                  <th>Дата премии</th>
                   <th>Тип учетной записи</th>
                   <th>Разделы</th>
                   <th>Точки</th>

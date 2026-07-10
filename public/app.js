@@ -486,7 +486,7 @@ function renderEmployees() {
   if (!state.users.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 10;
+    cell.colSpan = 13;
     cell.className = 'empty-state';
     cell.textContent = 'Нет сотрудников.';
     row.append(cell);
@@ -510,6 +510,9 @@ function buildEmployeeRow(user) {
   row.append(employeeTextInputCell(user, 'position', editable));
   row.append(employeeTextInputCell(user, 'hireDate', editable, 'date'));
   row.append(employeeOfficialCell(user, editable));
+  row.append(employeePremiumEnabledCell(user, editable));
+  row.append(employeeTextInputCell(user, 'premiumAmount', editable, 'text'));
+  row.append(employeeTextInputCell(user, 'premiumStartDate', editable, 'date'));
   row.append(employeeRoleCell(user, editable));
   row.append(employeeAccessCell(user, editable, 'allowedSections', state.sections));
   row.append(employeeAccessCell(user, editable, 'allowedPoints', state.points.map((point) => ({ id: point.id, label: point.name }))));
@@ -531,6 +534,11 @@ function employeeTextInputCell(user, field, editable, type = 'text') {
   if (field === 'fullName' || field === 'position') input.maxLength = 120;
   if (field === 'phone') input.maxLength = 32;
   if (field === 'email') input.maxLength = 180;
+  if (field === 'premiumAmount') {
+    input.inputMode = 'decimal';
+    input.pattern = '\\d*([,.]\\d+)?';
+    input.maxLength = 16;
+  }
   cell.append(input);
   return cell;
 }
@@ -545,6 +553,21 @@ function employeeOfficialCell(user, editable) {
   input.name = 'officialEmployment';
   input.type = 'checkbox';
   input.checked = Boolean(user.officialEmployment);
+  cell.className = 'center-cell';
+  cell.append(input);
+  return cell;
+}
+
+function employeePremiumEnabledCell(user, editable) {
+  const cell = document.createElement('td');
+  if (!editable) {
+    cell.textContent = user.premiumEnabled ? 'Да' : 'Нет';
+    return cell;
+  }
+  const input = document.createElement('input');
+  input.name = 'premiumEnabled';
+  input.type = 'checkbox';
+  input.checked = Boolean(user.premiumEnabled);
   cell.className = 'center-cell';
   cell.append(input);
   return cell;
@@ -698,6 +721,7 @@ async function deleteEmployee(userId, button) {
 function employeePayloadFromForm(form) {
   const values = formValues(form);
   values.officialEmployment = form.elements.officialEmployment.checked;
+  values.premiumEnabled = form.elements.premiumEnabled.checked;
   values.allowedSections = formArrayValues(form, 'allowedSections');
   values.allowedPoints = formArrayValues(form, 'allowedPoints');
   return values;
@@ -998,6 +1022,7 @@ function updateScheduleFromInput(event) {
     const employee = state.employeeOptions.find((item) => item.id === input.value);
     row.employeeId = employee ? employee.id : '';
     row.employeeName = employee ? employee.fullName : '';
+    applyEmployeePremium(row, employee);
     renderScheduleSummary();
   }
 }
@@ -1097,6 +1122,7 @@ function renderSummaryFooter() {
 function summaryInputCell(scheduleRow, field) {
   const cell = document.createElement('td');
   cell.className = ['numeric-cell', `${field}-cell`].join(' ');
+  const isPremiumField = field === 'bonusExtra';
   if (!state.canEditSchedule) {
     cell.textContent = formatMoney(toNumber(scheduleRow[field]));
     return cell;
@@ -1110,6 +1136,13 @@ function summaryInputCell(scheduleRow, field) {
   input.pattern = '\\d*([,.]\\d+)?';
   input.value = scheduleRow[field] || '';
   input.title = input.value;
+  if (isPremiumField) {
+    input.disabled = !scheduleRow.premiumActive;
+    input.readOnly = true;
+    input.title = scheduleRow.premiumActive
+      ? 'Премия перенесена из карточки сотрудника.'
+      : 'Премия не установлена в карточке сотрудника.';
+  }
   cell.append(input);
   return cell;
 }
@@ -1183,11 +1216,20 @@ function addScheduleRow() {
     employeeName: defaultEmployee?.fullName || '',
     advanceCard: '',
     salaryCard: '',
-    bonusExtra: '',
+    bonusExtra: defaultEmployee?.premium?.active ? defaultEmployee.premium.amount : '',
+    premiumActive: Boolean(defaultEmployee?.premium?.active),
+    premiumStartDate: defaultEmployee?.premium?.startDate || '',
     claims: '',
     days: {},
   });
   renderSchedule();
+}
+
+function applyEmployeePremium(scheduleRow, employee) {
+  const premium = employee?.premium || {};
+  scheduleRow.bonusExtra = premium.active ? premium.amount : '';
+  scheduleRow.premiumActive = Boolean(premium.active);
+  scheduleRow.premiumStartDate = premium.startDate || '';
 }
 
 async function saveSchedule() {

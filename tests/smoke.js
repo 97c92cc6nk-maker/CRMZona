@@ -108,11 +108,15 @@ async function main() {
         position: 'Продавец',
         hireDate: '2026-06-01',
         officialEmployment: true,
+        premiumEnabled: true,
+        premiumAmount: '300',
+        premiumStartDate: '2026-06-01',
         role: 'employee',
       },
     });
     assert.equal(createdEmployee.user.position, 'Продавец');
     assert.equal(createdEmployee.user.officialEmployment, true);
+    assert.equal(createdEmployee.user.premiumAmount, '300');
 
     const users = await jsonFetch(`${baseUrl}/api/users`, {
       headers: { Cookie: cookie },
@@ -182,6 +186,7 @@ async function main() {
     assert.equal(loadedEmployeeRow.advanceCard, '1000');
     assert.equal(loadedEmployeeRow.salaryCard, '2000');
     assert.equal(loadedEmployeeRow.bonusExtra, '300');
+    assert.equal(loadedEmployeeRow.premiumActive, true);
     assert.equal(loadedEmployeeRow.claims, '100');
 
     await jsonFetch(`${baseUrl}/api/users/${createdEmployee.user.id}`, {

@@ -180,7 +180,7 @@ test('schedule rows use employees from the directory and respect month boundarie
   assert.equal(rows[0].employeeName, 'Иван Петров');
   assert.equal(rows[0].advanceCard, '1000.5');
   assert.equal(rows[0].salaryCard, '2500');
-  assert.equal(rows[0].bonusExtra, '300');
+  assert.equal(rows[0].bonusExtra, '');
   assert.equal(rows[0].claims, '100');
   assert.deepEqual(rows[0].days, {
     1: { rateRub: '12.5', issuedCount: '7' },
@@ -275,8 +275,62 @@ test('employee can save only own schedule row without overwriting others', () =>
   assert.equal(employeeRow.days['2'].issuedCount, '4');
   assert.equal(employeeRow.advanceCard, '60');
   assert.equal(employeeRow.salaryCard, '90');
-  assert.equal(employeeRow.bonusExtra, '20');
+  assert.equal(employeeRow.bonusExtra, '');
   assert.equal(employeeRow.claims, '8');
+});
+
+test('employee premium applies by month and preserves historical values', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    ...validateRegistration({
+      fullName: 'Анна Владелец',
+      phone: '+79990000041',
+      email: 'owner-premium@example.com',
+    }),
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Иван Премия',
+    phone: '+79990000042',
+    email: 'premium@example.com',
+    password: 'PremiumPass123',
+    role: 'employee',
+    allowedSections: ['schedule'],
+    allowedPoints: ['moscow_6231'],
+    premiumEnabled: true,
+    premiumAmount: '5000',
+    premiumStartDate: '2026-06-01',
+  });
+
+  const june = store.getSchedule('moscow_6231', '2026-06', owner);
+  const juneRow = june.rows.find((row) => row.employeeId === employee.id);
+  assert.equal(juneRow.bonusExtra, '5000');
+  assert.equal(juneRow.premiumActive, true);
+
+  store.updateUser(owner, employee.id, {
+    ...employee,
+    premiumEnabled: true,
+    premiumAmount: '7000',
+    premiumStartDate: '2026-07-01',
+  });
+
+  const juneAfterChange = store.getSchedule('moscow_6231', '2026-06', owner);
+  const july = store.getSchedule('moscow_6231', '2026-07', owner);
+  assert.equal(juneAfterChange.rows.find((row) => row.employeeId === employee.id).bonusExtra, '5000');
+  assert.equal(july.rows.find((row) => row.employeeId === employee.id).bonusExtra, '7000');
+
+  const updatedEmployee = store.getUserById(employee.id);
+  store.updateUser(owner, employee.id, {
+    ...updatedEmployee,
+    premiumEnabled: false,
+    premiumAmount: '',
+    premiumStartDate: '2026-08-01',
+  });
+
+  const august = store.getSchedule('moscow_6231', '2026-08', owner);
+  const augustRow = august.rows.find((row) => row.employeeId === employee.id);
+  assert.equal(augustRow.bonusExtra, '');
+  assert.equal(augustRow.premiumActive, false);
 });
 
 test('owner can maintain employee directory records', () => {
