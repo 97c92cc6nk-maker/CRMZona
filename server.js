@@ -1692,7 +1692,7 @@ function startServer() {
   return server;
 }
 
-if (require.main === module || process.env.VERCEL) {
+if (require.main === module || (process.env.VERCEL && !process.env.VERCEL_API_ADAPTER)) {
   startServer();
 }
 
