@@ -9,13 +9,14 @@ const os = require('os');
 const tls = require('tls');
 const { URL } = require('url');
 
-loadEnvFile(path.join(__dirname, '.env'));
+const ROOT_DIR = path.resolve(__dirname, '..');
+
+loadEnvFile(path.join(ROOT_DIR, '.env'));
 
 if (!process.env.DATA_DIR && process.env.VERCEL) {
   process.env.DATA_DIR = path.join(os.tmpdir(), 'crmzona-data');
 }
 
-const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const DEFAULT_DATA_DIR = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)

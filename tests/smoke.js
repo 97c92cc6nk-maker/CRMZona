@@ -9,7 +9,7 @@ const path = require('path');
 process.env.SMTP_HOST = '';
 process.env.SMTP_PORT = '';
 
-const { Store, createRequestHandler } = require('../server');
+const { Store, createRequestHandler } = require('../src/server');
 
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-smoke-'));
