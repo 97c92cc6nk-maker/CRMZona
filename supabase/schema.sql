@@ -24,3 +24,5 @@ values
   ('repairs.json', '[]'::jsonb),
   ('audit.json', '[]'::jsonb)
 on conflict (key) do nothing;
+
+notify pgrst, 'reload schema';
