@@ -11,6 +11,10 @@ const { URL } = require('url');
 
 loadEnvFile(path.join(__dirname, '.env'));
 
+if (!process.env.DATA_DIR && process.env.VERCEL) {
+  process.env.DATA_DIR = path.join(os.tmpdir(), 'crmzona-data');
+}
+
 const ROOT_DIR = __dirname;
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 const DEFAULT_DATA_DIR = process.env.DATA_DIR
@@ -1688,7 +1692,7 @@ function startServer() {
   return server;
 }
 
-if (require.main === module) {
+if (require.main === module || process.env.VERCEL) {
   startServer();
 }
 
