@@ -9,6 +9,12 @@ module.exports = (req, res) => {
     hasPassword: Boolean(process.env.SMTP_PASS),
     from: process.env.SMTP_FROM || process.env.SMTP_USER || null,
   };
+  const supabase = {
+    configured: Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY)),
+    hasUrl: Boolean(process.env.SUPABASE_URL),
+    hasServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY),
+    url: process.env.SUPABASE_URL || null,
+  };
 
   res.statusCode = 200;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -16,6 +22,7 @@ module.exports = (req, res) => {
     ok: true,
     runtime: 'vercel-function',
     smtp,
+    supabase,
     at: new Date().toISOString(),
   }));
 };

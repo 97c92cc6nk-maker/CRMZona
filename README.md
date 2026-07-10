@@ -75,6 +75,26 @@ $env:SMTP_FROM="mailbox@example.com"
 
 Пароли не хранятся в открытом виде. В файле пользователей хранится PBKDF2-хеш с солью.
 
+## Supabase
+
+Для постоянного хранения данных на Vercel:
+
+1. В Supabase откройте SQL Editor и выполните `supabase/schema.sql`.
+2. В Vercel добавьте Environment Variables:
+
+```text
+SUPABASE_URL=https://thsuhgyarzsxehjldrbf.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` храните только в Vercel, не добавляйте его в `public/` и не коммитьте в GitHub.
+
+Если нужно перенести текущие локальные данные из `data/` в Supabase, задайте `SUPABASE_URL` и `SUPABASE_SERVICE_ROLE_KEY` в локальном `.env`, затем выполните:
+
+```powershell
+npm run migrate:supabase
+```
+
 ## Проверка
 
 ```powershell
