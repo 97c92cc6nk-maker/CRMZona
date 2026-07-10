@@ -308,10 +308,19 @@ test('employee premium applies by month and preserves historical values', () => 
   assert.equal(juneRow.premiumActive, true);
 
   store.updateUser(owner, employee.id, {
-    ...employee,
-    premiumEnabled: true,
-    premiumAmount: '7000',
-    premiumStartDate: '2026-07-01',
+    fullName: employee.fullName,
+    phone: employee.phone,
+    email: employee.email,
+    position: employee.position,
+    hireDate: employee.hireDate,
+    officialEmployment: employee.officialEmployment,
+    role: employee.role,
+    allowedSections: employee.allowedSections,
+    allowedPoints: employee.allowedPoints,
+    premiumHistory: [
+      { active: true, amount: '5000', startDate: '2026-06-01' },
+      { active: true, amount: '7000', startDate: '2026-07-01' },
+    ],
   });
 
   const juneAfterChange = store.getSchedule('moscow_6231', '2026-06', owner);
@@ -321,16 +330,83 @@ test('employee premium applies by month and preserves historical values', () => 
 
   const updatedEmployee = store.getUserById(employee.id);
   store.updateUser(owner, employee.id, {
-    ...updatedEmployee,
-    premiumEnabled: false,
-    premiumAmount: '',
-    premiumStartDate: '2026-08-01',
+    fullName: updatedEmployee.fullName,
+    phone: updatedEmployee.phone,
+    email: updatedEmployee.email,
+    position: updatedEmployee.position,
+    hireDate: updatedEmployee.hireDate,
+    officialEmployment: updatedEmployee.officialEmployment,
+    role: updatedEmployee.role,
+    allowedSections: updatedEmployee.allowedSections,
+    allowedPoints: updatedEmployee.allowedPoints,
+    premiumHistory: [
+      { active: true, amount: '5000', startDate: '2026-06-01' },
+      { active: true, amount: '7000', startDate: '2026-07-01' },
+      { active: false, amount: '', startDate: '2026-08-01' },
+    ],
   });
 
   const august = store.getSchedule('moscow_6231', '2026-08', owner);
   const augustRow = august.rows.find((row) => row.employeeId === employee.id);
   assert.equal(augustRow.bonusExtra, '');
   assert.equal(augustRow.premiumActive, false);
+});
+
+test('employee premium is assigned to the point with the most worked days', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    ...validateRegistration({
+      fullName: 'Анна Владелец',
+      phone: '+79990000043',
+      email: 'owner-premium-points@example.com',
+    }),
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Иван Точки',
+    phone: '+79990000044',
+    email: 'premium-points@example.com',
+    password: 'PremiumPass123',
+    role: 'employee',
+    allowedSections: ['schedule'],
+    allowedPoints: ['moscow_6231', 'krasnogorsk_466'],
+    premiumEnabled: true,
+    premiumAmount: '5000',
+    premiumStartDate: '2026-06-01',
+  });
+
+  store.saveSchedule(owner, 'moscow_6231', '2026-06', [{
+    employeeId: employee.id,
+    days: {
+      1: { rateRub: '1000', issuedCount: '1' },
+      2: { rateRub: '1000', issuedCount: '1' },
+    },
+  }]);
+  store.saveSchedule(owner, 'krasnogorsk_466', '2026-06', [{
+    employeeId: employee.id,
+    days: {
+      1: { rateRub: '1000', issuedCount: '1' },
+    },
+  }]);
+
+  let moscow = store.getSchedule('moscow_6231', '2026-06', owner);
+  let krasnogorsk = store.getSchedule('krasnogorsk_466', '2026-06', owner);
+  assert.equal(moscow.rows.find((row) => row.employeeId === employee.id).bonusExtra, '5000');
+  assert.equal(krasnogorsk.rows.find((row) => row.employeeId === employee.id).bonusExtra, '0');
+
+  store.saveSchedule(owner, 'krasnogorsk_466', '2026-06', [{
+    employeeId: employee.id,
+    days: {
+      1: { rateRub: '1000', issuedCount: '1' },
+      2: { rateRub: '1000', issuedCount: '1' },
+      3: { rateRub: '1000', issuedCount: '1' },
+    },
+  }]);
+
+  moscow = store.getSchedule('moscow_6231', '2026-06', owner);
+  krasnogorsk = store.getSchedule('krasnogorsk_466', '2026-06', owner);
+  assert.equal(moscow.rows.find((row) => row.employeeId === employee.id).bonusExtra, '0');
+  assert.equal(krasnogorsk.rows.find((row) => row.employeeId === employee.id).bonusExtra, '5000');
 });
 
 test('owner can maintain employee directory records', () => {

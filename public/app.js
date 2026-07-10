@@ -14,6 +14,7 @@ const state = {
   canEditSchedule: false,
   canManageAllSchedule: false,
   employeeOptions: [],
+  selectedEmployeeId: null,
 };
 
 const els = {};
@@ -50,6 +51,13 @@ function bindElements() {
     employeesNotice: document.getElementById('employeesNotice'),
     employeeAddPanel: document.getElementById('employeeAddPanel'),
     employeeForm: document.getElementById('employeeForm'),
+    employeeCardPanel: document.getElementById('employeeCardPanel'),
+    employeeCardTitle: document.getElementById('employeeCardTitle'),
+    employeeCardForm: document.getElementById('employeeCardForm'),
+    employeeCardPremiumRows: document.getElementById('employeeCardPremiumRows'),
+    addPremiumRow: document.getElementById('addPremiumRow'),
+    closeEmployeeCard: document.getElementById('closeEmployeeCard'),
+    deleteEmployeeCard: document.getElementById('deleteEmployeeCard'),
     refreshEmployees: document.getElementById('refreshEmployees'),
     usersPanel: document.getElementById('usersPanel'),
     usersBody: document.getElementById('usersBody'),
@@ -88,6 +96,12 @@ function bindEvents() {
   els.logoutButton.addEventListener('click', handleLogout);
   els.passwordForm.addEventListener('submit', handlePasswordChange);
   els.employeeForm.addEventListener('submit', handleEmployeeCreate);
+  els.employeeCardForm.addEventListener('submit', handleEmployeeCardSave);
+  els.closeEmployeeCard.addEventListener('click', closeEmployeeCard);
+  els.addPremiumRow.addEventListener('click', () => addPremiumHistoryRow());
+  els.employeeCardPremiumRows.addEventListener('click', handlePremiumHistoryClick);
+  els.employeeCardPremiumRows.addEventListener('change', handlePremiumHistoryChange);
+  els.deleteEmployeeCard.addEventListener('click', () => deleteEmployee(state.selectedEmployeeId, els.deleteEmployeeCard));
   els.refreshEmployees.addEventListener('click', loadUsers);
   els.refreshAudit.addEventListener('click', loadAudit);
   els.repairForm.addEventListener('submit', handleRepairCreate);
@@ -267,6 +281,7 @@ async function handleLogout() {
     state.sections = [];
     state.points = [];
     state.schedule = null;
+    state.selectedEmployeeId = null;
     showAuth();
   }, els.profileNotice);
 }
@@ -477,6 +492,7 @@ async function loadUsers() {
     state.points = data.points || state.points;
     renderEmployeeFormAccessControls();
     renderEmployees();
+    renderEmployeeCard();
   }, els.employeesNotice);
 }
 
@@ -486,7 +502,7 @@ function renderEmployees() {
   if (!state.users.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 13;
+    cell.colSpan = 4;
     cell.className = 'empty-state';
     cell.textContent = 'Нет сотрудников.';
     row.append(cell);
@@ -502,22 +518,229 @@ function renderEmployees() {
 function buildEmployeeRow(user) {
   const row = document.createElement('tr');
   row.dataset.userId = user.id;
-  const editable = state.permissions.canManageRoles && user.role !== 'owner';
 
-  row.append(employeeTextInputCell(user, 'fullName', editable));
-  row.append(employeeTextInputCell(user, 'phone', editable));
-  row.append(employeeTextInputCell(user, 'email', editable, 'email'));
-  row.append(employeeTextInputCell(user, 'position', editable));
-  row.append(employeeTextInputCell(user, 'hireDate', editable, 'date'));
-  row.append(employeeOfficialCell(user, editable));
-  row.append(employeePremiumEnabledCell(user, editable));
-  row.append(employeeTextInputCell(user, 'premiumAmount', editable, 'text'));
-  row.append(employeeTextInputCell(user, 'premiumStartDate', editable, 'date'));
-  row.append(employeeRoleCell(user, editable));
-  row.append(employeeAccessCell(user, editable, 'allowedSections', state.sections));
-  row.append(employeeAccessCell(user, editable, 'allowedPoints', state.points.map((point) => ({ id: point.id, label: point.name }))));
-  row.append(employeeActionsCell(user, editable));
+  const nameCell = document.createElement('td');
+  const nameButton = document.createElement('button');
+  nameButton.className = 'text-link';
+  nameButton.type = 'button';
+  nameButton.textContent = user.fullName;
+  nameButton.addEventListener('click', () => openEmployeeCard(user.id));
+  nameCell.append(nameButton);
+  row.append(nameCell);
+
+  appendCell(row, user.phone || '');
+  appendCell(row, user.email || '');
+  appendCell(row, user.roleLabel || user.role || '');
   return row;
+}
+
+function openEmployeeCard(userId) {
+  state.selectedEmployeeId = userId;
+  renderEmployeeCard();
+  els.employeeCardPanel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+function closeEmployeeCard() {
+  state.selectedEmployeeId = null;
+  renderEmployeeCard();
+}
+
+function selectedEmployee() {
+  return state.users.find((user) => user.id === state.selectedEmployeeId) || null;
+}
+
+function selectedEmployeeEditable(user = selectedEmployee()) {
+  return Boolean(user && state.permissions.canManageRoles && user.role !== 'owner');
+}
+
+function renderEmployeeCard() {
+  const user = selectedEmployee();
+  if (!user) {
+    els.employeeCardPanel.classList.add('is-hidden');
+    els.employeeCardForm.reset();
+    els.employeeCardForm.dataset.userId = '';
+    return;
+  }
+
+  const editable = selectedEmployeeEditable(user);
+  const form = els.employeeCardForm;
+  form.dataset.userId = user.id;
+  els.employeeCardTitle.textContent = `Карточка сотрудника: ${user.fullName}`;
+  form.elements.fullName.value = user.fullName || '';
+  form.elements.phone.value = user.phone || '';
+  form.elements.email.value = user.email || '';
+  form.elements.position.value = user.position || '';
+  form.elements.hireDate.value = user.hireDate || '';
+  form.elements.officialEmployment.checked = Boolean(user.officialEmployment);
+
+  renderEmployeeCardRole(user, editable);
+  renderEmployeeCardAccess(user, editable);
+  renderPremiumHistoryRows(user.premiumHistory || [], editable);
+  setEmployeeCardEditable(editable);
+  els.employeeCardPanel.classList.remove('is-hidden');
+}
+
+function renderEmployeeCardRole(user, editable) {
+  const select = els.employeeCardForm.elements.role;
+  select.replaceChildren();
+  const options = user.role === 'owner'
+    ? [{ value: 'owner', label: user.roleLabel || 'Владелец' }, ...state.roles]
+    : state.roles;
+  const seen = new Set();
+
+  for (const role of options) {
+    if (!role?.value || seen.has(role.value)) continue;
+    seen.add(role.value);
+    const option = document.createElement('option');
+    option.value = role.value;
+    option.textContent = role.label;
+    option.selected = role.value === user.role;
+    select.append(option);
+  }
+  select.disabled = !editable;
+}
+
+function renderEmployeeCardAccess(user, editable) {
+  const sectionTarget = document.querySelector('[data-access-card="sections"]');
+  const pointTarget = document.querySelector('[data-access-card="points"]');
+  if (sectionTarget) {
+    sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections, new Set(user.allowedSections || [])));
+    setInputsDisabled(sectionTarget, !editable);
+  }
+  if (pointTarget) {
+    const pointOptions = state.points.map((point) => ({ id: point.id, label: point.name }));
+    pointTarget.replaceChildren(buildAccessCheckboxes('allowedPoints', pointOptions, new Set(user.allowedPoints || [])));
+    setInputsDisabled(pointTarget, !editable);
+  }
+}
+
+function setEmployeeCardEditable(editable) {
+  els.employeeCardForm
+    .querySelectorAll('input, select')
+    .forEach((field) => {
+      field.disabled = !editable;
+    });
+  els.addPremiumRow.disabled = !editable;
+  els.addPremiumRow.classList.toggle('is-hidden', !editable);
+  els.employeeCardForm.querySelector('button[type="submit"]').classList.toggle('is-hidden', !editable);
+  els.deleteEmployeeCard.classList.toggle('is-hidden', !editable);
+  els.employeeCardPremiumRows
+    .querySelectorAll('.premium-history-row')
+    .forEach((row) => syncPremiumAmountState(row, editable));
+}
+
+function setInputsDisabled(root, disabled) {
+  root.querySelectorAll('input, select, button').forEach((field) => {
+    field.disabled = disabled;
+  });
+}
+
+function renderPremiumHistoryRows(history, editable) {
+  els.employeeCardPremiumRows.replaceChildren();
+  const records = normalizePremiumHistoryForUi(history);
+
+  if (!records.length) {
+    renderEmptyPremiumHistory();
+    return;
+  }
+
+  for (const record of records) {
+    addPremiumHistoryRow(record, editable);
+  }
+}
+
+function normalizePremiumHistoryForUi(history) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((item) => item && item.startDate)
+    .map((item) => ({
+      startDate: item.startDate || '',
+      active: item.active !== false,
+      amount: item.amount || '',
+    }))
+    .sort((left, right) => left.startDate.localeCompare(right.startDate));
+}
+
+function renderEmptyPremiumHistory() {
+  const empty = document.createElement('div');
+  empty.className = 'empty-state premium-empty';
+  empty.textContent = 'Премии не назначены.';
+  els.employeeCardPremiumRows.append(empty);
+}
+
+function addPremiumHistoryRow(record = {}, editable = selectedEmployeeEditable()) {
+  const empty = els.employeeCardPremiumRows.querySelector('.premium-empty');
+  if (empty) empty.remove();
+
+  const row = document.createElement('div');
+  row.className = 'premium-history-row';
+
+  const dateLabel = document.createElement('label');
+  dateLabel.textContent = 'Дата начала';
+  const dateInput = document.createElement('input');
+  dateInput.type = 'date';
+  dateInput.dataset.premiumField = 'startDate';
+  dateInput.value = record.startDate || '';
+  dateInput.disabled = !editable;
+  dateLabel.append(dateInput);
+
+  const activeLabel = document.createElement('label');
+  activeLabel.className = 'check-row premium-check';
+  const activeInput = document.createElement('input');
+  activeInput.type = 'checkbox';
+  activeInput.dataset.premiumField = 'active';
+  activeInput.checked = record.active !== false;
+  activeInput.disabled = !editable;
+  const activeText = document.createElement('span');
+  activeText.textContent = 'Активна';
+  activeLabel.append(activeInput, activeText);
+
+  const amountLabel = document.createElement('label');
+  amountLabel.textContent = 'Сумма';
+  const amountInput = document.createElement('input');
+  amountInput.type = 'text';
+  amountInput.inputMode = 'decimal';
+  amountInput.pattern = '\\d*([,.]\\d+)?';
+  amountInput.maxLength = 16;
+  amountInput.dataset.premiumField = 'amount';
+  amountInput.value = record.amount || '';
+  amountLabel.append(amountInput);
+
+  const remove = document.createElement('button');
+  remove.className = 'danger premium-remove';
+  remove.type = 'button';
+  remove.dataset.removePremium = 'true';
+  remove.textContent = 'Удалить';
+  remove.disabled = !editable;
+
+  row.append(dateLabel, activeLabel, amountLabel, remove);
+  els.employeeCardPremiumRows.append(row);
+  syncPremiumAmountState(row, editable);
+}
+
+function handlePremiumHistoryClick(event) {
+  const button = event.target.closest('[data-remove-premium]');
+  if (!button) return;
+  button.closest('.premium-history-row')?.remove();
+  if (!els.employeeCardPremiumRows.querySelector('.premium-history-row')) {
+    renderEmptyPremiumHistory();
+  }
+}
+
+function handlePremiumHistoryChange(event) {
+  const row = event.target.closest('.premium-history-row');
+  if (!row) return;
+  syncPremiumAmountState(row, selectedEmployeeEditable());
+}
+
+function syncPremiumAmountState(row, editable) {
+  const active = row.querySelector('[data-premium-field="active"]');
+  const amount = row.querySelector('[data-premium-field="amount"]');
+  if (!active || !amount) return;
+  amount.disabled = !editable || !active.checked;
+  if (!active.checked) {
+    amount.value = '';
+  }
 }
 
 function employeeTextInputCell(user, field, editable, type = 'text') {
@@ -681,19 +904,25 @@ async function handleEmployeeCreate(event) {
       body: employeePayloadFromForm(els.employeeForm),
     });
     els.employeeForm.reset();
+    state.selectedEmployeeId = data.user.id;
     await loadUsers();
     showEmployeeDelivery(data, 'Сотрудник добавлен.');
   }, els.employeesNotice);
 }
 
+async function handleEmployeeCardSave(event) {
+  event.preventDefault();
+  await updateEmployee(els.employeeCardForm.dataset.userId, event.submitter);
+}
+
 async function updateEmployee(userId, button) {
-  const row = els.employeesBody.querySelector(`tr[data-user-id="${CSS.escape(userId)}"]`);
-  if (!row) return;
+  if (!userId) return;
   await runWithButton(button, async () => {
     const data = await api(`/api/users/${encodeURIComponent(userId)}`, {
       method: 'PATCH',
-      body: employeePayloadFromRow(row),
+      body: employeePayloadFromCard(els.employeeCardForm),
     });
+    state.selectedEmployeeId = data.user.id;
     await loadUsers();
     showNotice(
       els.employeesNotice,
@@ -704,11 +933,13 @@ async function updateEmployee(userId, button) {
 }
 
 async function deleteEmployee(userId, button) {
+  if (!userId) return;
   if (!window.confirm('Удалить сотрудника из справочника и графиков?')) return;
   await runWithButton(button, async () => {
     const data = await api(`/api/users/${encodeURIComponent(userId)}`, {
       method: 'DELETE',
     });
+    state.selectedEmployeeId = null;
     await loadUsers();
     showNotice(
       els.employeesNotice,
@@ -725,6 +956,37 @@ function employeePayloadFromForm(form) {
   values.allowedSections = formArrayValues(form, 'allowedSections');
   values.allowedPoints = formArrayValues(form, 'allowedPoints');
   return values;
+}
+
+function employeePayloadFromCard(form) {
+  const values = formValues(form);
+  values.officialEmployment = form.elements.officialEmployment.checked;
+  values.allowedSections = checkedValues(form, 'allowedSections');
+  values.allowedPoints = checkedValues(form, 'allowedPoints');
+  values.premiumHistory = collectPremiumHistory();
+
+  const latest = latestPremiumRecord(values.premiumHistory);
+  values.premiumEnabled = Boolean(latest?.active);
+  values.premiumAmount = latest?.active ? latest.amount : '';
+  values.premiumStartDate = latest?.startDate || '';
+  return values;
+}
+
+function collectPremiumHistory() {
+  return Array.from(els.employeeCardPremiumRows.querySelectorAll('.premium-history-row'))
+    .map((row) => ({
+      startDate: row.querySelector('[data-premium-field="startDate"]')?.value || '',
+      active: Boolean(row.querySelector('[data-premium-field="active"]')?.checked),
+      amount: row.querySelector('[data-premium-field="amount"]')?.value.trim() || '',
+    }))
+    .filter((item) => item.startDate || item.amount)
+    .sort((left, right) => left.startDate.localeCompare(right.startDate));
+}
+
+function latestPremiumRecord(history) {
+  return Array.isArray(history) && history.length
+    ? [...history].sort((left, right) => left.startDate.localeCompare(right.startDate)).at(-1)
+    : null;
 }
 
 function employeePayloadFromRow(row) {
@@ -1137,11 +1399,14 @@ function summaryInputCell(scheduleRow, field) {
   input.value = scheduleRow[field] || '';
   input.title = input.value;
   if (isPremiumField) {
+    const assignedElsewhere = scheduleRow.premiumAssignedPointId && !scheduleRow.premiumActive;
     input.disabled = !scheduleRow.premiumActive;
     input.readOnly = true;
     input.title = scheduleRow.premiumActive
       ? 'Премия перенесена из карточки сотрудника.'
-      : 'Премия не установлена в карточке сотрудника.';
+      : assignedElsewhere
+        ? `Премия учтена на точке ${pointLabel(scheduleRow.premiumAssignedPointId)}.`
+        : 'Премия не установлена в карточке сотрудника.';
   }
   cell.append(input);
   return cell;
@@ -1216,9 +1481,12 @@ function addScheduleRow() {
     employeeName: defaultEmployee?.fullName || '',
     advanceCard: '',
     salaryCard: '',
-    bonusExtra: defaultEmployee?.premium?.active ? defaultEmployee.premium.amount : '',
+    bonusExtra: defaultEmployee?.premium?.active || defaultEmployee?.premium?.assignedPointId
+      ? defaultEmployee.premium.amount
+      : '',
     premiumActive: Boolean(defaultEmployee?.premium?.active),
     premiumStartDate: defaultEmployee?.premium?.startDate || '',
+    premiumAssignedPointId: defaultEmployee?.premium?.assignedPointId || '',
     claims: '',
     days: {},
   });
@@ -1227,9 +1495,10 @@ function addScheduleRow() {
 
 function applyEmployeePremium(scheduleRow, employee) {
   const premium = employee?.premium || {};
-  scheduleRow.bonusExtra = premium.active ? premium.amount : '';
+  scheduleRow.bonusExtra = premium.active || premium.assignedPointId ? premium.amount : '';
   scheduleRow.premiumActive = Boolean(premium.active);
   scheduleRow.premiumStartDate = premium.startDate || '';
+  scheduleRow.premiumAssignedPointId = premium.assignedPointId || '';
 }
 
 async function saveSchedule() {
@@ -1359,6 +1628,10 @@ function formatDateTime(value) {
 function formatDate(value) {
   if (!value) return '';
   return new Intl.DateTimeFormat('ru-RU').format(new Date(`${value}T00:00:00`));
+}
+
+function pointLabel(pointId) {
+  return state.points.find((point) => point.id === pointId)?.name || pointId || '';
 }
 
 function toNumber(value) {

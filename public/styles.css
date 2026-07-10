@@ -389,6 +389,37 @@ h3 {
   margin-top: 16px;
 }
 
+.employee-card-wide {
+  grid-column: 1 / -1;
+}
+
+.employee-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.premium-history {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.premium-history-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(110px, 0.45fr) minmax(150px, 0.8fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.premium-check {
+  min-height: 40px;
+}
+
+.premium-remove {
+  min-width: 88px;
+}
+
 .access-fieldset {
   min-width: 0;
   border: 1px solid var(--line);
@@ -509,7 +540,7 @@ tbody tr:last-child td {
 }
 
 .employees-table {
-  min-width: 2040px;
+  min-width: 760px;
 }
 
 .repairs-table {
@@ -530,6 +561,21 @@ tbody tr:last-child td {
   min-width: 18px;
   width: 18px;
   min-height: 18px;
+}
+
+.text-link {
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font-weight: 750;
+  text-align: left;
+  white-space: normal;
+}
+
+.text-link:hover {
+  text-decoration: underline;
 }
 
 .center-cell {
@@ -811,6 +857,10 @@ tbody tr:last-child td {
   .inline-form,
   .employee-form,
   .repair-form {
+    grid-template-columns: 1fr;
+  }
+
+  .premium-history-row {
     grid-template-columns: 1fr;
   }
 

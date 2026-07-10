@@ -217,6 +217,60 @@
           </form>
         </section>
 
+        <section class="panel is-hidden" id="employeeCardPanel" aria-labelledby="employeeCardTitle">
+          <div class="panel-head">
+            <h3 id="employeeCardTitle">Карточка сотрудника</h3>
+            <button class="secondary" type="button" id="closeEmployeeCard">К списку</button>
+          </div>
+          <form class="employee-form employee-card-form" id="employeeCardForm">
+            <label>
+              ФИО
+              <input name="fullName" type="text" autocomplete="name" required maxlength="120">
+            </label>
+            <label>
+              Номер телефона
+              <input name="phone" type="tel" autocomplete="tel" required maxlength="32">
+            </label>
+            <label>
+              Email
+              <input name="email" type="email" autocomplete="email" required maxlength="180">
+            </label>
+            <label>
+              Должность
+              <input name="position" type="text" maxlength="120">
+            </label>
+            <label>
+              Дата начала работы
+              <input name="hireDate" type="date">
+            </label>
+            <label>
+              Тип учетной записи
+              <select name="role" required></select>
+            </label>
+            <fieldset class="access-fieldset" id="employeeCardSections">
+              <legend>Разделы</legend>
+              <div class="access-options" data-access-card="sections"></div>
+            </fieldset>
+            <fieldset class="access-fieldset" id="employeeCardPoints">
+              <legend>Торговые точки</legend>
+              <div class="access-options" data-access-card="points"></div>
+            </fieldset>
+            <label class="check-row">
+              <input name="officialEmployment" type="checkbox" value="true">
+              <span>Официальное трудоустройство</span>
+            </label>
+            <fieldset class="access-fieldset employee-card-wide">
+              <legend>История премий</legend>
+              <div class="premium-history" id="employeeCardPremiumRows"></div>
+              <button class="secondary" type="button" id="addPremiumRow">Добавить премию</button>
+            </fieldset>
+            <div class="employee-card-actions employee-card-wide">
+              <button class="primary" type="submit">Сохранить</button>
+              <button class="danger" type="button" id="deleteEmployeeCard">Удалить</button>
+            </div>
+          </form>
+        </section>
+
         <section class="panel" aria-labelledby="employeesListTitle">
           <h3 id="employeesListTitle">Список сотрудников</h3>
           <div class="table-wrap employees-wrap">
@@ -226,16 +280,7 @@
                   <th>ФИО</th>
                   <th>Телефон</th>
                   <th>Email</th>
-                  <th>Должность</th>
-                  <th>Дата начала</th>
-                  <th>Оф.</th>
-                  <th>Премия</th>
-                  <th>Сумма премии</th>
-                  <th>Дата премии</th>
                   <th>Тип учетной записи</th>
-                  <th>Разделы</th>
-                  <th>Точки</th>
-                  <th></th>
                 </tr>
               </thead>
               <tbody id="employeesBody"></tbody>
