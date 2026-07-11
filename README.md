@@ -107,6 +107,15 @@ GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 
 Папку `GOOGLE_DRIVE_FOLDER_ID` нужно расшарить на `client_email` сервисного аккаунта. Для сервисного аккаунта это должна быть папка на Shared Drive: у сервисных аккаунтов нет собственной квоты Google Drive, поэтому обычная папка в My Drive не сможет принимать загрузки. Внутри нее сайт найдет или создаст папку `Хозрасходы`; если уже есть конкретная папка расходов на Shared Drive, можно задать `GOOGLE_DRIVE_EXPENSES_FOLDER_ID`.
 
+Если архив нужен в обычном Google Drive/My Drive, используйте OAuth вместо сервисного аккаунта:
+
+```text
+GOOGLE_DRIVE_CLIENT_ID=your-oauth-client-id
+GOOGLE_DRIVE_CLIENT_SECRET=your-oauth-client-secret
+GOOGLE_DRIVE_REFRESH_TOKEN=your-oauth-refresh-token
+GOOGLE_DRIVE_EXPENSES_FOLDER_NAME=Хозрасходы
+```
+
 Чеки принимаются в JPG, PNG, WebP и PDF. В Google Drive они называются по схеме `Дата чека-Пользователь-Торговая точка-Уникальный номер`, чтобы сортироваться по дате. Если Google Drive не настроен или недоступен, расход и чек всё равно сохраняются на сайте, а в записи расхода будет явно указана причина.
 
 ## Проверка
