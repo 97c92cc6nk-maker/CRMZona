@@ -81,6 +81,7 @@
         <nav class="tabs" aria-label="Разделы">
           <button class="tab is-active" type="button" data-view="profileView">Личный кабинет</button>
           <button class="tab is-hidden" type="button" data-view="employeesView" id="employeesTab">Сотрудники</button>
+          <button class="tab" type="button" data-view="retailPointsView">Торговые точки</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
           <button class="tab" type="button" data-view="expensesView">Хозрасходы</button>
@@ -305,6 +306,104 @@
         </section>
 
         <div class="notice" id="employeesNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="retailPointsView" aria-labelledby="retailPointsTitle">
+        <div class="section-head">
+          <h2 id="retailPointsTitle">Торговые точки</h2>
+          <button class="secondary" type="button" id="refreshRetailPoints">Обновить</button>
+        </div>
+
+        <section class="panel is-hidden" id="retailPointAddPanel" aria-labelledby="retailPointAddTitle">
+          <h3 id="retailPointAddTitle">Добавить торговую точку</h3>
+          <form class="retail-point-form" id="retailPointForm">
+            <label>Название торговой точки<input name="name" type="text" required maxlength="120"></label>
+            <label>Адрес помещения<input name="address" type="text" maxlength="240"></label>
+            <label>Арендодатель<input name="landlord" type="text" maxlength="160"></label>
+            <label>Юр.лицо<input name="legalEntity" type="text" maxlength="160"></label>
+            <label>Имя собственника<input name="ownerName" type="text" maxlength="160"></label>
+            <label>Телефон<input name="phone" type="tel" maxlength="32"></label>
+            <label>Email<input name="email" type="email" maxlength="180"></label>
+            <button class="primary" type="submit">Добавить</button>
+          </form>
+        </section>
+
+        <section class="panel is-hidden" id="retailPointCardPanel" aria-labelledby="retailPointCardTitle">
+          <div class="panel-head">
+            <h3 id="retailPointCardTitle">Карточка торговой точки</h3>
+            <button class="secondary" type="button" id="closeRetailPointCard">К списку</button>
+          </div>
+          <form class="retail-point-form" id="retailPointCardForm">
+            <label>Название торговой точки<input name="name" type="text" required maxlength="120"></label>
+            <label>Адрес помещения<input name="address" type="text" maxlength="240"></label>
+            <label>Арендодатель<input name="landlord" type="text" maxlength="160"></label>
+            <label>Юр.лицо<input name="legalEntity" type="text" maxlength="160"></label>
+            <label>Имя собственника<input name="ownerName" type="text" maxlength="160"></label>
+            <label>Телефон<input name="phone" type="tel" maxlength="32"></label>
+            <label>Email<input name="email" type="email" maxlength="180"></label>
+
+            <fieldset class="access-fieldset retail-point-wide">
+              <legend>Интернет</legend>
+              <div class="retail-point-grid">
+                <label>Провайдер<input name="internet.provider" type="text" maxlength="160"></label>
+                <label>Оплата<select name="internet.payment" id="retailPointInternetPayment"></select></label>
+                <label>Номер договора/л/с<input name="internet.contractNumber" type="text" maxlength="120"></label>
+                <label>На ком договор<input name="internet.contractHolder" type="text" maxlength="160"></label>
+                <label>Тариф<input name="internet.tariff" type="text" maxlength="160"></label>
+                <label>Логин<input name="internet.login" type="text" maxlength="160"></label>
+                <label>Пароль<input name="internet.password" type="text" maxlength="160"></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="access-fieldset retail-point-wide">
+              <legend>Видеонаблюдение</legend>
+              <div class="retail-point-grid">
+                <label>Оператор видеонаблюдения<input name="video.operator" type="text" maxlength="160"></label>
+                <label>Кол-во камер<input name="video.camerasCount" type="text" inputmode="numeric" pattern="\d*" maxlength="8"></label>
+                <label>Номер договора<input name="video.contractNumber" type="text" maxlength="120"></label>
+                <label>На ком договор<input name="video.contractHolder" type="text" maxlength="160"></label>
+                <label>Тариф<input name="video.tariff" type="text" maxlength="160"></label>
+                <label>Логин<input name="video.login" type="text" maxlength="160"></label>
+                <label>Пароль<input name="video.password" type="text" maxlength="160"></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="access-fieldset retail-point-wide">
+              <legend>Документы по торговой точке</legend>
+              <div class="retail-point-document-upload">
+                <label>Файл изображения/PDF<input id="retailPointDocumentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"></label>
+                <button class="secondary" type="button" id="uploadRetailPointDocument">Загрузить</button>
+              </div>
+              <div class="retail-point-documents-list" id="retailPointDocumentsList"></div>
+            </fieldset>
+
+            <div class="employee-card-actions retail-point-wide">
+              <button class="primary" type="submit">Сохранить</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="retailPointsListTitle">
+          <h3 id="retailPointsListTitle">Список торговых точек</h3>
+          <div class="table-wrap">
+            <table class="retail-points-table">
+              <thead>
+                <tr>
+                  <th>Название торговой точки</th>
+                  <th>Адрес помещения</th>
+                  <th>Арендодатель</th>
+                  <th>Юр.лицо</th>
+                  <th>Имя собственника</th>
+                  <th>Телефон</th>
+                  <th>Email</th>
+                </tr>
+              </thead>
+              <tbody id="retailPointsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="notice" id="retailPointsNotice" role="status" aria-live="polite"></div>
       </section>
 
       <section class="view" id="scheduleView" aria-labelledby="scheduleTitle">

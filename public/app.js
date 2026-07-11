@@ -7,6 +7,8 @@ const state = {
   sections: [],
   points: [],
   users: [],
+  retailPoints: [],
+  retailPointPaymentMethods: [],
   repairs: [],
   expenses: [],
   employeeDocumentTypes: [],
@@ -23,6 +25,7 @@ const state = {
   canManageAllSchedule: false,
   employeeOptions: [],
   selectedEmployeeId: null,
+  selectedRetailPointId: null,
 };
 
 const els = {};
@@ -77,6 +80,19 @@ function bindElements() {
     auditPanel: document.getElementById('auditPanel'),
     auditList: document.getElementById('auditList'),
     refreshAudit: document.getElementById('refreshAudit'),
+    retailPointForm: document.getElementById('retailPointForm'),
+    retailPointAddPanel: document.getElementById('retailPointAddPanel'),
+    retailPointCardPanel: document.getElementById('retailPointCardPanel'),
+    retailPointCardTitle: document.getElementById('retailPointCardTitle'),
+    retailPointCardForm: document.getElementById('retailPointCardForm'),
+    retailPointInternetPayment: document.getElementById('retailPointInternetPayment'),
+    retailPointDocumentFile: document.getElementById('retailPointDocumentFile'),
+    uploadRetailPointDocument: document.getElementById('uploadRetailPointDocument'),
+    retailPointDocumentsList: document.getElementById('retailPointDocumentsList'),
+    closeRetailPointCard: document.getElementById('closeRetailPointCard'),
+    refreshRetailPoints: document.getElementById('refreshRetailPoints'),
+    retailPointsBody: document.getElementById('retailPointsBody'),
+    retailPointsNotice: document.getElementById('retailPointsNotice'),
     repairForm: document.getElementById('repairForm'),
     repairPointSelect: document.getElementById('repairPointSelect'),
     refreshRepairs: document.getElementById('refreshRepairs'),
@@ -128,6 +144,12 @@ function bindEvents() {
   els.deleteEmployeeCard.addEventListener('click', () => deleteEmployee(state.selectedEmployeeId, els.deleteEmployeeCard));
   els.refreshEmployees.addEventListener('click', loadUsers);
   els.refreshAudit.addEventListener('click', loadAudit);
+  els.retailPointForm.addEventListener('submit', handleRetailPointCreate);
+  els.retailPointCardForm.addEventListener('submit', handleRetailPointSave);
+  els.closeRetailPointCard.addEventListener('click', closeRetailPointCard);
+  els.uploadRetailPointDocument.addEventListener('click', handleRetailPointDocumentUpload);
+  els.retailPointDocumentsList.addEventListener('click', handleRetailPointDocumentClick);
+  els.refreshRetailPoints.addEventListener('click', loadRetailPoints);
   els.repairForm.addEventListener('submit', handleRepairCreate);
   els.refreshRepairs.addEventListener('click', loadRepairs);
   els.repairsBody.addEventListener('change', handleRepairStatusChange);
@@ -184,6 +206,11 @@ async function loadAppData() {
   }
   if (state.permissions.canViewAudit) {
     await loadAudit();
+  }
+  if (state.permissions.canViewRetailPoints) {
+    await loadRetailPoints();
+  } else {
+    renderRetailPoints();
   }
   if (state.permissions.canViewRepairs) {
     await loadRepairs();
@@ -354,10 +381,12 @@ function renderProfile() {
   els.profileEmail.textContent = user.email;
   els.profileRole.textContent = user.roleLabel;
   els.employeesTab.classList.toggle('is-hidden', !state.permissions.canViewUsers);
+  setTabVisibility('retailPointsView', Boolean(state.permissions.canViewRetailPoints));
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('repairsView', Boolean(state.permissions.canViewRepairs));
   setTabVisibility('expensesView', Boolean(state.permissions.canViewExpenses));
   els.employeeAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRoles);
+  els.retailPointAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRetailPoints);
   if (els.usersPanel) {
     els.usersPanel.classList.add('is-hidden');
   }
@@ -394,6 +423,432 @@ function fillPointSelect(select) {
     return option;
   }));
   select.disabled = !state.points.length;
+}
+
+async function loadRetailPoints() {
+  if (!state.permissions.canViewRetailPoints) return;
+  await runWithButton(els.refreshRetailPoints, async () => {
+    const data = await api('/api/retail-points');
+    state.retailPoints = data.points || [];
+    state.retailPointPaymentMethods = data.paymentMethods || [];
+    state.permissions.canManageRetailPoints = Boolean(data.canManage);
+    renderRetailPoints();
+    renderRetailPointCard();
+  }, els.retailPointsNotice);
+}
+
+function renderRetailPoints() {
+  if (!els.retailPointsBody) return;
+  els.retailPointsBody.replaceChildren();
+  const canManage = Boolean(state.permissions.canManageRetailPoints);
+  if (els.retailPointAddPanel) {
+    els.retailPointAddPanel.classList.toggle('is-hidden', !canManage);
+  }
+  if (els.retailPointForm) {
+    Array.from(els.retailPointForm.elements).forEach((field) => {
+      field.disabled = !canManage;
+    });
+  }
+
+  if (!state.permissions.canViewRetailPoints) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty-state';
+    cell.textContent = 'Нет доступа к разделу торговых точек.';
+    row.append(cell);
+    els.retailPointsBody.append(row);
+    closeRetailPointCard();
+    return;
+  }
+
+  if (!state.retailPoints.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty-state';
+    cell.textContent = 'Торговые точки пока не добавлены.';
+    row.append(cell);
+    els.retailPointsBody.append(row);
+    return;
+  }
+
+  const points = [...state.retailPoints].sort((left, right) => (
+    String(left.name || '').localeCompare(String(right.name || ''), 'ru')
+  ));
+  for (const point of points) {
+    els.retailPointsBody.append(buildRetailPointRow(point));
+  }
+}
+
+function buildRetailPointRow(point) {
+  const row = document.createElement('tr');
+  row.dataset.pointId = point.id;
+
+  const nameCell = document.createElement('td');
+  const nameButton = document.createElement('button');
+  nameButton.type = 'button';
+  nameButton.className = 'text-link';
+  nameButton.textContent = point.name || 'Без названия';
+  nameButton.addEventListener('click', () => openRetailPointCard(point.id));
+  nameCell.append(nameButton);
+  row.append(nameCell);
+
+  appendCell(row, point.address || '');
+  appendCell(row, point.landlord || '');
+  appendCell(row, point.legalEntity || '');
+  appendCell(row, point.ownerName || '');
+  appendCell(row, point.phone || '');
+  appendCell(row, point.email || '');
+  return row;
+}
+
+function openRetailPointCard(pointId) {
+  state.selectedRetailPointId = pointId;
+  renderRetailPointCard();
+  els.retailPointCardPanel?.classList.remove('is-hidden');
+  els.retailPointCardPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeRetailPointCard() {
+  state.selectedRetailPointId = null;
+  els.retailPointCardPanel?.classList.add('is-hidden');
+  if (els.retailPointCardForm) {
+    els.retailPointCardForm.reset();
+    delete els.retailPointCardForm.dataset.pointId;
+  }
+  if (els.retailPointDocumentsList) {
+    els.retailPointDocumentsList.replaceChildren();
+  }
+}
+
+function selectedRetailPoint() {
+  return state.retailPoints.find((point) => point.id === state.selectedRetailPointId) || null;
+}
+
+function renderRetailPointCard() {
+  if (!els.retailPointCardForm) return;
+  const point = selectedRetailPoint();
+  if (!point) {
+    els.retailPointCardPanel?.classList.add('is-hidden');
+    return;
+  }
+
+  fillRetailPointPaymentOptions();
+  els.retailPointCardPanel?.classList.remove('is-hidden');
+  els.retailPointCardForm.dataset.pointId = point.id;
+  if (els.retailPointCardTitle) {
+    els.retailPointCardTitle.textContent = `Карточка торговой точки: ${point.name || 'без названия'}`;
+  }
+
+  const fields = ['name', 'address', 'landlord', 'legalEntity', 'ownerName', 'phone', 'email'];
+  for (const field of fields) {
+    setRetailPointFormValue(field, point[field]);
+  }
+  const internet = point.internet || {};
+  setRetailPointFormValue('internet.provider', internet.provider);
+  setRetailPointFormValue('internet.payment', internet.payment);
+  setRetailPointFormValue('internet.contractNumber', internet.contractNumber);
+  setRetailPointFormValue('internet.contractHolder', internet.contractHolder);
+  setRetailPointFormValue('internet.tariff', internet.tariff);
+  setRetailPointFormValue('internet.login', internet.login);
+  setRetailPointFormValue('internet.password', internet.password);
+
+  const video = point.video || {};
+  setRetailPointFormValue('video.operator', video.operator);
+  setRetailPointFormValue('video.camerasCount', video.camerasCount);
+  setRetailPointFormValue('video.contractNumber', video.contractNumber);
+  setRetailPointFormValue('video.contractHolder', video.contractHolder);
+  setRetailPointFormValue('video.tariff', video.tariff);
+  setRetailPointFormValue('video.login', video.login);
+  setRetailPointFormValue('video.password', video.password);
+
+  const editable = Boolean(state.permissions.canManageRetailPoints);
+  setRetailPointCardEditable(editable);
+  renderRetailPointDocuments(point.documents || [], editable);
+}
+
+function fillRetailPointPaymentOptions() {
+  const methods = state.retailPointPaymentMethods.length
+    ? state.retailPointPaymentMethods
+    : [
+        { value: 'account', label: 'в лк' },
+        { value: 'mobile', label: 'мобильный' },
+        { value: 'link', label: 'по ссылке' },
+        { value: 'invoice', label: 'по счету' },
+      ];
+  const options = [{ value: '', label: 'Не указано' }, ...methods];
+  els.retailPointInternetPayment?.replaceChildren(...options.map((method) => {
+    const option = document.createElement('option');
+    option.value = method.value;
+    option.textContent = method.label;
+    return option;
+  }));
+}
+
+function setRetailPointFormValue(name, value) {
+  const field = els.retailPointCardForm.elements[name];
+  if (field) field.value = value || '';
+}
+
+function setRetailPointCardEditable(editable) {
+  Array.from(els.retailPointCardForm.elements).forEach((field) => {
+    field.disabled = !editable;
+  });
+  if (els.uploadRetailPointDocument) {
+    els.uploadRetailPointDocument.disabled = !editable;
+  }
+}
+
+function renderRetailPointDocuments(documents, editable) {
+  els.retailPointDocumentsList.replaceChildren();
+  if (!Array.isArray(documents) || !documents.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state retail-point-documents-empty';
+    empty.textContent = 'Документы по торговой точке не загружены.';
+    els.retailPointDocumentsList.append(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'retail-point-documents-table';
+  for (const documentItem of [...documents].sort(compareRetailPointDocuments)) {
+    list.append(buildRetailPointDocumentRow(documentItem, editable));
+  }
+  els.retailPointDocumentsList.append(list);
+}
+
+function buildRetailPointDocumentRow(documentItem, editable) {
+  const row = document.createElement('div');
+  row.className = 'retail-point-document-row';
+  row.dataset.documentId = documentItem.id;
+
+  const file = document.createElement('strong');
+  file.textContent = documentItem.fileName || documentItem.originalFileName || 'Документ';
+
+  const date = document.createElement('span');
+  date.textContent = documentItem.createdAt ? formatDateTime(documentItem.createdAt) : '';
+
+  const size = document.createElement('span');
+  size.textContent = documentItem.size ? formatFileSize(documentItem.size) : '';
+
+  const linkWrap = document.createElement('span');
+  if (documentItem.googleDrive?.webViewLink) {
+    const link = document.createElement('a');
+    link.href = documentItem.googleDrive.webViewLink;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'Открыть';
+    linkWrap.append(link);
+  } else {
+    linkWrap.textContent = documentItem.googleDrive?.reason || 'Нет ссылки';
+  }
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'danger retail-point-document-remove';
+  remove.dataset.deleteRetailPointDocument = documentItem.id;
+  remove.textContent = 'Удалить';
+  remove.disabled = !editable;
+  remove.classList.toggle('is-hidden', !editable);
+
+  row.append(file, date, size, linkWrap, remove);
+  return row;
+}
+
+function compareRetailPointDocuments(left, right) {
+  const leftDate = left.createdAt || '';
+  const rightDate = right.createdAt || '';
+  return rightDate.localeCompare(leftDate) || String(left.fileName || '').localeCompare(String(right.fileName || ''), 'ru');
+}
+
+async function handleRetailPointCreate(event) {
+  event.preventDefault();
+  const button = event.submitter;
+  await runWithButton(button, async () => {
+    const data = await api('/api/retail-points', {
+      method: 'POST',
+      body: retailPointPayloadFromBasicForm(els.retailPointForm),
+    });
+    replaceRetailPointInState(data.point);
+    state.selectedRetailPointId = data.point.id;
+    els.retailPointForm.reset();
+    renderRetailPoints();
+    renderRetailPointCard();
+    showNotice(
+      els.retailPointsNotice,
+      ['Торговая точка добавлена.', storageWarningText(data.storage)].filter(Boolean).join(' '),
+      data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.retailPointsNotice);
+}
+
+async function handleRetailPointSave(event) {
+  event.preventDefault();
+  const pointId = els.retailPointCardForm.dataset.pointId;
+  if (!pointId) return;
+  await runWithButton(event.submitter, async () => {
+    const data = await api(`/api/retail-points/${encodeURIComponent(pointId)}`, {
+      method: 'PATCH',
+      body: retailPointPayloadFromCard(els.retailPointCardForm),
+    });
+    replaceRetailPointInState(data.point);
+    state.selectedRetailPointId = data.point.id;
+    renderRetailPoints();
+    renderRetailPointCard();
+    showNotice(
+      els.retailPointsNotice,
+      ['Карточка торговой точки обновлена.', storageWarningText(data.storage)].filter(Boolean).join(' '),
+      data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.retailPointsNotice);
+}
+
+async function handleRetailPointDocumentUpload() {
+  const pointId = els.retailPointCardForm.dataset.pointId;
+  if (!pointId) return;
+  const file = els.retailPointDocumentFile.files[0];
+  await runWithButton(els.uploadRetailPointDocument, async () => {
+    const payload = await retailPointDocumentPayloadFromFile(file);
+    const data = await api(`/api/retail-points/${encodeURIComponent(pointId)}/documents`, {
+      method: 'POST',
+      body: { file: payload },
+    });
+    replaceRetailPointInState(data.point);
+    state.selectedRetailPointId = data.point.id;
+    els.retailPointDocumentFile.value = '';
+    renderRetailPoints();
+    renderRetailPointCard();
+    showNotice(
+      els.retailPointsNotice,
+      ['Документ загружен в Google Drive.', storageWarningText(data.storage)].filter(Boolean).join(' '),
+      data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.retailPointsNotice);
+}
+
+async function handleRetailPointDocumentClick(event) {
+  const button = event.target.closest('[data-delete-retail-point-document]');
+  if (!button) return;
+  const pointId = els.retailPointCardForm.dataset.pointId;
+  const documentId = button.dataset.deleteRetailPointDocument;
+  const point = selectedRetailPoint();
+  const documentItem = point?.documents?.find((item) => item.id === documentId);
+  const label = documentItem?.fileName || 'документ';
+  if (!window.confirm(`Удалить ${label} из карточки и Google Drive?`)) return;
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/retail-points/${encodeURIComponent(pointId)}/documents/${encodeURIComponent(documentId)}`, {
+      method: 'DELETE',
+    });
+    replaceRetailPointInState(data.point);
+    state.selectedRetailPointId = data.point.id;
+    renderRetailPoints();
+    renderRetailPointCard();
+    const driveWarning = retailPointDriveDeleteWarning(data.googleDriveCleanup);
+    showNotice(
+      els.retailPointsNotice,
+      ['Документ удален из карточки и Google Drive.', driveWarning, storageWarningText(data.storage)].filter(Boolean).join(' '),
+      driveWarning || data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.retailPointsNotice);
+}
+
+function retailPointDriveDeleteWarning(cleanup) {
+  if (!cleanup || cleanup.status === 'deleted' || cleanup.status === 'skipped') return '';
+  return `Google Drive: ${cleanup.reason || 'документ не удалось удалить из архива.'}`;
+}
+
+function retailPointPayloadFromBasicForm(form) {
+  const values = formValues(form);
+  return {
+    name: values.name,
+    address: values.address,
+    landlord: values.landlord,
+    legalEntity: values.legalEntity,
+    ownerName: values.ownerName,
+    phone: values.phone,
+    email: values.email,
+  };
+}
+
+function retailPointPayloadFromCard(form) {
+  const values = formValues(form);
+  return {
+    name: values.name,
+    address: values.address,
+    landlord: values.landlord,
+    legalEntity: values.legalEntity,
+    ownerName: values.ownerName,
+    phone: values.phone,
+    email: values.email,
+    internet: {
+      provider: values['internet.provider'],
+      payment: values['internet.payment'],
+      contractNumber: values['internet.contractNumber'],
+      contractHolder: values['internet.contractHolder'],
+      tariff: values['internet.tariff'],
+      login: values['internet.login'],
+      password: values['internet.password'],
+    },
+    video: {
+      operator: values['video.operator'],
+      camerasCount: values['video.camerasCount'],
+      contractNumber: values['video.contractNumber'],
+      contractHolder: values['video.contractHolder'],
+      tariff: values['video.tariff'],
+      login: values['video.login'],
+      password: values['video.password'],
+    },
+  };
+}
+
+function replaceRetailPointInState(point) {
+  const index = state.retailPoints.findIndex((item) => item.id === point.id);
+  if (index === -1) {
+    state.retailPoints.push(point);
+  } else {
+    state.retailPoints.splice(index, 1, point);
+  }
+}
+
+async function retailPointDocumentPayloadFromFile(file) {
+  if (!file) throw new Error('Выберите файл документа.');
+  const lowerName = String(file.name || '').toLowerCase();
+  const isPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf');
+  const isImage = (
+    ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+    || lowerName.endsWith('.jpg')
+    || lowerName.endsWith('.jpeg')
+    || lowerName.endsWith('.png')
+    || lowerName.endsWith('.webp')
+  );
+  if (!isPdf && !isImage) {
+    throw new Error('Поддерживаются изображения JPG, PNG, WebP или PDF.');
+  }
+
+  if (isPdf) {
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('PDF документа слишком большой. Максимум 5 МБ.');
+    }
+    return {
+      fileName: file.name,
+      mimeType: 'application/pdf',
+      size: file.size,
+      dataUrl: await readFileAsDataUrlWithMime(file, 'application/pdf'),
+    };
+  }
+
+  const compressed = await compressReceiptImage(file);
+  if (compressed.size > 5 * 1024 * 1024) {
+    throw new Error('Файл документа слишком большой. Максимум 5 МБ.');
+  }
+  return {
+    fileName: file.name,
+    mimeType: 'image/jpeg',
+    size: compressed.size,
+    dataUrl: compressed.dataUrl.replace(/^data:[^;]+;/, 'data:image/jpeg;'),
+  };
 }
 
 async function loadRepairs() {
@@ -2247,6 +2702,15 @@ function formatDateTime(value) {
 function formatDate(value) {
   if (!value) return '';
   return new Intl.DateTimeFormat('ru-RU').format(new Date(`${value}T00:00:00`));
+}
+
+function formatFileSize(value) {
+  const size = Number(value);
+  if (!Number.isFinite(size) || size <= 0) return '';
+  if (size >= 1024 * 1024) {
+    return `${(size / 1024 / 1024).toFixed(1).replace('.', ',')} МБ`;
+  }
+  return `${Math.max(1, Math.round(size / 1024))} КБ`;
 }
 
 function pointLabel(pointId) {

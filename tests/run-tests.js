@@ -701,6 +701,156 @@ test('employee documents are archived and deleted in Google Drive', async () => 
   }
 });
 
+test('retail points can store cards and Google Drive documents', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    ...validateRegistration({
+      fullName: 'Анна Владелец',
+      phone: '+79990000070',
+      email: 'owner-retail-points@example.com',
+    }),
+    password: 'OwnerPass123',
+  });
+
+  const defaults = store.listRetailPoints(owner);
+  assert.ok(defaults.some((point) => point.name === 'МОСКВА_6231'));
+
+  const point = store.createRetailPoint(owner, {
+    name: 'САНКТ-ПЕТЕРБУРГ_100',
+    address: 'Невский проспект, 10',
+    landlord: 'ООО Аренда',
+    legalEntity: 'ООО CRMZona',
+    ownerName: 'Иван Собственник',
+    phone: '+79990000071',
+    email: 'spb-point@example.com',
+    internet: {
+      provider: 'Ростелеком',
+      payment: 'invoice',
+      contractNumber: 'LS-100',
+      contractHolder: 'ООО CRMZona',
+      tariff: '300 Мбит',
+      login: 'spb-login',
+      password: 'spb-pass',
+    },
+    video: {
+      operator: 'ВидеоОператор',
+      camerasCount: '6',
+      contractNumber: 'CAM-100',
+      contractHolder: 'ООО CRMZona',
+      tariff: 'Архив 30 дней',
+      login: 'cam-login',
+      password: 'cam-pass',
+    },
+  });
+
+  assert.equal(point.name, 'САНКТ-ПЕТЕРБУРГ_100');
+  assert.equal(point.internet.payment, 'invoice');
+  assert.equal(point.video.camerasCount, '6');
+
+  const updated = store.updateRetailPoint(owner, point.id, {
+    ...point,
+    internet: {
+      ...point.internet,
+      login: 'updated-login',
+    },
+  });
+  assert.equal(updated.internet.login, 'updated-login');
+
+  const previousFetch = global.fetch;
+  const previousToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  const previousFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  const previousRetailFolderId = process.env.GOOGLE_DRIVE_RETAIL_POINT_DOCUMENTS_FOLDER_ID;
+  const previousRetailFolderName = process.env.GOOGLE_DRIVE_RETAIL_POINT_DOCUMENTS_FOLDER_NAME;
+  const requests = [];
+  let folderCounter = 0;
+  process.env.GOOGLE_DRIVE_ACCESS_TOKEN = 'test-drive-token';
+  process.env.GOOGLE_DRIVE_FOLDER_ID = 'root-folder-1';
+  delete process.env.GOOGLE_DRIVE_RETAIL_POINT_DOCUMENTS_FOLDER_ID;
+  delete process.env.GOOGLE_DRIVE_RETAIL_POINT_DOCUMENTS_FOLDER_NAME;
+  global.fetch = async (url, options = {}) => {
+    const request = { url: String(url), options };
+    requests.push(request);
+    if (request.url.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'retail-point-document-file-1',
+          webViewLink: 'https://drive.google.com/file/d/retail-point-document-file-1/view',
+        }),
+      };
+    }
+    if (request.url.includes('/drive/v3/files/retail-point-document-file-1') && options.method === 'DELETE') {
+      return {
+        ok: true,
+        status: 204,
+        json: async () => ({}),
+      };
+    }
+    if (request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true') && options.method === 'POST') {
+      folderCounter += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: `retail-folder-${folderCounter}`, name: JSON.parse(options.body).name }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ files: [] }),
+    };
+  };
+
+  try {
+    const dataUrl = `data:application/pdf;base64,${Buffer.from('%PDF-retail-point-doc').toString('base64')}`;
+    const added = await store.addRetailPointDocument(owner, point.id, {
+      file: {
+        fileName: 'lease.pdf',
+        dataUrl,
+      },
+    });
+    assert.equal(added.document.googleDrive.fileId, 'retail-point-document-file-1');
+    assert.match(added.document.fileName, /^\d{4}-\d{2}-\d{2}-lease-[a-f0-9]+\.pdf$/);
+    assert.equal(added.point.documents.length, 1);
+
+    const createdFolderNames = requests
+      .filter((request) => request.options.method === 'POST' && request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true'))
+      .map((request) => JSON.parse(request.options.body).name);
+    assert.deepEqual(createdFolderNames, ['Документы по Торговым точкам', 'САНКТ-ПЕТЕРБУРГ_100']);
+
+    const deleted = await store.deleteRetailPointDocument(owner, point.id, added.document.id);
+    assert.equal(deleted.googleDriveCleanup.status, 'deleted');
+    assert.equal(deleted.point.documents.length, 0);
+    assert.ok(requests.some((request) => (
+      request.url === 'https://www.googleapis.com/drive/v3/files/retail-point-document-file-1?supportsAllDrives=true'
+      && request.options.method === 'DELETE'
+    )));
+  } finally {
+    global.fetch = previousFetch;
+    if (previousToken === undefined) {
+      delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    } else {
+      process.env.GOOGLE_DRIVE_ACCESS_TOKEN = previousToken;
+    }
+    if (previousFolderId === undefined) {
+      delete process.env.GOOGLE_DRIVE_FOLDER_ID;
+    } else {
+      process.env.GOOGLE_DRIVE_FOLDER_ID = previousFolderId;
+    }
+    if (previousRetailFolderId === undefined) {
+      delete process.env.GOOGLE_DRIVE_RETAIL_POINT_DOCUMENTS_FOLDER_ID;
+    } else {
+      process.env.GOOGLE_DRIVE_RETAIL_POINT_DOCUMENTS_FOLDER_ID = previousRetailFolderId;
+    }
+    if (previousRetailFolderName === undefined) {
+      delete process.env.GOOGLE_DRIVE_RETAIL_POINT_DOCUMENTS_FOLDER_NAME;
+    } else {
+      process.env.GOOGLE_DRIVE_RETAIL_POINT_DOCUMENTS_FOLDER_NAME = previousRetailFolderName;
+    }
+  }
+});
+
 test('owner can maintain employee directory records', () => {
   const store = createTempStore();
   const owner = store.createUser({
