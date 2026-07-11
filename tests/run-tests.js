@@ -788,6 +788,15 @@ test('retail points can store cards and Google Drive documents', async () => {
     }),
     password: 'OwnerPass123',
   });
+  const admin = store.createUser({
+    fullName: 'Ольга Администратор',
+    phone: '+79990000072',
+    email: 'retail-admin@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['points'],
+    allowedPoints: ['moscow_6231', 'krasnogorsk_466'],
+  });
 
   const defaults = store.listRetailPoints(owner);
   assert.ok(defaults.some((point) => point.name === 'МОСКВА_6231'));
@@ -800,6 +809,7 @@ test('retail points can store cards and Google Drive documents', async () => {
     ownerName: 'Иван Собственник',
     phone: '+79990000071',
     email: 'spb-point@example.com',
+    curatorAdminId: admin.id,
     internet: {
       provider: 'Ростелеком',
       payment: 'invoice',
@@ -821,6 +831,8 @@ test('retail points can store cards and Google Drive documents', async () => {
   });
 
   assert.equal(point.name, 'САНКТ-ПЕТЕРБУРГ_100');
+  assert.equal(point.curatorAdminId, admin.id);
+  assert.equal(point.curatorAdminName, 'Ольга Администратор');
   assert.equal(point.internet.payment, 'invoice');
   assert.equal(point.video.camerasCount, '6');
 
@@ -832,6 +844,7 @@ test('retail points can store cards and Google Drive documents', async () => {
     },
   });
   assert.equal(updated.internet.login, 'updated-login');
+  assert.equal(updated.curatorAdminName, 'Ольга Администратор');
 
   const previousFetch = global.fetch;
   const previousToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;

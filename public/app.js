@@ -9,6 +9,7 @@ const state = {
   users: [],
   retailPoints: [],
   retailPointPaymentMethods: [],
+  retailPointAdminOptions: [],
   repairs: [],
   expenses: [],
   claims: [],
@@ -88,6 +89,7 @@ function bindElements() {
     retailPointCardTitle: document.getElementById('retailPointCardTitle'),
     retailPointCardForm: document.getElementById('retailPointCardForm'),
     retailPointInternetPayment: document.getElementById('retailPointInternetPayment'),
+    retailPointCuratorAdmin: document.getElementById('retailPointCuratorAdmin'),
     retailPointDocumentFile: document.getElementById('retailPointDocumentFile'),
     uploadRetailPointDocument: document.getElementById('uploadRetailPointDocument'),
     retailPointDocumentsList: document.getElementById('retailPointDocumentsList'),
@@ -453,6 +455,7 @@ async function loadRetailPoints() {
     const data = await api('/api/retail-points');
     state.retailPoints = data.points || [];
     state.retailPointPaymentMethods = data.paymentMethods || [];
+    state.retailPointAdminOptions = data.adminOptions || [];
     state.permissions.canManageRetailPoints = Boolean(data.canManage);
     renderRetailPoints();
     renderRetailPointCard();
@@ -475,7 +478,7 @@ function renderRetailPoints() {
   if (!state.permissions.canViewRetailPoints) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.className = 'empty-state';
     cell.textContent = 'Нет доступа к разделу торговых точек.';
     row.append(cell);
@@ -487,7 +490,7 @@ function renderRetailPoints() {
   if (!state.retailPoints.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.className = 'empty-state';
     cell.textContent = 'Торговые точки пока не добавлены.';
     row.append(cell);
@@ -522,6 +525,7 @@ function buildRetailPointRow(point) {
   appendCell(row, point.ownerName || '');
   appendCell(row, point.phone || '');
   appendCell(row, point.email || '');
+  appendCell(row, point.curatorAdminName || '');
   return row;
 }
 
@@ -557,6 +561,7 @@ function renderRetailPointCard() {
   }
 
   fillRetailPointPaymentOptions();
+  fillRetailPointAdminOptions();
   els.retailPointCardPanel?.classList.remove('is-hidden');
   els.retailPointCardForm.dataset.pointId = point.id;
   if (els.retailPointCardTitle) {
@@ -567,6 +572,7 @@ function renderRetailPointCard() {
   for (const field of fields) {
     setRetailPointFormValue(field, point[field]);
   }
+  setRetailPointFormValue('curatorAdminId', point.curatorAdminId);
   const internet = point.internet || {};
   setRetailPointFormValue('internet.provider', internet.provider);
   setRetailPointFormValue('internet.payment', internet.payment);
@@ -604,6 +610,16 @@ function fillRetailPointPaymentOptions() {
     const option = document.createElement('option');
     option.value = method.value;
     option.textContent = method.label;
+    return option;
+  }));
+}
+
+function fillRetailPointAdminOptions() {
+  const options = [{ id: '', fullName: 'Не указан', email: '' }, ...state.retailPointAdminOptions];
+  els.retailPointCuratorAdmin?.replaceChildren(...options.map((admin) => {
+    const option = document.createElement('option');
+    option.value = admin.id;
+    option.textContent = admin.email ? `${admin.fullName} · ${admin.email}` : admin.fullName;
     return option;
   }));
 }
@@ -804,6 +820,7 @@ function retailPointPayloadFromCard(form) {
     ownerName: values.ownerName,
     phone: values.phone,
     email: values.email,
+    curatorAdminId: values.curatorAdminId,
     internet: {
       provider: values['internet.provider'],
       payment: values['internet.payment'],
