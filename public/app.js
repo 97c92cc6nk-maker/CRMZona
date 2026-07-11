@@ -10,6 +10,7 @@ const state = {
   repairs: [],
   expenses: [],
   expenseSortBy: 'date',
+  expenseFilterValue: '',
   repairStatuses: [],
   repairPriorities: [],
   expensePaymentMethods: [],
@@ -78,6 +79,7 @@ function bindElements() {
     expenseDateInput: document.getElementById('expenseDateInput'),
     expensePaymentMethod: document.getElementById('expensePaymentMethod'),
     expenseSortSelect: document.getElementById('expenseSortSelect'),
+    expenseFilterValueSelect: document.getElementById('expenseFilterValueSelect'),
     expenseSortTotals: document.getElementById('expenseSortTotals'),
     refreshExpenses: document.getElementById('refreshExpenses'),
     expensesBody: document.getElementById('expensesBody'),
@@ -122,6 +124,12 @@ function bindEvents() {
   els.expenseForm.addEventListener('submit', handleExpenseCreate);
   els.expenseSortSelect.addEventListener('change', () => {
     state.expenseSortBy = els.expenseSortSelect.value;
+    state.expenseFilterValue = '';
+    els.expenseFilterValueSelect.value = '';
+    renderExpenses();
+  });
+  els.expenseFilterValueSelect.addEventListener('change', () => {
+    state.expenseFilterValue = els.expenseFilterValueSelect.value;
     renderExpenses();
   });
   els.expensesBody.addEventListener('click', handleExpenseTableClick);
@@ -535,6 +543,7 @@ function renderExpenses() {
   if (els.expenseSortSelect.value !== state.expenseSortBy) {
     els.expenseSortSelect.value = state.expenseSortBy;
   }
+  fillExpenseFilterValues();
 
   if (!state.expenses.length) {
     const row = document.createElement('tr');
@@ -547,8 +556,19 @@ function renderExpenses() {
     return;
   }
 
-  const expenses = sortExpenses(state.expenses, state.expenseSortBy);
-  renderExpenseSortTotals(expenses, state.expenseSortBy);
+  const filteredExpenses = filterExpenses(state.expenses, state.expenseSortBy, state.expenseFilterValue);
+  const expenses = sortExpenses(filteredExpenses, state.expenseSortBy);
+  renderExpenseSortTotals(expenses, state.expenseSortBy, state.expenseFilterValue);
+  if (!expenses.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 8;
+    cell.className = 'empty-state';
+    cell.textContent = 'Нет расходов по выбранному отбору.';
+    row.append(cell);
+    els.expensesBody.append(row);
+    return;
+  }
   for (const expense of expenses) {
     els.expensesBody.append(buildExpenseRow(expense));
   }
@@ -568,6 +588,42 @@ function fillExpensePaymentMethods() {
     option.textContent = method.label;
     return option;
   }));
+}
+
+function fillExpenseFilterValues() {
+  const select = els.expenseFilterValueSelect;
+  const options = expenseFilterOptions(state.expenses, state.expenseSortBy);
+  select.replaceChildren();
+
+  if (state.expenseSortBy === 'date') {
+    state.expenseFilterValue = '';
+    select.disabled = true;
+    select.append(selectOption('', 'Все расходы'));
+    return;
+  }
+
+  const allLabels = {
+    author: 'Все авторы',
+    payment: 'Все способы оплаты',
+    point: 'Все торговые точки',
+  };
+  select.append(selectOption('', allLabels[state.expenseSortBy] || 'Все'));
+  for (const option of options) {
+    select.append(selectOption(option.value, `${option.label} · ${option.count} шт. · ${formatMoney(option.total)}`));
+  }
+
+  if (state.expenseFilterValue && !options.some((option) => option.value === state.expenseFilterValue)) {
+    state.expenseFilterValue = '';
+  }
+  select.value = state.expenseFilterValue;
+  select.disabled = !options.length;
+}
+
+function selectOption(value, label) {
+  const option = document.createElement('option');
+  option.value = value;
+  option.textContent = label;
+  return option;
 }
 
 function buildExpenseRow(expense) {
@@ -640,21 +696,43 @@ function sortExpenses(expenses, sortBy) {
   return sorted;
 }
 
-function renderExpenseSortTotals(expenses, sortBy) {
+function filterExpenses(expenses, sortBy, filterValue) {
+  if (sortBy === 'date' || !filterValue) return expenses;
+  return expenses.filter((expense) => expenseFilterValue(expense, sortBy) === filterValue);
+}
+
+function renderExpenseSortTotals(expenses, sortBy, filterValue) {
   const total = sumExpenses(expenses);
-  els.expenseSortTotals.append(expenseTotalPill('Итого по списку', total));
-  if (sortBy === 'date') return;
+  els.expenseSortTotals.append(expenseTotalPill(filterValue ? 'Итого по отбору' : 'Итого по списку', total));
+  if (sortBy === 'date' || filterValue) return;
 
   for (const item of expenseTotalsBySort(expenses, sortBy)) {
     els.expenseSortTotals.append(expenseTotalPill(item.label, item.total));
   }
 }
 
-function expenseTotalsBySort(expenses, sortBy) {
-  const fallback = 'Не указано';
+function expenseFilterOptions(expenses, sortBy) {
+  if (sortBy === 'date') return [];
   const grouped = new Map();
   for (const expense of expenses) {
-    const key = expenseSortKey(expense, sortBy) || fallback;
+    const value = expenseFilterValue(expense, sortBy);
+    const current = grouped.get(value) || {
+      value,
+      label: value,
+      count: 0,
+      total: 0,
+    };
+    current.count += 1;
+    current.total += toNumber(expense.amount);
+    grouped.set(value, current);
+  }
+  return [...grouped.values()].sort((left, right) => left.label.localeCompare(right.label, 'ru'));
+}
+
+function expenseTotalsBySort(expenses, sortBy) {
+  const grouped = new Map();
+  for (const expense of expenses) {
+    const key = expenseFilterValue(expense, sortBy);
     grouped.set(key, (grouped.get(key) || 0) + toNumber(expense.amount));
   }
   return [...grouped.entries()]
@@ -667,6 +745,10 @@ function expenseSortKey(expense, sortBy) {
   if (sortBy === 'payment') return expense.paymentMethodLabel;
   if (sortBy === 'point') return expense.pointName;
   return '';
+}
+
+function expenseFilterValue(expense, sortBy) {
+  return expenseSortKey(expense, sortBy) || 'Не указано';
 }
 
 function expenseTotalPill(label, total) {

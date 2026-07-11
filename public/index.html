@@ -446,15 +446,21 @@
         <section class="panel" aria-labelledby="expensesListTitle">
           <div class="panel-head">
             <h3 id="expensesListTitle">Список хозрасходов</h3>
-            <label class="compact-field">
-              Сортировка
-              <select id="expenseSortSelect">
-                <option value="date">По дате</option>
-                <option value="author">По автору</option>
-                <option value="payment">По оплате</option>
-                <option value="point">По торговой точке</option>
-              </select>
-            </label>
+            <div class="expense-list-controls">
+              <label class="compact-field">
+                Сортировка
+                <select id="expenseSortSelect">
+                  <option value="date">По дате</option>
+                  <option value="author">По автору</option>
+                  <option value="payment">По оплате</option>
+                  <option value="point">По торговой точке</option>
+                </select>
+              </label>
+              <label class="compact-field">
+                Отбор
+                <select id="expenseFilterValueSelect"></select>
+              </label>
+            </div>
           </div>
           <div class="expense-sort-totals" id="expenseSortTotals"></div>
           <div class="table-wrap">
