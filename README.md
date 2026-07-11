@@ -101,10 +101,13 @@ npm run migrate:supabase
 
 ```text
 GOOGLE_DRIVE_FOLDER_ID=your-google-drive-folder-id
+GOOGLE_DRIVE_EXPENSES_FOLDER_NAME=Хозрасходы
 GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
 ```
 
-Папку `GOOGLE_DRIVE_FOLDER_ID` нужно расшарить на `client_email` сервисного аккаунта. Если Google Drive не настроен или недоступен, расход и чек всё равно сохраняются на сайте, а в записи расхода будет явно указана причина.
+Папку `GOOGLE_DRIVE_FOLDER_ID` нужно расшарить на `client_email` сервисного аккаунта. Для сервисного аккаунта это должна быть папка на Shared Drive: у сервисных аккаунтов нет собственной квоты Google Drive, поэтому обычная папка в My Drive не сможет принимать загрузки. Внутри нее сайт найдет или создаст папку `Хозрасходы`; если уже есть конкретная папка расходов на Shared Drive, можно задать `GOOGLE_DRIVE_EXPENSES_FOLDER_ID`.
+
+Чеки принимаются в JPG, PNG, WebP и PDF. В Google Drive они называются по схеме `Дата чека-Пользователь-Торговая точка-Уникальный номер`, чтобы сортироваться по дате. Если Google Drive не настроен или недоступен, расход и чек всё равно сохраняются на сайте, а в записи расхода будет явно указана причина.
 
 ## Проверка
 

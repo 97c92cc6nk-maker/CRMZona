@@ -13,6 +13,11 @@ process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = '';
 
 const { Store, createRequestHandler } = require('../lib/app');
 
+delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+delete process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
+delete process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_BASE64;
+delete process.env.GOOGLE_DRIVE_EXPENSES_FOLDER_ID;
+
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-smoke-'));
   const store = new Store(dataDir);
@@ -160,8 +165,8 @@ async function main() {
         amount: '321,50',
         paymentMethod: 'corp_card',
         receipt: {
-          fileName: 'receipt.jpg',
-          dataUrl: `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64')}`,
+          fileName: 'receipt.pdf',
+          dataUrl: `data:application/pdf;base64,${Buffer.from('%PDF-smoke').toString('base64')}`,
         },
       },
     });
@@ -169,6 +174,7 @@ async function main() {
     assert.equal(createdExpense.expense.expenseDate, '2026-07-09');
     assert.equal(createdExpense.expense.paymentMethod, 'corp_card');
     assert.equal(createdExpense.expense.googleDrive.status, 'unavailable');
+    assert.match(createdExpense.expense.receipt.fileName, /^2026-07-09-Тестовый_Владелец-МОСКВА_6231-[a-f0-9]+\.pdf$/);
 
     const expenses = await jsonFetch(`${baseUrl}/api/expenses`, {
       headers: { Cookie: cookie },
@@ -180,8 +186,8 @@ async function main() {
       headers: { Cookie: cookie },
     });
     assert.equal(receiptResponse.status, 200);
-    assert.equal(receiptResponse.headers.get('content-type'), 'image/jpeg');
-    assert.deepEqual([...new Uint8Array(await receiptResponse.arrayBuffer())], [0xff, 0xd8, 0xff, 0xd9]);
+    assert.equal(receiptResponse.headers.get('content-type'), 'application/pdf');
+    assert.equal(Buffer.from(await receiptResponse.arrayBuffer()).toString('utf8'), '%PDF-smoke');
 
     const scheduleRows = [{
       employeeId: createdEmployee.user.id,

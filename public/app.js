@@ -633,12 +633,27 @@ function expenseDriveWarning(googleDrive) {
 }
 
 async function receiptPayloadFromFile(file) {
-  if (!file) throw new Error('Приложите фотографию чека.');
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    throw new Error('Поддерживаются только JPG, PNG или WebP.');
+  if (!file) throw new Error('Приложите чек.');
+  if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
+    throw new Error('Поддерживаются JPG, PNG, WebP или PDF.');
+  }
+
+  if (file.type === 'application/pdf') {
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('PDF чека слишком большой. Максимум 5 МБ.');
+    }
+    return {
+      fileName: file.name,
+      mimeType: file.type,
+      size: file.size,
+      dataUrl: await readFileAsDataUrl(file),
+    };
   }
 
   const compressed = await compressReceiptImage(file);
+  if (compressed.size > 5 * 1024 * 1024) {
+    throw new Error('Файл чека слишком большой. Максимум 5 МБ после сжатия.');
+  }
   return {
     fileName: file.name,
     mimeType: compressed.mimeType,

@@ -445,8 +445,8 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
 
   try {
     const receipt = {
-      fileName: 'check.jpg',
-      dataUrl: `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64')}`,
+      fileName: 'check.pdf',
+      dataUrl: `data:application/pdf;base64,${Buffer.from('%PDF-test').toString('base64')}`,
     };
 
     const expense = await store.createExpense(admin, {
@@ -463,10 +463,11 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
     assert.equal(expense.googleDrive.status, 'unavailable');
     assert.equal(expense.googleDrive.sourceUnavailable, true);
     assert.match(expense.receiptUrl, /^\/api\/receipts\//);
+    assert.match(expense.receipt.fileName, /^2026-07-09-Иван_Администратор-МОСКВА_6231-[a-f0-9]+\.pdf$/);
 
     const file = await store.readReceiptFile(expense.receipt);
-    assert.equal(file.mimeType, 'image/jpeg');
-    assert.deepEqual([...file.buffer], [0xff, 0xd8, 0xff, 0xd9]);
+    assert.equal(file.mimeType, 'application/pdf');
+    assert.equal(file.buffer.toString('utf8'), '%PDF-test');
 
     const list = store.listExpenses(admin);
     assert.equal(list.length, 1);
