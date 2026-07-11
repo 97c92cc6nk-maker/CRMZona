@@ -326,6 +326,10 @@ h3 {
   width: 190px;
 }
 
+.compact-field {
+  width: min(240px, 100%);
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
@@ -559,6 +563,24 @@ tbody tr:last-child td {
 
 .expenses-table {
   min-width: 1060px;
+}
+
+.expenses-table .expense-group-row td {
+  background: #eef7f4;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.expenses-table .expense-subtotal-row td {
+  background: #f7faf9;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.expenses-table .expense-total-row td {
+  background: #13201c;
+  color: #fff;
+  font-weight: 850;
 }
 
 .employees-table th,

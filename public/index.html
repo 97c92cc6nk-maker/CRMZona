@@ -444,7 +444,18 @@
         </section>
 
         <section class="panel" aria-labelledby="expensesListTitle">
-          <h3 id="expensesListTitle">Список расходов</h3>
+          <div class="panel-head">
+            <h3 id="expensesListTitle">Список хозрасходов</h3>
+            <label class="compact-field">
+              Группировка
+              <select id="expenseGroupSelect">
+                <option value="date">По дате</option>
+                <option value="author">По автору</option>
+                <option value="payment">По оплате</option>
+                <option value="point">По торговой точке</option>
+              </select>
+            </label>
+          </div>
           <div class="table-wrap">
             <table class="expenses-table">
               <thead>

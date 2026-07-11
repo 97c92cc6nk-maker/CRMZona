@@ -438,10 +438,18 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
     allowedPoints: ['moscow_6231'],
   });
 
-  const previousDriveToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
-  const previousDriveAccount = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
-  delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
-  delete process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
+  const driveEnvKeys = [
+    'GOOGLE_DRIVE_ACCESS_TOKEN',
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON',
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_BASE64',
+    'GOOGLE_DRIVE_CLIENT_ID',
+    'GOOGLE_DRIVE_CLIENT_SECRET',
+    'GOOGLE_DRIVE_REFRESH_TOKEN',
+  ];
+  const previousDriveEnv = Object.fromEntries(driveEnvKeys.map((key) => [key, process.env[key]]));
+  for (const key of driveEnvKeys) {
+    delete process.env[key];
+  }
 
   try {
     const receipt = {
@@ -484,15 +492,12 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
       (error) => error instanceof ApiError && error.status === 403,
     );
   } finally {
-    if (previousDriveToken === undefined) {
-      delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
-    } else {
-      process.env.GOOGLE_DRIVE_ACCESS_TOKEN = previousDriveToken;
-    }
-    if (previousDriveAccount === undefined) {
-      delete process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
-    } else {
-      process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = previousDriveAccount;
+    for (const key of driveEnvKeys) {
+      if (previousDriveEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previousDriveEnv[key];
+      }
     }
   }
 });

@@ -10,6 +10,9 @@ process.env.SMTP_HOST = '';
 process.env.SMTP_PORT = '';
 process.env.GOOGLE_DRIVE_ACCESS_TOKEN = '';
 process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = '';
+process.env.GOOGLE_DRIVE_CLIENT_ID = '';
+process.env.GOOGLE_DRIVE_CLIENT_SECRET = '';
+process.env.GOOGLE_DRIVE_REFRESH_TOKEN = '';
 
 const { Store, createRequestHandler } = require('../lib/app');
 
@@ -17,6 +20,9 @@ delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
 delete process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
 delete process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_BASE64;
 delete process.env.GOOGLE_DRIVE_EXPENSES_FOLDER_ID;
+delete process.env.GOOGLE_DRIVE_CLIENT_ID;
+delete process.env.GOOGLE_DRIVE_CLIENT_SECRET;
+delete process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
 
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-smoke-'));

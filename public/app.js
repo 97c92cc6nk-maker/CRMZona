@@ -9,6 +9,7 @@ const state = {
   users: [],
   repairs: [],
   expenses: [],
+  expenseGroupBy: 'date',
   repairStatuses: [],
   repairPriorities: [],
   expensePaymentMethods: [],
@@ -76,6 +77,7 @@ function bindElements() {
     expensePointSelect: document.getElementById('expensePointSelect'),
     expenseDateInput: document.getElementById('expenseDateInput'),
     expensePaymentMethod: document.getElementById('expensePaymentMethod'),
+    expenseGroupSelect: document.getElementById('expenseGroupSelect'),
     refreshExpenses: document.getElementById('refreshExpenses'),
     expensesBody: document.getElementById('expensesBody'),
     expensesNotice: document.getElementById('expensesNotice'),
@@ -117,6 +119,10 @@ function bindEvents() {
   els.refreshRepairs.addEventListener('click', loadRepairs);
   els.repairsBody.addEventListener('change', handleRepairStatusChange);
   els.expenseForm.addEventListener('submit', handleExpenseCreate);
+  els.expenseGroupSelect.addEventListener('change', () => {
+    state.expenseGroupBy = els.expenseGroupSelect.value;
+    renderExpenses();
+  });
   els.refreshExpenses.addEventListener('click', loadExpenses);
   els.loadSchedule.addEventListener('click', loadSchedule);
   els.pointSelect.addEventListener('change', loadSchedule);
@@ -523,6 +529,9 @@ function renderExpenses() {
   Array.from(els.expenseForm.elements).forEach((field) => {
     field.disabled = !expensesAllowed;
   });
+  if (els.expenseGroupSelect.value !== state.expenseGroupBy) {
+    els.expenseGroupSelect.value = state.expenseGroupBy;
+  }
 
   if (!state.expenses.length) {
     const row = document.createElement('tr');
@@ -535,9 +544,24 @@ function renderExpenses() {
     return;
   }
 
-  for (const expense of state.expenses) {
-    els.expensesBody.append(buildExpenseRow(expense));
+  if (state.expenseGroupBy === 'date') {
+    const expenses = [...state.expenses].sort(compareExpensesByDateDesc);
+    for (const expense of expenses) {
+      els.expensesBody.append(buildExpenseRow(expense));
+    }
+    els.expensesBody.append(buildExpenseTotalRow('Итого по списку', expenses));
+    return;
   }
+
+  const groups = groupExpenses(state.expenses, state.expenseGroupBy);
+  for (const group of groups) {
+    els.expensesBody.append(buildExpenseGroupRow(group));
+    for (const expense of group.expenses) {
+      els.expensesBody.append(buildExpenseRow(expense));
+    }
+    els.expensesBody.append(buildExpenseSubtotalRow(group));
+  }
+  els.expensesBody.append(buildExpenseTotalRow('Общий итог', state.expenses));
 }
 
 function fillExpensePaymentMethods() {
@@ -591,6 +615,96 @@ function buildExpenseRow(expense) {
   }
   row.append(driveCell);
   return row;
+}
+
+function groupExpenses(expenses, groupBy) {
+  const config = expenseGroupConfig(groupBy);
+  const grouped = new Map();
+  for (const expense of expenses) {
+    const key = config.key(expense);
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        key,
+        title: config.title(key),
+        expenses: [],
+      });
+    }
+    grouped.get(key).expenses.push(expense);
+  }
+  return [...grouped.values()]
+    .map((group) => ({
+      ...group,
+      expenses: group.expenses.sort(compareExpensesByDateDesc),
+      total: sumExpenses(group.expenses),
+    }))
+    .sort((left, right) => left.title.localeCompare(right.title, 'ru'));
+}
+
+function expenseGroupConfig(groupBy) {
+  const fallback = 'Не указано';
+  if (groupBy === 'author') {
+    return {
+      key: (expense) => expense.createdByName || fallback,
+      title: (key) => `Автор: ${key}`,
+    };
+  }
+  if (groupBy === 'payment') {
+    return {
+      key: (expense) => expense.paymentMethodLabel || fallback,
+      title: (key) => `Оплата: ${key}`,
+    };
+  }
+  if (groupBy === 'point') {
+    return {
+      key: (expense) => expense.pointName || fallback,
+      title: (key) => `Торговая точка: ${key}`,
+    };
+  }
+  return {
+    key: () => fallback,
+    title: (key) => key,
+  };
+}
+
+function buildExpenseGroupRow(group) {
+  const row = document.createElement('tr');
+  row.className = 'expense-group-row';
+  const cell = appendCell(row, `${group.title} · ${group.expenses.length} записей`);
+  cell.colSpan = 7;
+  return row;
+}
+
+function buildExpenseSubtotalRow(group) {
+  return buildExpenseTotalRow(`Итого: ${group.title}`, group.expenses, 'expense-subtotal-row');
+}
+
+function buildExpenseTotalRow(label, expenses, className = 'expense-total-row') {
+  const row = document.createElement('tr');
+  row.className = className;
+  const labelCell = appendCell(row, label);
+  labelCell.colSpan = 2;
+  appendCell(row, formatMoney(sumExpenses(expenses)), 'numeric-cell');
+  appendCell(row, '', '');
+  appendCell(row, '', '');
+  appendCell(row, '', '');
+  appendCell(row, '', '');
+  return row;
+}
+
+function sumExpenses(expenses) {
+  return expenses.reduce((sum, expense) => sum + toNumber(expense.amount), 0);
+}
+
+function compareExpensesByDateDesc(left, right) {
+  return expenseSortTime(right) - expenseSortTime(left);
+}
+
+function expenseSortTime(expense) {
+  const date = expense.expenseDate
+    ? `${expense.expenseDate}T23:59:59`
+    : expense.createdAt;
+  const time = new Date(date).getTime();
+  return Number.isFinite(time) ? time : 0;
 }
 
 async function handleExpenseCreate(event) {
