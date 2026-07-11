@@ -451,11 +451,13 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
 
     const expense = await store.createExpense(admin, {
       pointId: 'moscow_6231',
+      expenseDate: '2026-07-09',
       amount: '123,45',
       paymentMethod: 'cash',
       receipt,
     });
 
+    assert.equal(expense.expenseDate, '2026-07-09');
     assert.equal(expense.amount, '123.45');
     assert.equal(expense.paymentMethodLabel, 'наличные');
     assert.equal(expense.googleDrive.status, 'unavailable');
@@ -473,6 +475,7 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
     await assert.rejects(
       () => store.createExpense(employee, {
         pointId: 'moscow_6231',
+        expenseDate: '2026-07-09',
         amount: '100',
         paymentMethod: 'cash',
         receipt,

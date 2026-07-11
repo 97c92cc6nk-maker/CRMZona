@@ -424,6 +424,10 @@
               <select name="pointId" id="expensePointSelect" required></select>
             </label>
             <label>
+              Дата расхода
+              <input name="expenseDate" id="expenseDateInput" type="date" required>
+            </label>
+            <label>
               Сумма расхода
               <input name="amount" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16" required>
             </label>
@@ -445,7 +449,7 @@
             <table class="expenses-table">
               <thead>
                 <tr>
-                  <th>Дата</th>
+                  <th>Дата расхода</th>
                   <th>Точка</th>
                   <th>Сумма</th>
                   <th>Оплата</th>

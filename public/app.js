@@ -74,6 +74,7 @@ function bindElements() {
     repairsNotice: document.getElementById('repairsNotice'),
     expenseForm: document.getElementById('expenseForm'),
     expensePointSelect: document.getElementById('expensePointSelect'),
+    expenseDateInput: document.getElementById('expenseDateInput'),
     expensePaymentMethod: document.getElementById('expensePaymentMethod'),
     refreshExpenses: document.getElementById('refreshExpenses'),
     expensesBody: document.getElementById('expensesBody'),
@@ -135,6 +136,7 @@ function bindEvents() {
 
 async function bootstrap() {
   els.monthInput.value = currentMonth();
+  els.expenseDateInput.value = currentDate();
   try {
     await loadSession();
     await loadAppData();
@@ -514,6 +516,9 @@ async function loadExpenses() {
 function renderExpenses() {
   els.expensesBody.replaceChildren();
   fillExpensePaymentMethods();
+  if (!els.expenseDateInput.value) {
+    els.expenseDateInput.value = currentDate();
+  }
   const expensesAllowed = Boolean(state.permissions.canManageExpenses && state.points.length);
   Array.from(els.expenseForm.elements).forEach((field) => {
     field.disabled = !expensesAllowed;
@@ -553,7 +558,7 @@ function fillExpensePaymentMethods() {
 
 function buildExpenseRow(expense) {
   const row = document.createElement('tr');
-  appendCell(row, formatDateTime(expense.createdAt));
+  appendCell(row, expense.expenseDate ? formatDate(expense.expenseDate) : formatDateTime(expense.createdAt));
   appendCell(row, expense.pointName);
   appendCell(row, formatMoney(expense.amount), 'numeric-cell');
   appendCell(row, expense.paymentMethodLabel);
@@ -605,6 +610,7 @@ async function handleExpenseCreate(event) {
     });
     state.expenses = [data.expense, ...state.expenses];
     els.expenseForm.reset();
+    els.expenseDateInput.value = currentDate();
     if (state.points[0]) {
       els.expensePointSelect.value = state.points[0].id;
     }
@@ -1813,6 +1819,15 @@ function storageWarningText(storage) {
 function currentMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function currentDate() {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
 }
 
 function formatMonth(month) {

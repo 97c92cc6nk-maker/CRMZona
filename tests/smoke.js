@@ -156,6 +156,7 @@ async function main() {
       headers: { Cookie: cookie },
       body: {
         pointId: 'moscow_6231',
+        expenseDate: '2026-07-09',
         amount: '321,50',
         paymentMethod: 'corp_card',
         receipt: {
@@ -165,6 +166,7 @@ async function main() {
       },
     });
     assert.equal(createdExpense.expense.amount, '321.5');
+    assert.equal(createdExpense.expense.expenseDate, '2026-07-09');
     assert.equal(createdExpense.expense.paymentMethod, 'corp_card');
     assert.equal(createdExpense.expense.googleDrive.status, 'unavailable');
 
