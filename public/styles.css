@@ -330,18 +330,6 @@ h3 {
   width: min(240px, 100%);
 }
 
-.expense-list-controls {
-  display: flex;
-  justify-content: flex-end;
-  align-items: end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.expense-list-controls .compact-field {
-  width: min(260px, 100%);
-}
-
 .pill {
   display: inline-flex;
   align-items: center;
@@ -575,6 +563,27 @@ tbody tr:last-child td {
 
 .expenses-table {
   min-width: 1160px;
+}
+
+.expense-header-filter {
+  display: grid;
+  gap: 5px;
+  min-width: 130px;
+}
+
+.expense-header-filter span {
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+}
+
+.expense-header-filter select {
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-transform: none;
 }
 
 .expense-sort-totals {
@@ -933,9 +942,7 @@ tbody tr:last-child td {
 
   .toolbar label,
   .toolbar button,
-  .action-row button,
-  .expense-list-controls,
-  .expense-list-controls .compact-field {
+  .action-row button {
     width: 100%;
   }
 

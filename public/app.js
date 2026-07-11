@@ -9,8 +9,11 @@ const state = {
   users: [],
   repairs: [],
   expenses: [],
-  expenseSortBy: 'date',
-  expenseFilterValue: '',
+  expenseFilters: {
+    point: '',
+    payment: '',
+    author: '',
+  },
   repairStatuses: [],
   repairPriorities: [],
   expensePaymentMethods: [],
@@ -78,8 +81,9 @@ function bindElements() {
     expensePointSelect: document.getElementById('expensePointSelect'),
     expenseDateInput: document.getElementById('expenseDateInput'),
     expensePaymentMethod: document.getElementById('expensePaymentMethod'),
-    expenseSortSelect: document.getElementById('expenseSortSelect'),
-    expenseFilterValueSelect: document.getElementById('expenseFilterValueSelect'),
+    expensePointFilter: document.getElementById('expensePointFilter'),
+    expensePaymentFilter: document.getElementById('expensePaymentFilter'),
+    expenseAuthorFilter: document.getElementById('expenseAuthorFilter'),
     expenseSortTotals: document.getElementById('expenseSortTotals'),
     refreshExpenses: document.getElementById('refreshExpenses'),
     expensesBody: document.getElementById('expensesBody'),
@@ -122,16 +126,9 @@ function bindEvents() {
   els.refreshRepairs.addEventListener('click', loadRepairs);
   els.repairsBody.addEventListener('change', handleRepairStatusChange);
   els.expenseForm.addEventListener('submit', handleExpenseCreate);
-  els.expenseSortSelect.addEventListener('change', () => {
-    state.expenseSortBy = els.expenseSortSelect.value;
-    state.expenseFilterValue = '';
-    els.expenseFilterValueSelect.value = '';
-    renderExpenses();
-  });
-  els.expenseFilterValueSelect.addEventListener('change', () => {
-    state.expenseFilterValue = els.expenseFilterValueSelect.value;
-    renderExpenses();
-  });
+  els.expensePointFilter.addEventListener('change', () => updateExpenseFilter('point', els.expensePointFilter.value));
+  els.expensePaymentFilter.addEventListener('change', () => updateExpenseFilter('payment', els.expensePaymentFilter.value));
+  els.expenseAuthorFilter.addEventListener('change', () => updateExpenseFilter('author', els.expenseAuthorFilter.value));
   els.expensesBody.addEventListener('click', handleExpenseTableClick);
   els.refreshExpenses.addEventListener('click', loadExpenses);
   els.loadSchedule.addEventListener('click', loadSchedule);
@@ -540,10 +537,7 @@ function renderExpenses() {
   Array.from(els.expenseForm.elements).forEach((field) => {
     field.disabled = !expensesAllowed;
   });
-  if (els.expenseSortSelect.value !== state.expenseSortBy) {
-    els.expenseSortSelect.value = state.expenseSortBy;
-  }
-  fillExpenseFilterValues();
+  fillExpenseTableFilters();
 
   if (!state.expenses.length) {
     const row = document.createElement('tr');
@@ -556,15 +550,14 @@ function renderExpenses() {
     return;
   }
 
-  const filteredExpenses = filterExpenses(state.expenses, state.expenseSortBy, state.expenseFilterValue);
-  const expenses = sortExpenses(filteredExpenses, state.expenseSortBy);
-  renderExpenseSortTotals(expenses, state.expenseSortBy, state.expenseFilterValue);
+  const expenses = filterExpenses(state.expenses).sort(compareExpensesByDateDesc);
+  renderExpenseSortTotals(expenses);
   if (!expenses.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
     cell.colSpan = 8;
     cell.className = 'empty-state';
-    cell.textContent = 'Нет расходов по выбранному отбору.';
+    cell.textContent = 'Нет расходов по выбранному фильтру.';
     row.append(cell);
     els.expensesBody.append(row);
     return;
@@ -590,33 +583,28 @@ function fillExpensePaymentMethods() {
   }));
 }
 
-function fillExpenseFilterValues() {
-  const select = els.expenseFilterValueSelect;
-  const options = expenseFilterOptions(state.expenses, state.expenseSortBy);
-  select.replaceChildren();
+function fillExpenseTableFilters() {
+  fillExpenseColumnFilter(els.expensePointFilter, 'point', 'Все точки');
+  fillExpenseColumnFilter(els.expensePaymentFilter, 'payment', 'Все оплаты');
+  fillExpenseColumnFilter(els.expenseAuthorFilter, 'author', 'Все авторы');
+}
 
-  if (state.expenseSortBy === 'date') {
-    state.expenseFilterValue = '';
-    select.disabled = true;
-    select.append(selectOption('', 'Все расходы'));
-    return;
-  }
-
-  const allLabels = {
-    author: 'Все авторы',
-    payment: 'Все способы оплаты',
-    point: 'Все торговые точки',
-  };
-  select.append(selectOption('', allLabels[state.expenseSortBy] || 'Все'));
+function fillExpenseColumnFilter(select, filterName, allLabel) {
+  const options = expenseFilterOptions(filterName);
+  const currentValue = state.expenseFilters[filterName] || '';
+  select.replaceChildren(selectOption('', allLabel));
   for (const option of options) {
-    select.append(selectOption(option.value, `${option.label} · ${option.count} шт. · ${formatMoney(option.total)}`));
+    select.append(selectOption(option.value, option.label));
   }
+  if (currentValue && !options.some((option) => option.value === currentValue)) {
+    state.expenseFilters[filterName] = '';
+  }
+  select.value = state.expenseFilters[filterName] || '';
+}
 
-  if (state.expenseFilterValue && !options.some((option) => option.value === state.expenseFilterValue)) {
-    state.expenseFilterValue = '';
-  }
-  select.value = state.expenseFilterValue;
-  select.disabled = !options.length;
+function updateExpenseFilter(filterName, value) {
+  state.expenseFilters[filterName] = value;
+  renderExpenses();
 }
 
 function selectOption(value, label) {
@@ -678,44 +666,28 @@ function buildExpenseRow(expense) {
   return row;
 }
 
-function sortExpenses(expenses, sortBy) {
-  const sorted = [...expenses];
-  if (sortBy === 'author') {
-    sorted.sort((left, right) => compareExpenseText(left.createdByName, right.createdByName) || compareExpensesByDateDesc(left, right));
-    return sorted;
-  }
-  if (sortBy === 'payment') {
-    sorted.sort((left, right) => compareExpenseText(left.paymentMethodLabel, right.paymentMethodLabel) || compareExpensesByDateDesc(left, right));
-    return sorted;
-  }
-  if (sortBy === 'point') {
-    sorted.sort((left, right) => compareExpenseText(left.pointName, right.pointName) || compareExpensesByDateDesc(left, right));
-    return sorted;
-  }
-  sorted.sort(compareExpensesByDateDesc);
-  return sorted;
+function filterExpenses(expenses) {
+  return expenses.filter((expense) => (
+    expenseMatchesFilter(expense, 'point')
+    && expenseMatchesFilter(expense, 'payment')
+    && expenseMatchesFilter(expense, 'author')
+  ));
 }
 
-function filterExpenses(expenses, sortBy, filterValue) {
-  if (sortBy === 'date' || !filterValue) return expenses;
-  return expenses.filter((expense) => expenseFilterValue(expense, sortBy) === filterValue);
+function expenseMatchesFilter(expense, filterName) {
+  const filterValue = state.expenseFilters[filterName];
+  return !filterValue || expenseFilterValue(expense, filterName) === filterValue;
 }
 
-function renderExpenseSortTotals(expenses, sortBy, filterValue) {
+function renderExpenseSortTotals(expenses) {
   const total = sumExpenses(expenses);
-  els.expenseSortTotals.append(expenseTotalPill(filterValue ? 'Итого по отбору' : 'Итого по списку', total));
-  if (sortBy === 'date' || filterValue) return;
-
-  for (const item of expenseTotalsBySort(expenses, sortBy)) {
-    els.expenseSortTotals.append(expenseTotalPill(item.label, item.total));
-  }
+  els.expenseSortTotals.append(expenseTotalPill(hasActiveExpenseFilters() ? 'Итого по фильтру' : 'Итого по списку', total));
 }
 
-function expenseFilterOptions(expenses, sortBy) {
-  if (sortBy === 'date') return [];
+function expenseFilterOptions(filterName) {
   const grouped = new Map();
-  for (const expense of expenses) {
-    const value = expenseFilterValue(expense, sortBy);
+  for (const expense of state.expenses) {
+    const value = expenseFilterValue(expense, filterName);
     const current = grouped.get(value) || {
       value,
       label: value,
@@ -729,26 +701,15 @@ function expenseFilterOptions(expenses, sortBy) {
   return [...grouped.values()].sort((left, right) => left.label.localeCompare(right.label, 'ru'));
 }
 
-function expenseTotalsBySort(expenses, sortBy) {
-  const grouped = new Map();
-  for (const expense of expenses) {
-    const key = expenseFilterValue(expense, sortBy);
-    grouped.set(key, (grouped.get(key) || 0) + toNumber(expense.amount));
-  }
-  return [...grouped.entries()]
-    .map(([label, total]) => ({ label, total }))
-    .sort((left, right) => left.label.localeCompare(right.label, 'ru'));
-}
-
-function expenseSortKey(expense, sortBy) {
-  if (sortBy === 'author') return expense.createdByName;
-  if (sortBy === 'payment') return expense.paymentMethodLabel;
-  if (sortBy === 'point') return expense.pointName;
+function expenseFilterValue(expense, filterName) {
+  if (filterName === 'author') return expense.createdByName || 'Не указано';
+  if (filterName === 'payment') return expense.paymentMethodLabel || 'Не указано';
+  if (filterName === 'point') return expense.pointName || 'Не указано';
   return '';
 }
 
-function expenseFilterValue(expense, sortBy) {
-  return expenseSortKey(expense, sortBy) || 'Не указано';
+function hasActiveExpenseFilters() {
+  return Boolean(state.expenseFilters.point || state.expenseFilters.payment || state.expenseFilters.author);
 }
 
 function expenseTotalPill(label, total) {
@@ -766,10 +727,6 @@ function expenseTotalPill(label, total) {
 
 function sumExpenses(expenses) {
   return expenses.reduce((sum, expense) => sum + toNumber(expense.amount), 0);
-}
-
-function compareExpenseText(left, right) {
-  return String(left || '').localeCompare(String(right || ''), 'ru');
 }
 
 function compareExpensesByDateDesc(left, right) {

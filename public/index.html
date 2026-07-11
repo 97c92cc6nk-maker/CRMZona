@@ -446,21 +446,6 @@
         <section class="panel" aria-labelledby="expensesListTitle">
           <div class="panel-head">
             <h3 id="expensesListTitle">Список хозрасходов</h3>
-            <div class="expense-list-controls">
-              <label class="compact-field">
-                Сортировка
-                <select id="expenseSortSelect">
-                  <option value="date">По дате</option>
-                  <option value="author">По автору</option>
-                  <option value="payment">По оплате</option>
-                  <option value="point">По торговой точке</option>
-                </select>
-              </label>
-              <label class="compact-field">
-                Отбор
-                <select id="expenseFilterValueSelect"></select>
-              </label>
-            </div>
           </div>
           <div class="expense-sort-totals" id="expenseSortTotals"></div>
           <div class="table-wrap">
@@ -468,13 +453,28 @@
               <thead>
                 <tr>
                   <th>Дата расхода</th>
-                  <th>Точка</th>
+                  <th>
+                    <label class="expense-header-filter">
+                      <span>Точка</span>
+                      <select id="expensePointFilter" aria-label="Фильтр по торговой точке"></select>
+                    </label>
+                  </th>
                   <th>Сумма</th>
-                  <th>Оплата</th>
-                  <th>Автор</th>
+                  <th>
+                    <label class="expense-header-filter">
+                      <span>Оплата</span>
+                      <select id="expensePaymentFilter" aria-label="Фильтр по оплате"></select>
+                    </label>
+                  </th>
+                  <th>
+                    <label class="expense-header-filter">
+                      <span>Автор</span>
+                      <select id="expenseAuthorFilter" aria-label="Фильтр по автору"></select>
+                    </label>
+                  </th>
                   <th>Чек</th>
                   <th>Google Drive</th>
-                  <th>Действия</th>
+                  <th>Действие</th>
                 </tr>
               </thead>
               <tbody id="expensesBody"></tbody>
