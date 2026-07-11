@@ -195,6 +195,16 @@ async function main() {
     assert.equal(receiptResponse.headers.get('content-type'), 'application/pdf');
     assert.equal(Buffer.from(await receiptResponse.arrayBuffer()).toString('utf8'), '%PDF-smoke');
 
+    const deletedExpense = await jsonFetch(`${baseUrl}/api/expenses/${createdExpense.expense.id}`, {
+      method: 'DELETE',
+      headers: { Cookie: cookie },
+    });
+    assert.equal(deletedExpense.expense.id, createdExpense.expense.id);
+    const expensesAfterDelete = await jsonFetch(`${baseUrl}/api/expenses`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(expensesAfterDelete.expenses.length, 0);
+
     const scheduleRows = [{
       employeeId: createdEmployee.user.id,
       advanceCard: '1000',

@@ -447,8 +447,8 @@
           <div class="panel-head">
             <h3 id="expensesListTitle">Список хозрасходов</h3>
             <label class="compact-field">
-              Группировка
-              <select id="expenseGroupSelect">
+              Сортировка
+              <select id="expenseSortSelect">
                 <option value="date">По дате</option>
                 <option value="author">По автору</option>
                 <option value="payment">По оплате</option>
@@ -456,6 +456,7 @@
               </select>
             </label>
           </div>
+          <div class="expense-sort-totals" id="expenseSortTotals"></div>
           <div class="table-wrap">
             <table class="expenses-table">
               <thead>
@@ -467,6 +468,7 @@
                   <th>Автор</th>
                   <th>Чек</th>
                   <th>Google Drive</th>
+                  <th>Действия</th>
                 </tr>
               </thead>
               <tbody id="expensesBody"></tbody>

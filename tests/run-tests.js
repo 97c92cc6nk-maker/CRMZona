@@ -491,6 +491,15 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
       }),
       (error) => error instanceof ApiError && error.status === 403,
     );
+
+    const deleted = store.deleteExpense(admin, expense.id);
+    assert.equal(deleted.id, expense.id);
+    assert.equal(store.listExpenses(admin).length, 0);
+    assert.equal(store.getExpenseByReceiptId(admin, expense.receipt.id), null);
+    await assert.rejects(
+      () => store.readReceiptFile(expense.receipt),
+      (error) => error instanceof ApiError && error.status === 404,
+    );
   } finally {
     for (const key of driveEnvKeys) {
       if (previousDriveEnv[key] === undefined) {
