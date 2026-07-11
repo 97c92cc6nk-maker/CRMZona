@@ -210,7 +210,7 @@ async function main() {
       advanceCard: '1000',
       salaryCard: '2000',
       bonusExtra: '300',
-      claims: '100',
+      claims: '999',
       days: {
         1: { rateRub: '12.5', issuedCount: '7' },
         2: { rateRub: '10', issuedCount: '0' },
@@ -230,6 +230,27 @@ async function main() {
       saved.schedule.rows.some((row) => row.employeeId === createdEmployee.user.id),
       true,
     );
+
+    const createdClaim = await jsonFetch(`${baseUrl}/api/claims`, {
+      method: 'POST',
+      headers: { Cookie: cookie },
+      body: {
+        date: '2026-06-15',
+        amount: '100',
+        pointId: 'moscow_6231',
+        claimNumber: 'SMOKE-CLAIM-1',
+        company: 'Smoke Company',
+        guiltyEmployeeId: createdEmployee.user.id,
+        comment: 'Smoke claim',
+      },
+    });
+    assert.equal(createdClaim.claim.amount, '100');
+
+    const claims = await jsonFetch(`${baseUrl}/api/claims`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(claims.claims.length, 1);
+    assert.equal(claims.canManage, true);
 
     const loaded = await jsonFetch(`${baseUrl}/api/schedule?pointId=moscow_6231&month=2026-06`, {
       headers: { Cookie: cookie },

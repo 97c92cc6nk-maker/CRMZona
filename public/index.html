@@ -83,6 +83,7 @@
           <button class="tab is-hidden" type="button" data-view="employeesView" id="employeesTab">Сотрудники</button>
           <button class="tab" type="button" data-view="retailPointsView">Торговые точки</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
+          <button class="tab" type="button" data-view="claimsView">Претензии</button>
           <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
           <button class="tab" type="button" data-view="expensesView">Хозрасходы</button>
         </nav>
@@ -466,6 +467,71 @@
         </section>
 
         <div class="notice" id="scheduleNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="claimsView" aria-labelledby="claimsTitle">
+        <div class="section-head">
+          <h2 id="claimsTitle">Претензии</h2>
+          <button class="secondary" type="button" id="refreshClaims">Обновить</button>
+        </div>
+
+        <section class="panel" aria-labelledby="claimCreateTitle">
+          <h3 id="claimCreateTitle">Новая претензия</h3>
+          <form class="claim-form" id="claimForm">
+            <label>
+              Дата
+              <input name="date" id="claimDateInput" type="date" required>
+            </label>
+            <label>
+              Сумма
+              <input name="amount" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16" required>
+            </label>
+            <label>
+              Торговая точка
+              <select name="pointId" id="claimPointSelect" required></select>
+            </label>
+            <label>
+              Номер претензии
+              <input name="claimNumber" type="text" maxlength="120" required>
+            </label>
+            <label>
+              Компания
+              <input name="company" type="text" maxlength="160" required>
+            </label>
+            <label>
+              Виновный сотрудник
+              <select name="guiltyEmployeeId" id="claimEmployeeSelect" required></select>
+            </label>
+            <label class="claim-comment-field">
+              Комментарий
+              <textarea name="comment" maxlength="1000"></textarea>
+            </label>
+            <button class="primary" type="submit">Сохранить претензию</button>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="claimsListTitle">
+          <h3 id="claimsListTitle">Список претензий</h3>
+          <div class="table-wrap">
+            <table class="claims-table">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Сумма</th>
+                  <th>Торговая точка</th>
+                  <th>Номер претензии</th>
+                  <th>Компания</th>
+                  <th>Виновный сотрудник</th>
+                  <th>Комментарий</th>
+                  <th>Действие</th>
+                </tr>
+              </thead>
+              <tbody id="claimsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="notice" id="claimsNotice" role="status" aria-live="polite"></div>
       </section>
 
       <section class="view" id="repairsView" aria-labelledby="repairsTitle">

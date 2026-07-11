@@ -11,6 +11,8 @@ const state = {
   retailPointPaymentMethods: [],
   repairs: [],
   expenses: [],
+  claims: [],
+  claimEmployees: [],
   employeeDocumentTypes: [],
   expenseFilters: {
     point: '',
@@ -108,6 +110,13 @@ function bindElements() {
     refreshExpenses: document.getElementById('refreshExpenses'),
     expensesBody: document.getElementById('expensesBody'),
     expensesNotice: document.getElementById('expensesNotice'),
+    claimForm: document.getElementById('claimForm'),
+    claimDateInput: document.getElementById('claimDateInput'),
+    claimPointSelect: document.getElementById('claimPointSelect'),
+    claimEmployeeSelect: document.getElementById('claimEmployeeSelect'),
+    refreshClaims: document.getElementById('refreshClaims'),
+    claimsBody: document.getElementById('claimsBody'),
+    claimsNotice: document.getElementById('claimsNotice'),
     pointSelect: document.getElementById('pointSelect'),
     monthInput: document.getElementById('monthInput'),
     loadSchedule: document.getElementById('loadSchedule'),
@@ -159,6 +168,9 @@ function bindEvents() {
   els.expenseAuthorFilter.addEventListener('change', () => updateExpenseFilter('author', els.expenseAuthorFilter.value));
   els.expensesBody.addEventListener('click', handleExpenseTableClick);
   els.refreshExpenses.addEventListener('click', loadExpenses);
+  els.claimForm.addEventListener('submit', handleClaimCreate);
+  els.claimsBody.addEventListener('click', handleClaimTableClick);
+  els.refreshClaims.addEventListener('click', loadClaims);
   els.loadSchedule.addEventListener('click', loadSchedule);
   els.pointSelect.addEventListener('change', loadSchedule);
   els.monthInput.addEventListener('change', loadSchedule);
@@ -178,6 +190,7 @@ function bindEvents() {
 async function bootstrap() {
   els.monthInput.value = currentMonth();
   els.expenseDateInput.value = currentDate();
+  els.claimDateInput.value = currentDate();
   try {
     await loadSession();
     await loadAppData();
@@ -221,6 +234,11 @@ async function loadAppData() {
     await loadExpenses();
   } else {
     renderExpenses();
+  }
+  if (state.permissions.canViewClaims) {
+    await loadClaims();
+  } else {
+    renderClaims();
   }
   if (state.permissions.canViewSchedule) {
     await loadSchedule();
@@ -345,6 +363,8 @@ async function handleLogout() {
     state.points = [];
     state.schedule = null;
     state.expenses = [];
+    state.claims = [];
+    state.claimEmployees = [];
     state.selectedEmployeeId = null;
     showAuth();
   }, els.profileNotice);
@@ -385,6 +405,7 @@ function renderProfile() {
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('repairsView', Boolean(state.permissions.canViewRepairs));
   setTabVisibility('expensesView', Boolean(state.permissions.canViewExpenses));
+  setTabVisibility('claimsView', Boolean(state.permissions.canViewClaims));
   els.employeeAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRoles);
   els.retailPointAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRetailPoints);
   if (els.usersPanel) {
@@ -412,6 +433,7 @@ async function loadPoints() {
   fillPointSelect(els.pointSelect);
   fillPointSelect(els.repairPointSelect);
   fillPointSelect(els.expensePointSelect);
+  fillPointSelect(els.claimPointSelect);
   renderEmployeeFormAccessControls();
 }
 
@@ -1271,6 +1293,174 @@ function expenseDriveWarning(googleDrive) {
 function expenseDriveDeleteWarning(cleanup) {
   if (!cleanup || cleanup.status === 'deleted' || cleanup.status === 'skipped') return '';
   return `Google Drive: ${cleanup.reason || 'чек не удалось удалить из архива.'}`;
+}
+
+async function loadClaims() {
+  if (!state.permissions.canViewClaims) return;
+  await runWithButton(els.refreshClaims, async () => {
+    const data = await api('/api/claims');
+    state.claims = data.claims || [];
+    state.claimEmployees = data.employeeOptions || [];
+    state.permissions.canManageClaims = data.canManage;
+    renderClaims();
+  }, els.claimsNotice);
+}
+
+function renderClaims() {
+  if (!els.claimsBody) return;
+  els.claimsBody.replaceChildren();
+  const canManage = Boolean(state.permissions.canManageClaims && state.points.length && state.claimEmployees.length);
+  if (!els.claimDateInput.value) {
+    els.claimDateInput.value = currentDate();
+  }
+  fillClaimEmployeeOptions();
+  Array.from(els.claimForm.elements).forEach((field) => {
+    field.disabled = !canManage;
+  });
+
+  if (!state.permissions.canViewClaims) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 8;
+    cell.className = 'empty-state';
+    cell.textContent = 'Нет доступа к разделу претензий.';
+    row.append(cell);
+    els.claimsBody.append(row);
+    return;
+  }
+
+  if (!state.claims.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 8;
+    cell.className = 'empty-state';
+    cell.textContent = 'Претензий пока нет.';
+    row.append(cell);
+    els.claimsBody.append(row);
+    return;
+  }
+
+  for (const claim of [...state.claims].sort(compareClaimsByDateDesc)) {
+    els.claimsBody.append(buildClaimRow(claim));
+  }
+}
+
+function fillClaimEmployeeOptions() {
+  const employees = state.claimEmployees.length
+    ? state.claimEmployees
+    : state.users.map((user) => ({
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+      }));
+  els.claimEmployeeSelect.replaceChildren(...employees.map((employee) => {
+    const option = document.createElement('option');
+    option.value = employee.id;
+    option.textContent = employee.email ? `${employee.fullName} · ${employee.email}` : employee.fullName;
+    return option;
+  }));
+}
+
+function buildClaimRow(claim) {
+  const row = document.createElement('tr');
+  row.dataset.claimId = claim.id;
+  appendCell(row, claim.date ? formatDate(claim.date) : '');
+  appendCell(row, formatMoney(toNumber(claim.amount)), 'numeric-cell');
+  appendCell(row, claim.pointName || '');
+  appendCell(row, claim.claimNumber || '');
+  appendCell(row, claim.company || '');
+  appendCell(row, claim.guiltyEmployeeName || '');
+  appendCell(row, claim.comment || '');
+
+  const actionsCell = document.createElement('td');
+  if (state.permissions.canManageClaims) {
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'danger claim-delete-button';
+    deleteButton.dataset.action = 'delete-claim';
+    deleteButton.dataset.claimId = claim.id;
+    deleteButton.textContent = 'Удалить';
+    actionsCell.append(deleteButton);
+  } else {
+    actionsCell.textContent = '—';
+  }
+  row.append(actionsCell);
+  return row;
+}
+
+function compareClaimsByDateDesc(left, right) {
+  return claimSortTime(right) - claimSortTime(left);
+}
+
+function claimSortTime(claim) {
+  const date = claim.date ? `${claim.date}T23:59:59` : claim.createdAt;
+  const time = new Date(date).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+async function handleClaimCreate(event) {
+  event.preventDefault();
+  if (!state.permissions.canManageClaims || !state.points.length || !state.claimEmployees.length) {
+    showNotice(els.claimsNotice, 'Нет прав на внесение претензий, доступных торговых точек или сотрудников.', 'warning');
+    return;
+  }
+  const button = event.submitter;
+  await runWithButton(button, async () => {
+    const values = formValues(els.claimForm);
+    const data = await api('/api/claims', {
+      method: 'POST',
+      body: values,
+    });
+    state.claims = [data.claim, ...state.claims];
+    els.claimForm.reset();
+    els.claimDateInput.value = currentDate();
+    if (state.points[0]) {
+      els.claimPointSelect.value = state.points[0].id;
+    }
+    renderClaims();
+    await refreshScheduleForClaimMonth(data.claim.date);
+    await loadAudit();
+    const storageWarning = storageWarningText(data.storage);
+    showNotice(
+      els.claimsNotice,
+      ['Претензия сохранена.', storageWarning].filter(Boolean).join(' '),
+      storageWarning ? 'warning' : 'success',
+    );
+  }, els.claimsNotice);
+}
+
+async function handleClaimTableClick(event) {
+  const button = event.target.closest('[data-action="delete-claim"]');
+  if (!button) return;
+
+  const claimId = button.dataset.claimId;
+  const claim = state.claims.find((item) => item.id === claimId);
+  const label = claim
+    ? `${claim.date ? formatDate(claim.date) : 'без даты'}, ${claim.guiltyEmployeeName}, ${formatMoney(toNumber(claim.amount))}`
+    : 'эту претензию';
+  if (!window.confirm(`Удалить ${label}?`)) return;
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/claims/${encodeURIComponent(claimId)}`, {
+      method: 'DELETE',
+      body: {},
+    });
+    state.claims = state.claims.filter((item) => item.id !== data.claim.id);
+    renderClaims();
+    await refreshScheduleForClaimMonth(data.claim.date);
+    await loadAudit();
+    const storageWarning = storageWarningText(data.storage);
+    showNotice(
+      els.claimsNotice,
+      ['Претензия удалена.', storageWarning].filter(Boolean).join(' '),
+      storageWarning ? 'warning' : 'success',
+    );
+  }, els.claimsNotice);
+}
+
+async function refreshScheduleForClaimMonth(date) {
+  if (!state.schedule || !date || state.schedule.month !== String(date).slice(0, 7)) return;
+  await loadSchedule();
 }
 
 async function employeeDocumentPayloadFromFile(file) {
@@ -2450,8 +2640,18 @@ function summaryInputCell(scheduleRow, field) {
   const cell = document.createElement('td');
   cell.className = ['numeric-cell', `${field}-cell`].join(' ');
   const isPremiumField = field === 'bonusExtra';
-  if (!state.canEditSchedule) {
+  const isClaimsField = field === 'claims';
+  if (!state.canEditSchedule || isClaimsField) {
     cell.textContent = formatMoney(toNumber(scheduleRow[field]));
+    if (isClaimsField) {
+      const assignedElsewhere = scheduleRow.claimAssignedPointId
+        && scheduleRow.claimAssignedPointId !== state.schedule.pointId;
+      cell.title = scheduleRow.claimAssignedPointId
+        ? assignedElsewhere
+          ? `Претензии учтены на точке ${pointLabel(scheduleRow.claimAssignedPointId)}.`
+          : 'Претензии перенесены из раздела Претензии.'
+        : 'Претензии редактируются только через раздел Претензии.';
+    }
     return cell;
   }
   const input = document.createElement('input');
@@ -2553,6 +2753,7 @@ function addScheduleRow() {
     premiumStartDate: defaultEmployee?.premium?.startDate || '',
     premiumAssignedPointId: defaultEmployee?.premium?.assignedPointId || '',
     claims: '',
+    claimAssignedPointId: '',
     days: {},
   });
   renderSchedule();

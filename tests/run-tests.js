@@ -181,7 +181,7 @@ test('schedule rows use employees from the directory and respect month boundarie
   assert.equal(rows[0].advanceCard, '1000.5');
   assert.equal(rows[0].salaryCard, '2500');
   assert.equal(rows[0].bonusExtra, '');
-  assert.equal(rows[0].claims, '100');
+  assert.equal(rows[0].claims, '');
   assert.deepEqual(rows[0].days, {
     1: { rateRub: '12.5', issuedCount: '7' },
     28: { rateRub: '10', issuedCount: '' },
@@ -276,7 +276,84 @@ test('employee can save only own schedule row without overwriting others', () =>
   assert.equal(employeeRow.advanceCard, '60');
   assert.equal(employeeRow.salaryCard, '90');
   assert.equal(employeeRow.bonusExtra, '');
-  assert.equal(employeeRow.claims, '8');
+  assert.equal(employeeRow.claims, '');
+});
+
+test('claims are created in directory and distributed to the busiest point', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    ...validateRegistration({
+      fullName: 'Анна Владелец',
+      phone: '+79990000081',
+      email: 'owner-claims@example.com',
+    }),
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Иван Претензия',
+    phone: '+79990000082',
+    email: 'claims-employee@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['schedule', 'claims'],
+    allowedPoints: ['moscow_6231', 'krasnogorsk_466'],
+  });
+
+  store.saveSchedule(owner, 'moscow_6231', '2026-06', [{
+    employeeId: employee.id,
+    claims: '999',
+    days: {
+      1: { rateRub: '10', issuedCount: '1' },
+      2: { rateRub: '10', issuedCount: '' },
+      3: { rateRub: '', issuedCount: '2' },
+    },
+  }]);
+  store.saveSchedule(owner, 'krasnogorsk_466', '2026-06', [{
+    employeeId: employee.id,
+    claims: '999',
+    days: {
+      1: { rateRub: '10', issuedCount: '1' },
+    },
+  }]);
+
+  const beforeClaim = store.getSchedule('moscow_6231', '2026-06', owner)
+    .rows.find((row) => row.employeeId === employee.id);
+  assert.equal(beforeClaim.claims, '');
+
+  const firstClaim = store.createClaim(owner, {
+    date: '2026-06-10',
+    amount: '1200',
+    pointId: 'krasnogorsk_466',
+    claimNumber: 'CL-001',
+    company: 'Маркетплейс',
+    guiltyEmployeeId: employee.id,
+    comment: 'Недостача',
+  });
+  store.createClaim(owner, {
+    date: '2026-06-20',
+    amount: '300',
+    pointId: 'moscow_6231',
+    claimNumber: 'CL-002',
+    company: 'Маркетплейс',
+    guiltyEmployeeId: employee.id,
+    comment: 'Повторная претензия',
+  });
+
+  assert.equal(store.listClaims(owner).length, 2);
+
+  const moscow = store.getSchedule('moscow_6231', '2026-06', owner)
+    .rows.find((row) => row.employeeId === employee.id);
+  const krasnogorsk = store.getSchedule('krasnogorsk_466', '2026-06', owner)
+    .rows.find((row) => row.employeeId === employee.id);
+  assert.equal(moscow.claims, '1500');
+  assert.equal(moscow.claimAssignedPointId, 'moscow_6231');
+  assert.equal(krasnogorsk.claims, '0');
+  assert.equal(krasnogorsk.claimAssignedPointId, 'moscow_6231');
+
+  store.deleteClaim(owner, firstClaim.id);
+  const afterDelete = store.getSchedule('moscow_6231', '2026-06', owner)
+    .rows.find((row) => row.employeeId === employee.id);
+  assert.equal(afterDelete.claims, '300');
 });
 
 test('employee premium applies by month and preserves historical values', () => {
