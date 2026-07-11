@@ -84,7 +84,6 @@ function bindElements() {
     expensePointFilter: document.getElementById('expensePointFilter'),
     expensePaymentFilter: document.getElementById('expensePaymentFilter'),
     expenseAuthorFilter: document.getElementById('expenseAuthorFilter'),
-    expenseSortTotals: document.getElementById('expenseSortTotals'),
     refreshExpenses: document.getElementById('refreshExpenses'),
     expensesBody: document.getElementById('expensesBody'),
     expensesNotice: document.getElementById('expensesNotice'),
@@ -528,7 +527,6 @@ async function loadExpenses() {
 
 function renderExpenses() {
   els.expensesBody.replaceChildren();
-  els.expenseSortTotals.replaceChildren();
   fillExpensePaymentMethods();
   if (!els.expenseDateInput.value) {
     els.expenseDateInput.value = currentDate();
@@ -551,7 +549,6 @@ function renderExpenses() {
   }
 
   const expenses = filterExpenses(state.expenses).sort(compareExpensesByDateDesc);
-  renderExpenseSortTotals(expenses);
   if (!expenses.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
@@ -560,11 +557,13 @@ function renderExpenses() {
     cell.textContent = 'Нет расходов по выбранному фильтру.';
     row.append(cell);
     els.expensesBody.append(row);
+    els.expensesBody.append(buildExpenseTotalRow(expenses));
     return;
   }
   for (const expense of expenses) {
     els.expensesBody.append(buildExpenseRow(expense));
   }
+  els.expensesBody.append(buildExpenseTotalRow(expenses));
 }
 
 function fillExpensePaymentMethods() {
@@ -666,6 +665,26 @@ function buildExpenseRow(expense) {
   return row;
 }
 
+function buildExpenseTotalRow(expenses) {
+  const row = document.createElement('tr');
+  row.className = 'expense-total-row';
+
+  const labelCell = document.createElement('td');
+  labelCell.colSpan = 2;
+  labelCell.className = 'expense-total-label';
+  labelCell.textContent = 'Итого по списку';
+
+  const amountCell = document.createElement('td');
+  amountCell.className = 'numeric-cell expense-total-sum';
+  amountCell.textContent = formatMoney(sumExpenses(expenses));
+
+  const restCell = document.createElement('td');
+  restCell.colSpan = 5;
+
+  row.append(labelCell, amountCell, restCell);
+  return row;
+}
+
 function filterExpenses(expenses) {
   return expenses.filter((expense) => (
     expenseMatchesFilter(expense, 'point')
@@ -677,11 +696,6 @@ function filterExpenses(expenses) {
 function expenseMatchesFilter(expense, filterName) {
   const filterValue = state.expenseFilters[filterName];
   return !filterValue || expenseFilterValue(expense, filterName) === filterValue;
-}
-
-function renderExpenseSortTotals(expenses) {
-  const total = sumExpenses(expenses);
-  els.expenseSortTotals.append(expenseTotalPill(hasActiveExpenseFilters() ? 'Итого по фильтру' : 'Итого по списку', total));
 }
 
 function expenseFilterOptions(filterName) {
@@ -706,23 +720,6 @@ function expenseFilterValue(expense, filterName) {
   if (filterName === 'payment') return expense.paymentMethodLabel || 'Не указано';
   if (filterName === 'point') return expense.pointName || 'Не указано';
   return '';
-}
-
-function hasActiveExpenseFilters() {
-  return Boolean(state.expenseFilters.point || state.expenseFilters.payment || state.expenseFilters.author);
-}
-
-function expenseTotalPill(label, total) {
-  const pill = document.createElement('div');
-  pill.className = 'expense-total-pill';
-
-  const name = document.createElement('span');
-  name.textContent = label;
-  const amount = document.createElement('strong');
-  amount.textContent = formatMoney(total);
-
-  pill.append(name, amount);
-  return pill;
 }
 
 function sumExpenses(expenses) {
@@ -795,10 +792,11 @@ async function handleExpenseTableClick(event) {
     renderExpenses();
     await loadAudit();
     const storageWarning = storageWarningText(data.storage);
+    const driveWarning = expenseDriveDeleteWarning(data.expense.googleDriveCleanup);
     showNotice(
       els.expensesNotice,
-      ['Хозрасход удален.', storageWarning].filter(Boolean).join(' '),
-      storageWarning ? 'warning' : 'success',
+      ['Хозрасход удален.', driveWarning, storageWarning].filter(Boolean).join(' '),
+      driveWarning || storageWarning ? 'warning' : 'success',
     );
   }, els.expensesNotice);
 }
@@ -806,6 +804,11 @@ async function handleExpenseTableClick(event) {
 function expenseDriveWarning(googleDrive) {
   if (googleDrive?.status === 'uploaded') return '';
   return `Google Drive: ${googleDrive?.reason || 'чек не удалось отправить в архив.'}`;
+}
+
+function expenseDriveDeleteWarning(cleanup) {
+  if (!cleanup || cleanup.status === 'deleted' || cleanup.status === 'skipped') return '';
+  return `Google Drive: ${cleanup.reason || 'чек не удалось удалить из архива.'}`;
 }
 
 async function receiptPayloadFromFile(file) {

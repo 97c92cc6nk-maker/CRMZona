@@ -586,33 +586,23 @@ tbody tr:last-child td {
   text-transform: none;
 }
 
-.expense-sort-totals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.expense-total-pill {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  min-height: 34px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f7faf9;
-  font-size: 13px;
-  font-weight: 750;
-}
-
-.expense-total-pill strong {
-  color: var(--accent-strong);
-}
-
 .expense-delete-button {
   min-height: 34px;
   padding: 6px 10px;
+}
+
+.expense-total-row td {
+  border-top: 2px solid #cfe0dc;
+  background: #f7faf9;
+  font-weight: 850;
+}
+
+.expense-total-label {
+  text-align: right;
+}
+
+.expense-total-sum {
+  color: var(--accent-strong);
 }
 
 .employees-table th,

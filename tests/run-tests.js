@@ -492,8 +492,9 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
       (error) => error instanceof ApiError && error.status === 403,
     );
 
-    const deleted = store.deleteExpense(admin, expense.id);
+    const deleted = await store.deleteExpense(admin, expense.id);
     assert.equal(deleted.id, expense.id);
+    assert.equal(deleted.googleDriveCleanup.status, 'skipped');
     assert.equal(store.listExpenses(admin).length, 0);
     assert.equal(store.getExpenseByReceiptId(admin, expense.receipt.id), null);
     await assert.rejects(
@@ -507,6 +508,91 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
       } else {
         process.env[key] = previousDriveEnv[key];
       }
+    }
+  }
+});
+
+test('deleting housekeeping expense removes archived Google Drive file', async () => {
+  const store = createTempStore();
+  store.createUser({
+    ...validateRegistration({
+      fullName: 'Анна Владелец',
+      phone: '+79990000048',
+      email: 'owner-drive-delete@example.com',
+    }),
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Иван Администратор',
+    phone: '+79990000049',
+    email: 'admin-drive-delete@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['expenses'],
+    allowedPoints: ['moscow_6231'],
+  });
+  const now = new Date().toISOString();
+  const receipt = await store.saveReceiptFile({
+    id: 'receipt-drive-delete',
+    archiveName: 'receipt-drive-delete.pdf',
+    buffer: Buffer.from('%PDF-drive-delete'),
+    mimeType: 'application/pdf',
+    size: 17,
+  });
+  store.saveJson('expenses.json', [{
+    id: 'expense-drive-delete',
+    pointId: 'moscow_6231',
+    expenseDate: '2026-07-10',
+    amount: '500',
+    paymentMethod: 'card',
+    receipt,
+    googleDrive: {
+      status: 'uploaded',
+      sourceUnavailable: false,
+      fileId: 'drive-file-delete-1',
+      webViewLink: 'https://drive.google.com/file/d/drive-file-delete-1/view',
+      reason: '',
+    },
+    createdBy: admin.id,
+    createdByName: admin.fullName,
+    createdAt: now,
+    updatedAt: now,
+    updatedBy: admin.id,
+  }]);
+
+  const previousFetch = global.fetch;
+  const previousToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  const requests = [];
+  process.env.GOOGLE_DRIVE_ACCESS_TOKEN = 'test-drive-token';
+  global.fetch = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    return {
+      ok: true,
+      status: 204,
+      json: async () => ({}),
+    };
+  };
+
+  try {
+    const deleted = await store.deleteExpense(admin, 'expense-drive-delete');
+    assert.equal(deleted.id, 'expense-drive-delete');
+    assert.equal(deleted.googleDriveCleanup.status, 'deleted');
+    assert.equal(deleted.googleDriveCleanup.fileId, 'drive-file-delete-1');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].url, 'https://www.googleapis.com/drive/v3/files/drive-file-delete-1?supportsAllDrives=true');
+    assert.equal(requests[0].options.method, 'DELETE');
+    assert.equal(requests[0].options.headers.Authorization, 'Bearer test-drive-token');
+    assert.equal(store.listExpenses(admin).length, 0);
+    await assert.rejects(
+      () => store.readReceiptFile(receipt),
+      (error) => error instanceof ApiError && error.status === 404,
+    );
+  } finally {
+    global.fetch = previousFetch;
+    if (previousToken === undefined) {
+      delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    } else {
+      process.env.GOOGLE_DRIVE_ACCESS_TOKEN = previousToken;
     }
   }
 });
