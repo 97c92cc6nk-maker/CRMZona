@@ -426,6 +426,52 @@ h3 {
   min-width: 88px;
 }
 
+.employee-document-upload {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1.2fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.employee-documents-list {
+  display: grid;
+  gap: 8px;
+}
+
+.employee-documents-table {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.employee-document-row {
+  display: grid;
+  grid-template-columns: minmax(145px, 0.9fr) minmax(180px, 1fr) minmax(130px, 0.8fr) minmax(80px, 0.4fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 46px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.employee-document-row:last-child {
+  border-bottom: 0;
+}
+
+.employee-document-row span,
+.employee-document-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.employee-document-remove {
+  min-height: 32px;
+  padding: 5px 9px;
+}
+
 .access-fieldset {
   min-width: 0;
   border: 1px solid var(--line);
@@ -920,6 +966,11 @@ tbody tr:last-child td {
   }
 
   .premium-history-row {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-document-upload,
+  .employee-document-row {
     grid-template-columns: 1fr;
   }
 

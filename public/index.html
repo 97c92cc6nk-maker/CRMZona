@@ -265,6 +265,21 @@
               <div class="premium-history" id="employeeCardPremiumRows"></div>
               <button class="secondary" type="button" id="addPremiumRow">Добавить премию</button>
             </fieldset>
+            <fieldset class="access-fieldset employee-card-wide">
+              <legend>Документы сотрудника</legend>
+              <div class="employee-document-upload">
+                <label>
+                  Тип документа
+                  <select id="employeeDocumentType"></select>
+                </label>
+                <label>
+                  Файл JPEG/PDF
+                  <input id="employeeDocumentFile" type="file" accept="image/jpeg,application/pdf,.jpg,.jpeg,.pdf">
+                </label>
+                <button class="secondary" type="button" id="uploadEmployeeDocument">Загрузить</button>
+              </div>
+              <div class="employee-documents-list" id="employeeDocumentsList"></div>
+            </fieldset>
             <div class="employee-card-actions employee-card-wide">
               <button class="primary" type="submit">Сохранить</button>
               <button class="danger" type="button" id="deleteEmployeeCard">Удалить</button>

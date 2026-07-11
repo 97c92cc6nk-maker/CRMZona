@@ -597,6 +597,110 @@ test('deleting housekeeping expense removes archived Google Drive file', async (
   }
 });
 
+test('employee documents are archived and deleted in Google Drive', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    ...validateRegistration({
+      fullName: 'Анна Владелец',
+      phone: '+79990000050',
+      email: 'owner-employee-docs@example.com',
+    }),
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Петр Документов',
+    phone: '+79990000051',
+    email: 'employee-docs@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['employees'],
+    allowedPoints: ['moscow_6231'],
+  });
+
+  const previousFetch = global.fetch;
+  const previousToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  const previousFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  const requests = [];
+  let folderCounter = 0;
+  process.env.GOOGLE_DRIVE_ACCESS_TOKEN = 'test-drive-token';
+  process.env.GOOGLE_DRIVE_FOLDER_ID = 'root-folder-1';
+  global.fetch = async (url, options = {}) => {
+    const request = { url: String(url), options };
+    requests.push(request);
+    if (request.url.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'employee-document-file-1',
+          webViewLink: 'https://drive.google.com/file/d/employee-document-file-1/view',
+        }),
+      };
+    }
+    if (request.url.includes('/drive/v3/files/employee-document-file-1') && options.method === 'DELETE') {
+      return {
+        ok: true,
+        status: 204,
+        json: async () => ({}),
+      };
+    }
+    if (request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true') && options.method === 'POST') {
+      folderCounter += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: `folder-${folderCounter}`, name: JSON.parse(options.body).name }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ files: [] }),
+    };
+  };
+
+  try {
+    const dataUrl = `data:application/pdf;base64,${Buffer.from('%PDF-employee-doc').toString('base64')}`;
+    const added = await store.addEmployeeDocument(owner, employee.id, {
+      documentType: 'passport_first',
+      file: {
+        fileName: 'passport.pdf',
+        dataUrl,
+      },
+    });
+    assert.equal(added.document.type, 'passport_first');
+    assert.equal(added.document.typeLabel, 'Паспорт 1-ая');
+    assert.equal(added.document.googleDrive.fileId, 'employee-document-file-1');
+    assert.match(added.document.fileName, /^\d{4}-\d{2}-\d{2}-Паспорт_1-ая-[a-f0-9]+\.pdf$/);
+    assert.equal(added.user.employeeDocuments.length, 1);
+
+    const createdFolderNames = requests
+      .filter((request) => request.options.method === 'POST' && request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true'))
+      .map((request) => JSON.parse(request.options.body).name);
+    assert.deepEqual(createdFolderNames, ['Документы сотрудников', 'Петр Документов']);
+
+    const deleted = await store.deleteEmployeeDocument(owner, employee.id, added.document.id);
+    assert.equal(deleted.googleDriveCleanup.status, 'deleted');
+    assert.equal(deleted.user.employeeDocuments.length, 0);
+    assert.ok(requests.some((request) => (
+      request.url === 'https://www.googleapis.com/drive/v3/files/employee-document-file-1?supportsAllDrives=true'
+      && request.options.method === 'DELETE'
+    )));
+  } finally {
+    global.fetch = previousFetch;
+    if (previousToken === undefined) {
+      delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    } else {
+      process.env.GOOGLE_DRIVE_ACCESS_TOKEN = previousToken;
+    }
+    if (previousFolderId === undefined) {
+      delete process.env.GOOGLE_DRIVE_FOLDER_ID;
+    } else {
+      process.env.GOOGLE_DRIVE_FOLDER_ID = previousFolderId;
+    }
+  }
+});
+
 test('owner can maintain employee directory records', () => {
   const store = createTempStore();
   const owner = store.createUser({

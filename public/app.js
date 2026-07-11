@@ -9,6 +9,7 @@ const state = {
   users: [],
   repairs: [],
   expenses: [],
+  employeeDocumentTypes: [],
   expenseFilters: {
     point: '',
     payment: '',
@@ -62,6 +63,10 @@ function bindElements() {
     employeeCardTitle: document.getElementById('employeeCardTitle'),
     employeeCardForm: document.getElementById('employeeCardForm'),
     employeeCardPremiumRows: document.getElementById('employeeCardPremiumRows'),
+    employeeDocumentType: document.getElementById('employeeDocumentType'),
+    employeeDocumentFile: document.getElementById('employeeDocumentFile'),
+    uploadEmployeeDocument: document.getElementById('uploadEmployeeDocument'),
+    employeeDocumentsList: document.getElementById('employeeDocumentsList'),
     addPremiumRow: document.getElementById('addPremiumRow'),
     closeEmployeeCard: document.getElementById('closeEmployeeCard'),
     deleteEmployeeCard: document.getElementById('deleteEmployeeCard'),
@@ -118,6 +123,8 @@ function bindEvents() {
   els.addPremiumRow.addEventListener('click', () => addPremiumHistoryRow());
   els.employeeCardPremiumRows.addEventListener('click', handlePremiumHistoryClick);
   els.employeeCardPremiumRows.addEventListener('change', handlePremiumHistoryChange);
+  els.uploadEmployeeDocument.addEventListener('click', handleEmployeeDocumentUpload);
+  els.employeeDocumentsList.addEventListener('click', handleEmployeeDocumentClick);
   els.deleteEmployeeCard.addEventListener('click', () => deleteEmployee(state.selectedEmployeeId, els.deleteEmployeeCard));
   els.refreshEmployees.addEventListener('click', loadUsers);
   els.refreshAudit.addEventListener('click', loadAudit);
@@ -811,6 +818,39 @@ function expenseDriveDeleteWarning(cleanup) {
   return `Google Drive: ${cleanup.reason || 'чек не удалось удалить из архива.'}`;
 }
 
+async function employeeDocumentPayloadFromFile(file) {
+  if (!file) throw new Error('Выберите файл документа.');
+  const lowerName = String(file.name || '').toLowerCase();
+  const isPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf');
+  const isJpeg = file.type === 'image/jpeg' || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg');
+  if (!isPdf && !isJpeg) {
+    throw new Error('Поддерживаются документы в формате JPEG или PDF.');
+  }
+
+  if (isPdf) {
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('PDF документа слишком большой. Максимум 5 МБ.');
+    }
+    return {
+      fileName: file.name,
+      mimeType: 'application/pdf',
+      size: file.size,
+      dataUrl: await readFileAsDataUrlWithMime(file, 'application/pdf'),
+    };
+  }
+
+  const compressed = await compressReceiptImage(file);
+  if (compressed.size > 5 * 1024 * 1024) {
+    throw new Error('Файл документа слишком большой. Максимум 5 МБ.');
+  }
+  return {
+    fileName: file.name,
+    mimeType: 'image/jpeg',
+    size: compressed.size,
+    dataUrl: compressed.dataUrl.replace(/^data:[^;]+;/, 'data:image/jpeg;'),
+  };
+}
+
 async function receiptPayloadFromFile(file) {
   if (!file) throw new Error('Приложите чек.');
   if (!['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(file.type)) {
@@ -879,6 +919,11 @@ function readFileAsDataUrl(file) {
   });
 }
 
+async function readFileAsDataUrlWithMime(file, mimeType) {
+  const dataUrl = await readFileAsDataUrl(file);
+  return dataUrl.replace(/^data:[^;]*;/, `data:${mimeType};`);
+}
+
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -899,6 +944,7 @@ async function loadUsers() {
     const data = await api('/api/users');
     state.users = data.users;
     state.roles = data.roles;
+    state.employeeDocumentTypes = data.documentTypes || [];
     state.sections = data.sections || state.sections;
     state.points = data.points || state.points;
     renderEmployeeFormAccessControls();
@@ -970,6 +1016,8 @@ function renderEmployeeCard() {
     els.employeeCardPanel.classList.add('is-hidden');
     els.employeeCardForm.reset();
     els.employeeCardForm.dataset.userId = '';
+    els.employeeDocumentFile.value = '';
+    els.employeeDocumentsList.replaceChildren();
     return;
   }
 
@@ -987,6 +1035,8 @@ function renderEmployeeCard() {
   renderEmployeeCardRole(user, editable);
   renderEmployeeCardAccess(user, editable);
   renderPremiumHistoryRows(user.premiumHistory || [], editable);
+  renderEmployeeDocumentTypeOptions();
+  renderEmployeeDocuments(user.employeeDocuments || [], editable);
   setEmployeeCardEditable(editable);
   els.employeeCardPanel.classList.remove('is-hidden');
 }
@@ -1038,6 +1088,14 @@ function setEmployeeCardEditable(editable) {
   els.employeeCardPremiumRows
     .querySelectorAll('.premium-history-row')
     .forEach((row) => syncPremiumAmountState(row, editable));
+  els.uploadEmployeeDocument.disabled = !editable;
+  els.uploadEmployeeDocument.classList.toggle('is-hidden', !editable);
+  els.employeeDocumentsList
+    .querySelectorAll('button')
+    .forEach((button) => {
+      button.disabled = !editable;
+      button.classList.toggle('is-hidden', !editable);
+    });
 }
 
 function setInputsDisabled(root, disabled) {
@@ -1152,6 +1210,88 @@ function syncPremiumAmountState(row, editable) {
   if (!active.checked) {
     amount.value = '';
   }
+}
+
+function renderEmployeeDocumentTypeOptions() {
+  const types = state.employeeDocumentTypes.length
+    ? state.employeeDocumentTypes
+    : [
+        { value: 'passport_first', label: 'Паспорт 1-ая' },
+        { value: 'passport_registration', label: 'Паспорт Прописка' },
+        { value: 'inn', label: 'ИНН' },
+        { value: 'snils', label: 'СНИЛС' },
+        { value: 'card_details', label: 'Реквизиты карты' },
+        { value: 'employment_contract', label: 'Трудовой договор' },
+        { value: 'other', label: 'Прочие документы' },
+      ];
+  els.employeeDocumentType.replaceChildren(...types.map((type) => {
+    const option = document.createElement('option');
+    option.value = type.value;
+    option.textContent = type.label;
+    return option;
+  }));
+}
+
+function renderEmployeeDocuments(documents, editable) {
+  els.employeeDocumentsList.replaceChildren();
+  if (!Array.isArray(documents) || !documents.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state employee-documents-empty';
+    empty.textContent = 'Документы не загружены.';
+    els.employeeDocumentsList.append(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'employee-documents-table';
+  for (const documentItem of [...documents].sort(compareEmployeeDocuments)) {
+    list.append(buildEmployeeDocumentRow(documentItem, editable));
+  }
+  els.employeeDocumentsList.append(list);
+}
+
+function buildEmployeeDocumentRow(documentItem, editable) {
+  const row = document.createElement('div');
+  row.className = 'employee-document-row';
+  row.dataset.documentId = documentItem.id;
+
+  const type = document.createElement('strong');
+  type.textContent = documentItem.typeLabel || documentItem.type || 'Документ';
+
+  const file = document.createElement('span');
+  file.textContent = documentItem.fileName || documentItem.originalFileName || '';
+
+  const date = document.createElement('span');
+  date.textContent = documentItem.createdAt ? formatDateTime(documentItem.createdAt) : '';
+
+  const linkWrap = document.createElement('span');
+  if (documentItem.googleDrive?.webViewLink) {
+    const link = document.createElement('a');
+    link.href = documentItem.googleDrive.webViewLink;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'Открыть';
+    linkWrap.append(link);
+  } else {
+    linkWrap.textContent = documentItem.googleDrive?.reason || 'Нет ссылки';
+  }
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'danger employee-document-remove';
+  remove.dataset.deleteEmployeeDocument = documentItem.id;
+  remove.textContent = 'Удалить';
+  remove.disabled = !editable;
+  remove.classList.toggle('is-hidden', !editable);
+
+  row.append(type, file, date, linkWrap, remove);
+  return row;
+}
+
+function compareEmployeeDocuments(left, right) {
+  const leftDate = left.createdAt || '';
+  const rightDate = right.createdAt || '';
+  return rightDate.localeCompare(leftDate) || String(left.typeLabel || '').localeCompare(String(right.typeLabel || ''), 'ru');
 }
 
 function employeeTextInputCell(user, field, editable, type = 'text') {
@@ -1326,6 +1466,56 @@ async function handleEmployeeCardSave(event) {
   await updateEmployee(els.employeeCardForm.dataset.userId, event.submitter);
 }
 
+async function handleEmployeeDocumentUpload() {
+  const userId = els.employeeCardForm.dataset.userId;
+  if (!userId) return;
+  const file = els.employeeDocumentFile.files[0];
+  await runWithButton(els.uploadEmployeeDocument, async () => {
+    const payload = await employeeDocumentPayloadFromFile(file);
+    const data = await api(`/api/users/${encodeURIComponent(userId)}/documents`, {
+      method: 'POST',
+      body: {
+        documentType: els.employeeDocumentType.value,
+        file: payload,
+      },
+    });
+    replaceUserInState(data.user);
+    els.employeeDocumentFile.value = '';
+    renderEmployees();
+    renderEmployeeCard();
+    showNotice(
+      els.employeesNotice,
+      ['Документ загружен в Google Drive.', storageWarningText(data.storage)].filter(Boolean).join(' '),
+      data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.employeesNotice);
+}
+
+async function handleEmployeeDocumentClick(event) {
+  const button = event.target.closest('[data-delete-employee-document]');
+  if (!button) return;
+  const userId = els.employeeCardForm.dataset.userId;
+  const documentId = button.dataset.deleteEmployeeDocument;
+  const user = selectedEmployee();
+  const documentItem = user?.employeeDocuments?.find((item) => item.id === documentId);
+  const label = documentItem ? `${documentItem.typeLabel}: ${documentItem.fileName}` : 'документ';
+  if (!window.confirm(`Удалить ${label} из карточки и Google Drive?`)) return;
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/users/${encodeURIComponent(userId)}/documents/${encodeURIComponent(documentId)}`, {
+      method: 'DELETE',
+    });
+    replaceUserInState(data.user);
+    renderEmployees();
+    renderEmployeeCard();
+    showNotice(
+      els.employeesNotice,
+      ['Документ удален из карточки и Google Drive.', storageWarningText(data.storage)].filter(Boolean).join(' '),
+      data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.employeesNotice);
+}
+
 async function updateEmployee(userId, button) {
   if (!userId) return;
   await runWithButton(button, async () => {
@@ -1358,6 +1548,15 @@ async function deleteEmployee(userId, button) {
       data.storage?.persistent === false ? 'warning' : 'success',
     );
   }, els.employeesNotice);
+}
+
+function replaceUserInState(user) {
+  const index = state.users.findIndex((item) => item.id === user.id);
+  if (index === -1) {
+    state.users.push(user);
+  } else {
+    state.users.splice(index, 1, user);
+  }
 }
 
 function employeePayloadFromForm(form) {
