@@ -10,6 +10,8 @@ const state = {
   retailPoints: [],
   retailPointPaymentMethods: [],
   retailPointAdminOptions: [],
+  companies: [],
+  companyPoints: [],
   repairs: [],
   expenses: [],
   claims: [],
@@ -29,6 +31,7 @@ const state = {
   employeeOptions: [],
   selectedEmployeeId: null,
   selectedRetailPointId: null,
+  selectedCompanyId: null,
 };
 
 const els = {};
@@ -97,6 +100,19 @@ function bindElements() {
     refreshRetailPoints: document.getElementById('refreshRetailPoints'),
     retailPointsBody: document.getElementById('retailPointsBody'),
     retailPointsNotice: document.getElementById('retailPointsNotice'),
+    companyForm: document.getElementById('companyForm'),
+    companyAddPanel: document.getElementById('companyAddPanel'),
+    companyCardPanel: document.getElementById('companyCardPanel'),
+    companyCardTitle: document.getElementById('companyCardTitle'),
+    companyCardForm: document.getElementById('companyCardForm'),
+    companyPointOptions: document.getElementById('companyPointOptions'),
+    companyDocumentFile: document.getElementById('companyDocumentFile'),
+    uploadCompanyDocument: document.getElementById('uploadCompanyDocument'),
+    companyDocumentsList: document.getElementById('companyDocumentsList'),
+    closeCompanyCard: document.getElementById('closeCompanyCard'),
+    refreshCompanies: document.getElementById('refreshCompanies'),
+    companiesBody: document.getElementById('companiesBody'),
+    companiesNotice: document.getElementById('companiesNotice'),
     repairForm: document.getElementById('repairForm'),
     repairPointSelect: document.getElementById('repairPointSelect'),
     refreshRepairs: document.getElementById('refreshRepairs'),
@@ -161,6 +177,12 @@ function bindEvents() {
   els.uploadRetailPointDocument.addEventListener('click', handleRetailPointDocumentUpload);
   els.retailPointDocumentsList.addEventListener('click', handleRetailPointDocumentClick);
   els.refreshRetailPoints.addEventListener('click', loadRetailPoints);
+  els.companyForm.addEventListener('submit', handleCompanyCreate);
+  els.companyCardForm.addEventListener('submit', handleCompanySave);
+  els.closeCompanyCard.addEventListener('click', closeCompanyCard);
+  els.uploadCompanyDocument.addEventListener('click', handleCompanyDocumentUpload);
+  els.companyDocumentsList.addEventListener('click', handleCompanyDocumentClick);
+  els.refreshCompanies.addEventListener('click', loadCompanies);
   els.repairForm.addEventListener('submit', handleRepairCreate);
   els.refreshRepairs.addEventListener('click', loadRepairs);
   els.repairsBody.addEventListener('change', handleRepairStatusChange);
@@ -226,6 +248,11 @@ async function loadAppData() {
     await loadRetailPoints();
   } else {
     renderRetailPoints();
+  }
+  if (state.permissions.canViewCompanies) {
+    await loadCompanies();
+  } else {
+    renderCompanies();
   }
   if (state.permissions.canViewRepairs) {
     await loadRepairs();
@@ -404,12 +431,14 @@ function renderProfile() {
   els.profileRole.textContent = user.roleLabel;
   els.employeesTab.classList.toggle('is-hidden', !state.permissions.canViewUsers);
   setTabVisibility('retailPointsView', Boolean(state.permissions.canViewRetailPoints));
+  setTabVisibility('companiesView', Boolean(state.permissions.canViewCompanies));
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('repairsView', Boolean(state.permissions.canViewRepairs));
   setTabVisibility('expensesView', Boolean(state.permissions.canViewExpenses));
   setTabVisibility('claimsView', Boolean(state.permissions.canViewClaims));
   els.employeeAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRoles);
   els.retailPointAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRetailPoints);
+  els.companyAddPanel.classList.toggle('is-hidden', !state.permissions.canManageCompanies);
   if (els.usersPanel) {
     els.usersPanel.classList.add('is-hidden');
   }
@@ -888,6 +917,382 @@ async function retailPointDocumentPayloadFromFile(file) {
     size: compressed.size,
     dataUrl: compressed.dataUrl.replace(/^data:[^;]+;/, 'data:image/jpeg;'),
   };
+}
+
+async function loadCompanies() {
+  if (!state.permissions.canViewCompanies) return;
+  await runWithButton(els.refreshCompanies, async () => {
+    const data = await api('/api/companies');
+    state.companies = data.companies || [];
+    state.companyPoints = data.points || state.points || [];
+    state.permissions.canManageCompanies = Boolean(data.canManage);
+    renderCompanies();
+    renderCompanyCard();
+  }, els.companiesNotice);
+}
+
+function renderCompanies() {
+  if (!els.companiesBody) return;
+  els.companiesBody.replaceChildren();
+  const canManage = Boolean(state.permissions.canManageCompanies);
+  if (els.companyAddPanel) {
+    els.companyAddPanel.classList.toggle('is-hidden', !canManage);
+  }
+  if (els.companyForm) {
+    Array.from(els.companyForm.elements).forEach((field) => {
+      field.disabled = !canManage;
+    });
+  }
+
+  if (!state.permissions.canViewCompanies) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty-state';
+    cell.textContent = 'Нет доступа к разделу компаний.';
+    row.append(cell);
+    els.companiesBody.append(row);
+    closeCompanyCard();
+    return;
+  }
+
+  if (!state.companies.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty-state';
+    cell.textContent = 'Компании пока не добавлены.';
+    row.append(cell);
+    els.companiesBody.append(row);
+    return;
+  }
+
+  const companies = [...state.companies].sort((left, right) => (
+    String(left.shortName || left.name || '').localeCompare(String(right.shortName || right.name || ''), 'ru')
+  ));
+  for (const company of companies) {
+    els.companiesBody.append(buildCompanyRow(company));
+  }
+}
+
+function buildCompanyRow(company) {
+  const row = document.createElement('tr');
+  row.dataset.companyId = company.id;
+
+  const nameCell = document.createElement('td');
+  const nameButton = document.createElement('button');
+  nameButton.type = 'button';
+  nameButton.className = 'text-link';
+  nameButton.textContent = company.shortName || company.name || 'Без названия';
+  nameButton.addEventListener('click', () => openCompanyCard(company.id));
+  nameCell.append(nameButton);
+  row.append(nameCell);
+
+  appendCell(row, company.name || '');
+  appendCell(row, company.inn || '');
+  appendCell(row, company.ogrnip || '');
+  appendCell(row, company.phone || '');
+  appendCell(row, company.email || '');
+  appendCell(row, (company.pointNames || []).join(', '));
+  return row;
+}
+
+function openCompanyCard(companyId) {
+  state.selectedCompanyId = companyId;
+  renderCompanyCard();
+  els.companyCardPanel?.classList.remove('is-hidden');
+  els.companyCardPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeCompanyCard() {
+  state.selectedCompanyId = null;
+  els.companyCardPanel?.classList.add('is-hidden');
+  if (els.companyCardForm) {
+    els.companyCardForm.reset();
+    delete els.companyCardForm.dataset.companyId;
+  }
+  if (els.companyPointOptions) {
+    els.companyPointOptions.replaceChildren();
+  }
+  if (els.companyDocumentsList) {
+    els.companyDocumentsList.replaceChildren();
+  }
+}
+
+function selectedCompany() {
+  return state.companies.find((company) => company.id === state.selectedCompanyId) || null;
+}
+
+function renderCompanyCard() {
+  if (!els.companyCardForm) return;
+  const company = selectedCompany();
+  if (!company) {
+    els.companyCardPanel?.classList.add('is-hidden');
+    return;
+  }
+
+  els.companyCardPanel?.classList.remove('is-hidden');
+  els.companyCardForm.dataset.companyId = company.id;
+  if (els.companyCardTitle) {
+    els.companyCardTitle.textContent = `Карточка компании: ${company.shortName || company.name || 'без названия'}`;
+  }
+
+  [
+    'shortName',
+    'name',
+    'legalAddress',
+    'actualAddress',
+    'postalAddress',
+    'director',
+    'phone',
+    'email',
+    'inn',
+    'ogrnip',
+    'okpo',
+    'okato',
+    'oktmo',
+    'okved',
+    'bankName',
+    'bankBik',
+    'bankAccount',
+    'bankCorrespondentAccount',
+    'bankInn',
+    'bankKpp',
+  ].forEach((field) => setCompanyFormValue(field, company[field]));
+
+  const editable = Boolean(state.permissions.canManageCompanies);
+  renderCompanyPointOptions(company, editable);
+  setCompanyCardEditable(editable);
+  renderCompanyDocuments(company.documents || [], editable);
+}
+
+function setCompanyFormValue(name, value) {
+  const field = els.companyCardForm.elements[name];
+  if (field) field.value = value || '';
+}
+
+function setCompanyCardEditable(editable) {
+  Array.from(els.companyCardForm.elements).forEach((field) => {
+    field.disabled = !editable;
+  });
+  if (els.uploadCompanyDocument) {
+    els.uploadCompanyDocument.disabled = !editable;
+  }
+}
+
+function renderCompanyPointOptions(company, editable) {
+  const options = state.companyPoints.length ? state.companyPoints : state.points;
+  const selected = new Set(company?.pointIds || []);
+  els.companyPointOptions.replaceChildren(...options.map((point) => {
+    const label = document.createElement('label');
+    label.className = 'check-row';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.name = 'pointIds';
+    input.value = point.id;
+    input.checked = selected.has(point.id);
+    input.disabled = !editable;
+    const text = document.createElement('span');
+    text.textContent = point.name;
+    label.append(input, text);
+    return label;
+  }));
+}
+
+function renderCompanyDocuments(documents, editable) {
+  els.companyDocumentsList.replaceChildren();
+  if (!Array.isArray(documents) || !documents.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state company-documents-empty';
+    empty.textContent = 'Документы компании не загружены.';
+    els.companyDocumentsList.append(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'company-documents-table';
+  for (const documentItem of [...documents].sort(compareRetailPointDocuments)) {
+    list.append(buildCompanyDocumentRow(documentItem, editable));
+  }
+  els.companyDocumentsList.append(list);
+}
+
+function buildCompanyDocumentRow(documentItem, editable) {
+  const row = document.createElement('div');
+  row.className = 'company-document-row';
+  row.dataset.documentId = documentItem.id;
+
+  const file = document.createElement('strong');
+  file.textContent = documentItem.fileName || documentItem.originalFileName || 'Документ';
+
+  const date = document.createElement('span');
+  date.textContent = documentItem.createdAt ? formatDateTime(documentItem.createdAt) : '';
+
+  const size = document.createElement('span');
+  size.textContent = documentItem.size ? formatFileSize(documentItem.size) : '';
+
+  const linkWrap = document.createElement('span');
+  if (documentItem.googleDrive?.webViewLink) {
+    const link = document.createElement('a');
+    link.href = documentItem.googleDrive.webViewLink;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'Открыть';
+    linkWrap.append(link);
+  } else {
+    linkWrap.textContent = documentItem.googleDrive?.reason || 'Нет ссылки';
+  }
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'danger company-document-remove';
+  remove.dataset.deleteCompanyDocument = documentItem.id;
+  remove.textContent = 'Удалить';
+  remove.disabled = !editable;
+  remove.classList.toggle('is-hidden', !editable);
+
+  row.append(file, date, size, linkWrap, remove);
+  return row;
+}
+
+async function handleCompanyCreate(event) {
+  event.preventDefault();
+  const button = event.submitter;
+  await runWithButton(button, async () => {
+    const data = await api('/api/companies', {
+      method: 'POST',
+      body: companyPayloadFromBasicForm(els.companyForm),
+    });
+    replaceCompanyInState(data.company);
+    state.selectedCompanyId = data.company.id;
+    els.companyForm.reset();
+    renderCompanies();
+    renderCompanyCard();
+    showNotice(
+      els.companiesNotice,
+      ['Компания добавлена.', storageWarningText(data.storage)].filter(Boolean).join(' '),
+      data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.companiesNotice);
+}
+
+async function handleCompanySave(event) {
+  event.preventDefault();
+  const companyId = els.companyCardForm.dataset.companyId;
+  if (!companyId) return;
+  await runWithButton(event.submitter, async () => {
+    const data = await api(`/api/companies/${encodeURIComponent(companyId)}`, {
+      method: 'PATCH',
+      body: companyPayloadFromCard(els.companyCardForm),
+    });
+    replaceCompanyInState(data.company);
+    state.selectedCompanyId = data.company.id;
+    renderCompanies();
+    renderCompanyCard();
+    showNotice(
+      els.companiesNotice,
+      ['Карточка компании обновлена.', storageWarningText(data.storage)].filter(Boolean).join(' '),
+      data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.companiesNotice);
+}
+
+async function handleCompanyDocumentUpload() {
+  const companyId = els.companyCardForm.dataset.companyId;
+  if (!companyId) return;
+  const file = els.companyDocumentFile.files[0];
+  await runWithButton(els.uploadCompanyDocument, async () => {
+    const payload = await retailPointDocumentPayloadFromFile(file);
+    const data = await api(`/api/companies/${encodeURIComponent(companyId)}/documents`, {
+      method: 'POST',
+      body: { file: payload },
+    });
+    replaceCompanyInState(data.company);
+    state.selectedCompanyId = data.company.id;
+    els.companyDocumentFile.value = '';
+    renderCompanies();
+    renderCompanyCard();
+    showNotice(
+      els.companiesNotice,
+      ['Документ загружен в Google Drive.', storageWarningText(data.storage)].filter(Boolean).join(' '),
+      data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.companiesNotice);
+}
+
+async function handleCompanyDocumentClick(event) {
+  const button = event.target.closest('[data-delete-company-document]');
+  if (!button) return;
+  const companyId = els.companyCardForm.dataset.companyId;
+  const documentId = button.dataset.deleteCompanyDocument;
+  const company = selectedCompany();
+  const documentItem = company?.documents?.find((item) => item.id === documentId);
+  const label = documentItem?.fileName || 'документ';
+  if (!window.confirm(`Удалить ${label} из карточки и Google Drive?`)) return;
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/companies/${encodeURIComponent(companyId)}/documents/${encodeURIComponent(documentId)}`, {
+      method: 'DELETE',
+    });
+    replaceCompanyInState(data.company);
+    state.selectedCompanyId = data.company.id;
+    renderCompanies();
+    renderCompanyCard();
+    const driveWarning = retailPointDriveDeleteWarning(data.googleDriveCleanup);
+    showNotice(
+      els.companiesNotice,
+      ['Документ удален из карточки и Google Drive.', driveWarning, storageWarningText(data.storage)].filter(Boolean).join(' '),
+      driveWarning || data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.companiesNotice);
+}
+
+function companyPayloadFromBasicForm(form) {
+  const values = formValues(form);
+  return {
+    shortName: values.shortName,
+    name: values.name,
+    inn: values.inn,
+    ogrnip: values.ogrnip,
+    phone: values.phone,
+    email: values.email,
+  };
+}
+
+function companyPayloadFromCard(form) {
+  const values = formValues(form);
+  return {
+    shortName: values.shortName,
+    name: values.name,
+    legalAddress: values.legalAddress,
+    actualAddress: values.actualAddress,
+    postalAddress: values.postalAddress,
+    director: values.director,
+    phone: values.phone,
+    email: values.email,
+    inn: values.inn,
+    ogrnip: values.ogrnip,
+    okpo: values.okpo,
+    okato: values.okato,
+    oktmo: values.oktmo,
+    okved: values.okved,
+    bankName: values.bankName,
+    bankBik: values.bankBik,
+    bankAccount: values.bankAccount,
+    bankCorrespondentAccount: values.bankCorrespondentAccount,
+    bankInn: values.bankInn,
+    bankKpp: values.bankKpp,
+    pointIds: checkedValues(form, 'pointIds'),
+  };
+}
+
+function replaceCompanyInState(company) {
+  const index = state.companies.findIndex((item) => item.id === company.id);
+  if (index === -1) {
+    state.companies.push(company);
+  } else {
+    state.companies.splice(index, 1, company);
+  }
 }
 
 async function loadRepairs() {

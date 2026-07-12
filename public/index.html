@@ -82,6 +82,7 @@
           <button class="tab is-active" type="button" data-view="profileView">Личный кабинет</button>
           <button class="tab is-hidden" type="button" data-view="employeesView" id="employeesTab">Сотрудники</button>
           <button class="tab" type="button" data-view="retailPointsView">Торговые точки</button>
+          <button class="tab" type="button" data-view="companiesView">Компании</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="claimsView">Претензии</button>
           <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
@@ -407,6 +408,101 @@
         </section>
 
         <div class="notice" id="retailPointsNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="companiesView" aria-labelledby="companiesTitle">
+        <div class="section-head">
+          <h2 id="companiesTitle">Компании</h2>
+          <button class="secondary" type="button" id="refreshCompanies">Обновить</button>
+        </div>
+
+        <section class="panel is-hidden" id="companyAddPanel" aria-labelledby="companyAddTitle">
+          <h3 id="companyAddTitle">Добавить компанию</h3>
+          <form class="company-form" id="companyForm">
+            <label>Краткое наименование<input name="shortName" type="text" required maxlength="120"></label>
+            <label>Полное наименование<input name="name" type="text" required maxlength="240"></label>
+            <label>ИНН<input name="inn" type="text" maxlength="32"></label>
+            <label>ОГРН/ОГРНИП<input name="ogrnip" type="text" maxlength="32"></label>
+            <label>Телефон<input name="phone" type="tel" maxlength="32"></label>
+            <label>Email<input name="email" type="email" maxlength="180"></label>
+            <button class="primary" type="submit">Добавить</button>
+          </form>
+        </section>
+
+        <section class="panel is-hidden" id="companyCardPanel" aria-labelledby="companyCardTitle">
+          <div class="panel-head">
+            <h3 id="companyCardTitle">Карточка компании</h3>
+            <button class="secondary" type="button" id="closeCompanyCard">К списку</button>
+          </div>
+          <form class="company-form" id="companyCardForm">
+            <label>Краткое наименование<input name="shortName" type="text" required maxlength="120"></label>
+            <label>Полное наименование<input name="name" type="text" required maxlength="240"></label>
+            <label>Юридический адрес<input name="legalAddress" type="text" maxlength="300"></label>
+            <label>Фактический адрес<input name="actualAddress" type="text" maxlength="300"></label>
+            <label>Почтовый адрес<input name="postalAddress" type="text" maxlength="300"></label>
+            <label>Руководитель<input name="director" type="text" maxlength="160"></label>
+            <label>Телефон<input name="phone" type="tel" maxlength="32"></label>
+            <label>Email<input name="email" type="email" maxlength="180"></label>
+            <label>ИНН<input name="inn" type="text" maxlength="32"></label>
+            <label>ОГРН/ОГРНИП<input name="ogrnip" type="text" maxlength="32"></label>
+            <label>ОКПО<input name="okpo" type="text" maxlength="32"></label>
+            <label>ОКАТО<input name="okato" type="text" maxlength="32"></label>
+            <label>ОКТМО<input name="oktmo" type="text" maxlength="32"></label>
+            <label>ОКВЭД<input name="okved" type="text" maxlength="64"></label>
+
+            <fieldset class="access-fieldset company-wide">
+              <legend>Торговые точки</legend>
+              <div class="access-options" id="companyPointOptions"></div>
+            </fieldset>
+
+            <fieldset class="access-fieldset company-wide">
+              <legend>Банк</legend>
+              <div class="company-grid">
+                <label>Банк<input name="bankName" type="text" maxlength="180"></label>
+                <label>БИК<input name="bankBik" type="text" maxlength="32"></label>
+                <label>Расчетный счет<input name="bankAccount" type="text" maxlength="40"></label>
+                <label>Корреспондентский счет<input name="bankCorrespondentAccount" type="text" maxlength="40"></label>
+                <label>ИНН банка<input name="bankInn" type="text" maxlength="32"></label>
+                <label>КПП банка<input name="bankKpp" type="text" maxlength="32"></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="access-fieldset company-wide">
+              <legend>Документы компании</legend>
+              <div class="company-document-upload">
+                <label>Файл изображения/PDF<input id="companyDocumentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"></label>
+                <button class="secondary" type="button" id="uploadCompanyDocument">Загрузить</button>
+              </div>
+              <div class="company-documents-list" id="companyDocumentsList"></div>
+            </fieldset>
+
+            <div class="employee-card-actions company-wide">
+              <button class="primary" type="submit">Сохранить</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="companiesListTitle">
+          <h3 id="companiesListTitle">Список компаний</h3>
+          <div class="table-wrap">
+            <table class="companies-table">
+              <thead>
+                <tr>
+                  <th>Краткое наименование</th>
+                  <th>Полное наименование</th>
+                  <th>ИНН</th>
+                  <th>ОГРН/ОГРНИП</th>
+                  <th>Телефон</th>
+                  <th>Email</th>
+                  <th>Торговые точки</th>
+                </tr>
+              </thead>
+              <tbody id="companiesBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="notice" id="companiesNotice" role="status" aria-live="polite"></div>
       </section>
 
       <section class="view" id="scheduleView" aria-labelledby="scheduleTitle">

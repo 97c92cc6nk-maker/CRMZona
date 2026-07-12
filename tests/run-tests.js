@@ -941,6 +941,150 @@ test('retail points can store cards and Google Drive documents', async () => {
   }
 });
 
+test('companies can store requisites, point links and Google Drive documents', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    ...validateRegistration({
+      fullName: 'Анна Владелец',
+      phone: '+79990000080',
+      email: 'owner-companies@example.com',
+    }),
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Ольга Компании',
+    phone: '+79990000081',
+    email: 'company-admin@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['companies'],
+    allowedPoints: ['moscow_6231'],
+  });
+
+  const company = store.createCompany(owner, {
+    shortName: 'ИП ТСТ',
+    name: 'Индивидуальный предприниматель Тест Сергей Петрович',
+    legalAddress: 'г Москва, тестовая улица, д 1',
+    inn: '770000000001',
+    ogrnip: '325770000000001',
+    phone: '+79990000082',
+    email: 'company-test@example.com',
+    bankName: 'ПАО Тест Банк',
+    bankBik: '044525000',
+    bankAccount: '40802810000000000001',
+    bankCorrespondentAccount: '30101810000000000001',
+    pointIds: ['moscow_6231'],
+  });
+
+  assert.equal(company.shortName, 'ИП ТСТ');
+  assert.deepEqual(company.pointNames, ['МОСКВА_6231']);
+  assert.throws(
+    () => store.updateCompany(admin, company.id, { ...company, pointIds: ['krasnogorsk_466'] }),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
+
+  const updated = store.updateCompany(admin, company.id, {
+    ...company,
+    bankName: 'ПАО Новый Банк',
+    pointIds: ['moscow_6231'],
+  });
+  assert.equal(updated.bankName, 'ПАО Новый Банк');
+
+  const previousFetch = global.fetch;
+  const previousToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  const previousFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  const previousCompanyFolderId = process.env.GOOGLE_DRIVE_COMPANY_DOCUMENTS_FOLDER_ID;
+  const previousCompanyFolderName = process.env.GOOGLE_DRIVE_COMPANY_DOCUMENTS_FOLDER_NAME;
+  const requests = [];
+  let folderCounter = 0;
+  process.env.GOOGLE_DRIVE_ACCESS_TOKEN = 'test-drive-token';
+  process.env.GOOGLE_DRIVE_FOLDER_ID = 'root-folder-1';
+  delete process.env.GOOGLE_DRIVE_COMPANY_DOCUMENTS_FOLDER_ID;
+  delete process.env.GOOGLE_DRIVE_COMPANY_DOCUMENTS_FOLDER_NAME;
+  global.fetch = async (url, options = {}) => {
+    const request = { url: String(url), options };
+    requests.push(request);
+    if (request.url.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'company-document-file-1',
+          webViewLink: 'https://drive.google.com/file/d/company-document-file-1/view',
+        }),
+      };
+    }
+    if (request.url.includes('/drive/v3/files/company-document-file-1') && options.method === 'DELETE') {
+      return {
+        ok: true,
+        status: 204,
+        json: async () => ({}),
+      };
+    }
+    if (request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true') && options.method === 'POST') {
+      folderCounter += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: `company-folder-${folderCounter}`, name: JSON.parse(options.body).name }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ files: [] }),
+    };
+  };
+
+  try {
+    const dataUrl = `data:application/pdf;base64,${Buffer.from('%PDF-company-doc').toString('base64')}`;
+    const added = await store.addCompanyDocument(owner, company.id, {
+      file: {
+        fileName: 'requisites.pdf',
+        dataUrl,
+      },
+    });
+    assert.equal(added.document.googleDrive.fileId, 'company-document-file-1');
+    assert.match(added.document.fileName, /^\d{4}-\d{2}-\d{2}-requisites-[a-f0-9]+\.pdf$/);
+    assert.equal(added.company.documents.length, 1);
+
+    const createdFolderNames = requests
+      .filter((request) => request.options.method === 'POST' && request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true'))
+      .map((request) => JSON.parse(request.options.body).name);
+    assert.deepEqual(createdFolderNames, ['Документы по компаниям', 'ИП ТСТ']);
+
+    const deleted = await store.deleteCompanyDocument(owner, company.id, added.document.id);
+    assert.equal(deleted.googleDriveCleanup.status, 'deleted');
+    assert.equal(deleted.company.documents.length, 0);
+    assert.ok(requests.some((request) => (
+      request.url === 'https://www.googleapis.com/drive/v3/files/company-document-file-1?supportsAllDrives=true'
+      && request.options.method === 'DELETE'
+    )));
+  } finally {
+    global.fetch = previousFetch;
+    if (previousToken === undefined) {
+      delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    } else {
+      process.env.GOOGLE_DRIVE_ACCESS_TOKEN = previousToken;
+    }
+    if (previousFolderId === undefined) {
+      delete process.env.GOOGLE_DRIVE_FOLDER_ID;
+    } else {
+      process.env.GOOGLE_DRIVE_FOLDER_ID = previousFolderId;
+    }
+    if (previousCompanyFolderId === undefined) {
+      delete process.env.GOOGLE_DRIVE_COMPANY_DOCUMENTS_FOLDER_ID;
+    } else {
+      process.env.GOOGLE_DRIVE_COMPANY_DOCUMENTS_FOLDER_ID = previousCompanyFolderId;
+    }
+    if (previousCompanyFolderName === undefined) {
+      delete process.env.GOOGLE_DRIVE_COMPANY_DOCUMENTS_FOLDER_NAME;
+    } else {
+      process.env.GOOGLE_DRIVE_COMPANY_DOCUMENTS_FOLDER_NAME = previousCompanyFolderName;
+    }
+  }
+});
+
 test('owner can maintain employee directory records', () => {
   const store = createTempStore();
   const owner = store.createUser({
