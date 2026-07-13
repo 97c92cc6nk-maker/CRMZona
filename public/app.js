@@ -53,6 +53,8 @@ function bindElements() {
     loginForm: document.getElementById('loginForm'),
     forgotPasswordForm: document.getElementById('forgotPasswordForm'),
     registerForm: document.getElementById('registerForm'),
+    registerCaptchaQuestion: document.getElementById('registerCaptchaQuestion'),
+    refreshCaptcha: document.getElementById('refreshCaptcha'),
     authNotice: document.getElementById('authNotice'),
     logoutButton: document.getElementById('logoutButton'),
     currentUserLine: document.getElementById('currentUserLine'),
@@ -158,6 +160,8 @@ function bindEvents() {
   els.loginForm.addEventListener('submit', handleLogin);
   els.forgotPasswordForm.addEventListener('submit', handleForgotPassword);
   els.registerForm.addEventListener('submit', handleRegister);
+  els.registerForm.elements.phone.addEventListener('input', formatRegisterPhoneInput);
+  els.refreshCaptcha.addEventListener('click', refreshCaptcha);
   els.logoutButton.addEventListener('click', handleLogout);
   els.passwordForm.addEventListener('submit', handlePasswordChange);
   els.employeeForm.addEventListener('submit', handleEmployeeCreate);
@@ -298,6 +302,7 @@ function switchAuthMode(mode) {
   els.forgotPasswordForm.classList.remove('is-active');
   els.registerForm.classList.toggle('is-active', !isLogin);
   showNotice(els.authNotice, '');
+  if (!isLogin) refreshCaptcha();
 }
 
 function showForgotPassword() {
@@ -308,8 +313,42 @@ function showForgotPassword() {
   els.loginForm.classList.remove('is-active');
   els.registerForm.classList.remove('is-active');
   els.forgotPasswordForm.classList.add('is-active');
-  els.forgotPasswordForm.elements.email.value = els.loginForm.elements.email.value.trim();
+  const loginValue = els.loginForm.elements.login.value.trim();
+  els.forgotPasswordForm.elements.email.value = loginValue.includes('@') ? loginValue : '';
   showNotice(els.authNotice, '');
+}
+
+async function refreshCaptcha() {
+  try {
+    const data = await api('/api/captcha');
+    const captcha = data.captcha || {};
+    els.registerCaptchaQuestion.textContent = captcha.question || '';
+    els.registerForm.elements.captchaToken.value = captcha.token || '';
+    els.registerForm.elements.captchaAnswer.value = '';
+  } catch {
+    els.registerCaptchaQuestion.textContent = 'Недоступна';
+    els.registerForm.elements.captchaToken.value = '';
+  }
+}
+
+function formatRegisterPhoneInput(event) {
+  const input = event.target;
+  const digits = input.value.replace(/\D/g, '');
+  const national = (digits.length > 10 && (digits.startsWith('7') || digits.startsWith('8')))
+    ? digits.slice(1, 11)
+    : digits.slice(0, 10);
+  input.value = formatRussianPhoneNational(national);
+}
+
+function formatRussianPhoneNational(digits) {
+  if (!digits) return '';
+  const parts = [];
+  if (digits.length > 0) parts.push(`(${digits.slice(0, 3)}`);
+  if (digits.length >= 3) parts[0] += ')';
+  if (digits.length > 3) parts.push(` ${digits.slice(3, 6)}`);
+  if (digits.length > 6) parts.push(`-${digits.slice(6, 8)}`);
+  if (digits.length > 8) parts.push(`-${digits.slice(8, 10)}`);
+  return parts.join('');
 }
 
 async function handleLogin(event) {

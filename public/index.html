@@ -25,8 +25,8 @@
 
         <form class="auth-form is-active" id="loginForm">
           <label>
-            Email
-            <input name="email" type="email" autocomplete="email" required>
+            Email или телефон
+            <input name="login" type="text" autocomplete="username" required>
           </label>
           <label>
             Пароль
@@ -51,17 +51,37 @@
 
         <form class="auth-form" id="registerForm">
           <label>
-            ФИО
-            <input name="fullName" type="text" autocomplete="name" required maxlength="120">
+            Фамилия
+            <input name="lastName" type="text" autocomplete="family-name" required maxlength="60">
           </label>
           <label>
+            Имя
+            <input name="firstName" type="text" autocomplete="given-name" required maxlength="60">
+          </label>
+          <label>
+            Отчество
+            <input name="middleName" type="text" autocomplete="additional-name" required maxlength="60">
+          </label>
+          <label class="phone-field">
             Номер телефона
-            <input name="phone" type="tel" autocomplete="tel" required maxlength="32">
+            <span class="phone-input">
+              <span class="phone-prefix">+7</span>
+              <input name="phone" type="tel" autocomplete="tel-national" inputmode="numeric" required maxlength="15" placeholder="(999) 111-22-33">
+            </span>
           </label>
           <label>
             Email
             <input name="email" type="email" autocomplete="email" required maxlength="180">
           </label>
+          <div class="captcha-field">
+            <label>
+              Captcha
+              <span class="captcha-question" id="registerCaptchaQuestion"></span>
+              <input name="captchaAnswer" type="text" inputmode="numeric" required maxlength="8">
+            </label>
+            <input name="captchaToken" type="hidden">
+            <button class="secondary" type="button" id="refreshCaptcha">Обновить</button>
+          </div>
           <button class="primary" type="submit">Зарегистрироваться</button>
         </form>
 

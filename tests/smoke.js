@@ -39,12 +39,17 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   try {
+    const captcha = await jsonFetch(`${baseUrl}/api/captcha`);
     const registration = await jsonFetch(`${baseUrl}/api/register`, {
       method: 'POST',
       body: {
-        fullName: 'Тестовый Сотрудник',
+        lastName: 'Тестовый',
+        firstName: 'Сотрудник',
+        middleName: 'Проверочный',
         phone: '+79990000010',
         email: 'registered-smoke@example.com',
+        captchaToken: captcha.captcha.token,
+        captchaAnswer: solveCaptcha(captcha.captcha.question),
       },
     });
     assert.equal(registration.user.role, 'employee');
@@ -309,6 +314,14 @@ function readPasswordFromOutbox(dataDir, email = '') {
   const match = raw.match(/Пароль:\s*(.+)/);
   if (!match) throw new Error('Password was not written to outbox.');
   return match[1].trim();
+}
+
+function solveCaptcha(question) {
+  const match = String(question || '').match(/^(\d+) ([+-]) (\d+)/);
+  if (!match) throw new Error(`Unexpected captcha question: ${question}`);
+  const left = Number(match[1]);
+  const right = Number(match[3]);
+  return String(match[2] === '+' ? left + right : left - right);
 }
 
 main().catch((error) => {

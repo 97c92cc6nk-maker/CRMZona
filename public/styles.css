@@ -186,6 +186,56 @@ h3 {
   display: grid;
 }
 
+.phone-field,
+.captcha-field {
+  display: grid;
+  gap: 6px;
+}
+
+.phone-input {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.phone-input:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(27, 128, 106, 0.12);
+}
+
+.phone-prefix {
+  padding: 9px 0 9px 12px;
+  color: var(--text);
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.phone-input input {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.phone-input input:focus {
+  outline: none;
+}
+
+.captcha-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.captcha-question {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  font-weight: 750;
+  color: var(--accent-strong);
+}
+
 .auth-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

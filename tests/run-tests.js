@@ -9,9 +9,11 @@ const path = require('path');
 const {
   ApiError,
   Store,
+  createCaptchaChallenge,
   sendPasswordEmail,
   validateRegistration,
   validateScheduleRows,
+  verifyCaptcha,
   verifyPassword,
 } = require('../lib/app');
 
@@ -34,9 +36,43 @@ test('registration validates all required fields', () => {
 
   assert.deepEqual(value, {
     fullName: 'Иван Петров',
+    lastName: 'Иван',
+    firstName: 'Петров',
+    middleName: '',
     phone: '+7 (999) 111-22-33',
     email: 'ivan@example.com',
   });
+
+  const splitValue = validateRegistration({
+    lastName: 'Иванов',
+    firstName: 'Иван',
+    middleName: 'Иванович',
+    phone: '9991112233',
+    email: 'IVANOV@example.com',
+  });
+
+  assert.deepEqual(splitValue, {
+    fullName: 'Иванов Иван Иванович',
+    lastName: 'Иванов',
+    firstName: 'Иван',
+    middleName: 'Иванович',
+    phone: '+7 (999) 111-22-33',
+    email: 'ivanov@example.com',
+  });
+});
+
+test('captcha challenge verifies the registration answer', () => {
+  const captcha = createCaptchaChallenge();
+  const [, left, operation, right] = captcha.question.match(/^(\d+) ([+-]) (\d+)/);
+  const answer = operation === '+'
+    ? Number(left) + Number(right)
+    : Number(left) - Number(right);
+
+  assert.equal(verifyCaptcha(captcha.token, String(answer)), true);
+  assert.throws(
+    () => verifyCaptcha(captcha.token, String(answer + 1)),
+    (error) => error instanceof ApiError && error.status === 400,
+  );
 });
 
 test('first user becomes owner and next users become employees', () => {
@@ -60,6 +96,7 @@ test('first user becomes owner and next users become employees', () => {
 
   assert.equal(owner.role, 'owner');
   assert.equal(employee.role, 'employee');
+  assert.equal(store.getUserByPhone('9990000002').email, 'employee@example.com');
 });
 
 test('self-registered user can be created as employee without access rights', () => {
