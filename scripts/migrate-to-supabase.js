@@ -16,6 +16,11 @@ const FILES = [
   ['sessions.json', {}],
   ['schedules.json', {}],
   ['repairs.json', []],
+  ['retail_points.json', []],
+  ['companies.json', []],
+  ['expenses.json', []],
+  ['claims.json', []],
+  ['healthcheck.json', null],
 ];
 
 main().catch((error) => {

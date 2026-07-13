@@ -238,42 +238,44 @@ async function loadAppData() {
   renderProfile();
   renderEmployeeFormAccessControls();
 
+  const loaders = [];
   if (state.permissions.canViewUsers) {
-    await loadUsers();
+    loaders.push(loadUsers());
   }
   if (state.permissions.canViewAudit) {
-    await loadAudit();
+    loaders.push(loadAudit());
   }
   if (state.permissions.canViewRetailPoints) {
-    await loadRetailPoints();
+    loaders.push(loadRetailPoints());
   } else {
     renderRetailPoints();
   }
   if (state.permissions.canViewCompanies) {
-    await loadCompanies();
+    loaders.push(loadCompanies());
   } else {
     renderCompanies();
   }
   if (state.permissions.canViewRepairs) {
-    await loadRepairs();
+    loaders.push(loadRepairs());
   } else {
     renderRepairs();
   }
   if (state.permissions.canViewExpenses) {
-    await loadExpenses();
+    loaders.push(loadExpenses());
   } else {
     renderExpenses();
   }
   if (state.permissions.canViewClaims) {
-    await loadClaims();
+    loaders.push(loadClaims());
   } else {
     renderClaims();
   }
   if (state.permissions.canViewSchedule) {
-    await loadSchedule();
+    loaders.push(loadSchedule());
   } else {
     renderUnavailableSchedule();
   }
+  await Promise.all(loaders);
 }
 
 function showAuth() {
