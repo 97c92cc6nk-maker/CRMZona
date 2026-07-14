@@ -10,6 +10,7 @@ const state = {
   retailPoints: [],
   retailPointPaymentMethods: [],
   retailPointAdminOptions: [],
+  retailPointCompanyOptions: [],
   companies: [],
   companyPoints: [],
   repairs: [],
@@ -96,6 +97,8 @@ function bindElements() {
     retailPointCardPanel: document.getElementById('retailPointCardPanel'),
     retailPointCardTitle: document.getElementById('retailPointCardTitle'),
     retailPointCardForm: document.getElementById('retailPointCardForm'),
+    retailPointLegalEntity: document.getElementById('retailPointLegalEntity'),
+    retailPointCardLegalEntity: document.getElementById('retailPointCardLegalEntity'),
     retailPointInternetPayment: document.getElementById('retailPointInternetPayment'),
     retailPointCuratorAdmin: document.getElementById('retailPointCuratorAdmin'),
     retailPointDocumentFile: document.getElementById('retailPointDocumentFile'),
@@ -557,6 +560,7 @@ async function loadRetailPoints() {
     state.retailPoints = data.points || [];
     state.retailPointPaymentMethods = data.paymentMethods || [];
     state.retailPointAdminOptions = data.adminOptions || [];
+    state.retailPointCompanyOptions = data.companyOptions || [];
     state.permissions.canManageRetailPoints = Boolean(data.canManage);
     renderRetailPoints();
     renderRetailPointCard();
@@ -570,6 +574,7 @@ function renderRetailPoints() {
   if (els.retailPointAddPanel) {
     els.retailPointAddPanel.classList.toggle('is-hidden', !canManage);
   }
+  fillRetailPointCompanySelect(els.retailPointLegalEntity, els.retailPointLegalEntity?.value || '');
   if (els.retailPointForm) {
     Array.from(els.retailPointForm.elements).forEach((field) => {
       field.disabled = !canManage;
@@ -663,6 +668,7 @@ function renderRetailPointCard() {
 
   fillRetailPointPaymentOptions();
   fillRetailPointAdminOptions();
+  fillRetailPointCompanySelect(els.retailPointCardLegalEntity, point.legalEntity);
   els.retailPointCardPanel?.classList.remove('is-hidden');
   els.retailPointCardForm.dataset.pointId = point.id;
   if (els.retailPointCardTitle) {
@@ -723,6 +729,27 @@ function fillRetailPointAdminOptions() {
     option.textContent = admin.email ? `${admin.fullName} · ${admin.email}` : admin.fullName;
     return option;
   }));
+}
+
+function fillRetailPointCompanySelect(select, selectedValue = '') {
+  if (!select) return;
+  const normalizedSelected = String(selectedValue || '').trim();
+  const options = [
+    { value: '', label: 'Не указано' },
+    ...state.retailPointCompanyOptions,
+  ];
+  const hasSelected = !normalizedSelected || options.some((option) => option.value === normalizedSelected);
+  const finalOptions = hasSelected
+    ? options
+    : [...options, { value: normalizedSelected, label: `${normalizedSelected} (нет в справочнике)` }];
+
+  select.replaceChildren(...finalOptions.map((item) => {
+    const option = document.createElement('option');
+    option.value = item.value;
+    option.textContent = item.label || item.value;
+    return option;
+  }));
+  select.value = normalizedSelected;
 }
 
 function setRetailPointFormValue(name, value) {
@@ -996,6 +1023,12 @@ async function loadCompanies() {
   await runWithButton(els.refreshCompanies, async () => {
     const data = await api('/api/companies');
     state.companies = data.companies || [];
+    state.retailPointCompanyOptions = companyOptionsFromCompanies(state.companies);
+    fillRetailPointCompanySelect(els.retailPointLegalEntity, els.retailPointLegalEntity?.value || '');
+    const point = selectedRetailPoint();
+    if (point) {
+      fillRetailPointCompanySelect(els.retailPointCardLegalEntity, point.legalEntity);
+    }
     state.companyPoints = data.points || state.points || [];
     state.permissions.canManageCompanies = Boolean(data.canManage);
     renderCompanies();
@@ -1365,6 +1398,31 @@ function replaceCompanyInState(company) {
   } else {
     state.companies.splice(index, 1, company);
   }
+  state.retailPointCompanyOptions = companyOptionsFromCompanies(state.companies);
+  fillRetailPointCompanySelect(els.retailPointLegalEntity, els.retailPointLegalEntity?.value || '');
+  const point = selectedRetailPoint();
+  if (point) {
+    fillRetailPointCompanySelect(els.retailPointCardLegalEntity, point.legalEntity);
+  }
+}
+
+function companyOptionsFromCompanies(companies) {
+  const byValue = new Map();
+  for (const company of companies || []) {
+    const value = String(company.shortName || company.name || '').trim();
+    if (!value) continue;
+    const key = value.toLowerCase();
+    if (!byValue.has(key)) {
+      byValue.set(key, {
+        value,
+        label: value,
+        companyId: company.id || '',
+        shortName: company.shortName || '',
+        name: company.name || '',
+      });
+    }
+  }
+  return [...byValue.values()].sort((left, right) => left.label.localeCompare(right.label, 'ru'));
 }
 
 async function loadReports() {

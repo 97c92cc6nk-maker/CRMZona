@@ -11,6 +11,7 @@ const {
   Store,
   buildAdminPayrollReport,
   createCaptchaChallenge,
+  retailPointCompanyOptions,
   sendPasswordEmail,
   validateRegistration,
   validateScheduleRows,
@@ -857,6 +858,21 @@ test('employee documents are archived and deleted in Google Drive', async () => 
       process.env.GOOGLE_DRIVE_FOLDER_ID = previousFolderId;
     }
   }
+});
+
+test('retail point legal entity options use company short names', () => {
+  const options = retailPointCompanyOptions([
+    { id: 'company-a', shortName: 'OIA', name: 'Company OIA', pointIds: ['moscow_6231'] },
+    { id: 'company-b', shortName: 'BNF', name: 'Company BNF', pointIds: ['krasnogorsk_466'] },
+    { id: 'company-c', shortName: 'OIA', name: 'Duplicate OIA', pointIds: ['moscow_6231'] },
+  ], {
+    role: 'admin',
+    allowedSections: ['points'],
+    allowedPoints: ['moscow_6231'],
+  });
+
+  assert.deepEqual(options.map((option) => option.value), ['OIA']);
+  assert.equal(options[0].label, 'OIA');
 });
 
 test('retail points can store cards and Google Drive documents', async () => {
