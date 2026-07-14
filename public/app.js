@@ -36,6 +36,7 @@ const state = {
   selectedRetailPointId: null,
   selectedCompanyId: null,
   selectedReportId: null,
+  retailPointsLoading: false,
 };
 
 const els = {};
@@ -493,6 +494,13 @@ function activateView(viewId) {
   document.querySelectorAll('.view').forEach((view) => {
     view.classList.toggle('is-active', view.id === viewId);
   });
+  refreshViewData(viewId);
+}
+
+function refreshViewData(viewId) {
+  if (viewId === 'retailPointsView') {
+    loadRetailPoints();
+  }
 }
 
 function renderProfile() {
@@ -554,7 +562,8 @@ function fillPointSelect(select) {
 }
 
 async function loadRetailPoints() {
-  if (!state.permissions.canViewRetailPoints) return;
+  if (!state.permissions.canViewRetailPoints || state.retailPointsLoading) return;
+  state.retailPointsLoading = true;
   await runWithButton(els.refreshRetailPoints, async () => {
     const data = await api('/api/retail-points');
     state.retailPoints = data.points || [];
@@ -565,6 +574,7 @@ async function loadRetailPoints() {
     renderRetailPoints();
     renderRetailPointCard();
   }, els.retailPointsNotice);
+  state.retailPointsLoading = false;
 }
 
 function renderRetailPoints() {
