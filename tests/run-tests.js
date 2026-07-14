@@ -903,9 +903,11 @@ test('retail points can store cards and Google Drive documents', async () => {
     address: 'Невский проспект, 10',
     landlord: 'ООО Аренда',
     legalEntity: 'ООО CRMZona',
+    rentCost: '125000',
     ownerName: 'Иван Собственник',
     phone: '+79990000071',
     email: 'spb-point@example.com',
+    comment: 'Rent test',
     curatorAdminId: admin.id,
     internet: {
       provider: 'Ростелеком',
@@ -930,6 +932,8 @@ test('retail points can store cards and Google Drive documents', async () => {
   assert.equal(point.name, 'САНКТ-ПЕТЕРБУРГ_100');
   assert.equal(point.curatorAdminId, admin.id);
   assert.equal(point.curatorAdminName, 'Ольга Администратор');
+  assert.equal(point.rentCost, '125000');
+  assert.equal(point.comment, 'Rent test');
   assert.equal(point.internet.payment, 'invoice');
   assert.equal(point.video.camerasCount, '6');
 

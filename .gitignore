@@ -1,4 +1,5 @@
 data/
+work/
 *.log
 node_modules/
 .env

@@ -675,7 +675,7 @@ function renderRetailPointCard() {
     els.retailPointCardTitle.textContent = `Карточка торговой точки: ${point.name || 'без названия'}`;
   }
 
-  const fields = ['name', 'address', 'landlord', 'legalEntity', 'ownerName', 'phone', 'email'];
+  const fields = ['name', 'address', 'landlord', 'legalEntity', 'rentCost', 'ownerName', 'phone', 'email', 'comment'];
   for (const field of fields) {
     setRetailPointFormValue(field, point[field]);
   }
@@ -932,9 +932,11 @@ function retailPointPayloadFromBasicForm(form) {
     address: values.address,
     landlord: values.landlord,
     legalEntity: values.legalEntity,
+    rentCost: values.rentCost,
     ownerName: values.ownerName,
     phone: values.phone,
     email: values.email,
+    comment: values.comment,
   };
 }
 
@@ -945,9 +947,11 @@ function retailPointPayloadFromCard(form) {
     address: values.address,
     landlord: values.landlord,
     legalEntity: values.legalEntity,
+    rentCost: values.rentCost,
     ownerName: values.ownerName,
     phone: values.phone,
     email: values.email,
+    comment: values.comment,
     curatorAdminId: values.curatorAdminId,
     internet: {
       provider: values['internet.provider'],
