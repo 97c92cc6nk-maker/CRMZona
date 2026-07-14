@@ -691,7 +691,7 @@ tbody tr:last-child td {
 }
 
 .employees-table {
-  min-width: 1120px;
+  min-width: 980px;
 }
 
 .retail-points-table {
@@ -806,6 +806,11 @@ tbody tr:last-child td {
 
 .danger:hover {
   background: #ffecec;
+}
+
+.employee-list-delete {
+  min-height: 34px;
+  padding: 6px 10px;
 }
 
 .audit-list {

@@ -2067,7 +2067,7 @@ function renderEmployees() {
   if (!state.users.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = 7;
     cell.className = 'empty-state';
     cell.textContent = 'Нет сотрудников.';
     row.append(cell);
@@ -2099,9 +2099,25 @@ function buildEmployeeRow(user) {
   appendCell(row, user.phone || '');
   appendCell(row, user.email || '');
   appendCell(row, user.roleLabel || user.role || '');
-  appendCell(row, user.officialSalary ? formatMoney(toNumber(user.officialSalary)) : '', 'numeric-cell');
-  appendCell(row, user.unofficialSalary ? formatMoney(toNumber(user.unofficialSalary)) : '', 'numeric-cell');
+  row.append(employeeListActionsCell(user));
   return row;
+}
+
+function employeeListActionsCell(user) {
+  const cell = document.createElement('td');
+  const editable = selectedEmployeeEditable(user);
+  if (!editable) {
+    cell.textContent = user.role === 'owner' ? 'Владелец' : '';
+    return cell;
+  }
+
+  const remove = document.createElement('button');
+  remove.className = 'danger employee-list-delete';
+  remove.type = 'button';
+  remove.textContent = 'Удалить';
+  remove.addEventListener('click', () => deleteEmployee(user.id, remove));
+  cell.append(remove);
+  return cell;
 }
 
 function employeeNameParts(user) {
