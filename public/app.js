@@ -183,7 +183,11 @@ function bindEvents() {
   els.logoutButton.addEventListener('click', handleLogout);
   els.passwordForm.addEventListener('submit', handlePasswordChange);
   els.employeeForm.addEventListener('submit', handleEmployeeCreate);
+  els.employeeForm.elements.role.addEventListener('change', renderEmployeeFormAccessControls);
   els.employeeCardForm.addEventListener('submit', handleEmployeeCardSave);
+  els.employeeCardForm.elements.role.addEventListener('change', () => {
+    renderEmployeeCardAccess(selectedEmployee(), selectedEmployeeEditable());
+  });
   els.closeEmployeeCard.addEventListener('click', closeEmployeeCard);
   els.addPremiumRow.addEventListener('click', () => addPremiumHistoryRow());
   els.employeeCardPremiumRows.addEventListener('click', handlePremiumHistoryClick);
@@ -677,7 +681,7 @@ function renderRetailPointCard() {
   }
 
   fillRetailPointPaymentOptions();
-  fillRetailPointAdminOptions();
+  fillRetailPointAdminOptions(point);
   fillRetailPointCompanySelect(els.retailPointCardLegalEntity, point.legalEntity);
   els.retailPointCardPanel?.classList.remove('is-hidden');
   els.retailPointCardForm.dataset.pointId = point.id;
@@ -689,7 +693,6 @@ function renderRetailPointCard() {
   for (const field of fields) {
     setRetailPointFormValue(field, point[field]);
   }
-  setRetailPointFormValue('curatorAdminId', point.curatorAdminId);
   const internet = point.internet || {};
   setRetailPointFormValue('internet.provider', internet.provider);
   setRetailPointFormValue('internet.payment', internet.payment);
@@ -731,14 +734,10 @@ function fillRetailPointPaymentOptions() {
   }));
 }
 
-function fillRetailPointAdminOptions() {
-  const options = [{ id: '', fullName: 'Не указан', email: '' }, ...state.retailPointAdminOptions];
-  els.retailPointCuratorAdmin?.replaceChildren(...options.map((admin) => {
-    const option = document.createElement('option');
-    option.value = admin.id;
-    option.textContent = admin.email ? `${admin.fullName} · ${admin.email}` : admin.fullName;
-    return option;
-  }));
+function fillRetailPointAdminOptions(point = selectedRetailPoint()) {
+  if (els.retailPointCuratorAdmin) {
+    els.retailPointCuratorAdmin.value = point?.curatorAdminName || 'Не указан';
+  }
 }
 
 function fillRetailPointCompanySelect(select, selectedValue = '') {
@@ -962,7 +961,6 @@ function retailPointPayloadFromCard(form) {
     phone: values.phone,
     email: values.email,
     comment: values.comment,
-    curatorAdminId: values.curatorAdminId,
     internet: {
       provider: values['internet.provider'],
       payment: values['internet.payment'],
@@ -2581,22 +2579,26 @@ function renderEmployeeCardRole(user, editable) {
 function renderEmployeeCardAccess(user, editable) {
   const sectionTarget = document.querySelector('[data-access-card="sections"]');
   const pointTarget = document.querySelector('[data-access-card="points"]');
+  const role = els.employeeCardForm.elements.role.value || user?.role || 'employee';
+  const pointsAvailable = role === 'admin';
   if (sectionTarget) {
-    sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections, new Set(user.allowedSections || [])));
+    sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections, new Set(user?.allowedSections || [])));
     setInputsDisabled(sectionTarget, !editable);
   }
   if (pointTarget) {
-    const pointOptions = state.points.map((point) => ({ id: point.id, label: point.name }));
-    pointTarget.replaceChildren(buildAccessCheckboxes('allowedPoints', pointOptions, new Set(user.allowedPoints || [])));
-    setInputsDisabled(pointTarget, !editable);
+    const pointOptions = pointAccessOptions(user?.id);
+    pointTarget.replaceChildren(buildAccessCheckboxes('allowedPoints', pointOptions, new Set(user?.allowedPoints || [])));
+    pointTarget.closest('fieldset')?.classList.toggle('is-hidden', !pointsAvailable);
+    setInputsDisabled(pointTarget, !editable || !pointsAvailable);
   }
 }
 
 function setEmployeeCardEditable(editable) {
+  const pointsAvailable = els.employeeCardForm.elements.role.value === 'admin';
   els.employeeCardForm
     .querySelectorAll('input, select')
     .forEach((field) => {
-      field.disabled = !editable;
+      field.disabled = !editable || field.dataset.locked === 'true' || (field.name === 'allowedPoints' && !pointsAvailable);
     });
   els.addPremiumRow.disabled = !editable;
   els.addPremiumRow.classList.toggle('is-hidden', !editable);
@@ -2617,7 +2619,7 @@ function setEmployeeCardEditable(editable) {
 
 function setInputsDisabled(root, disabled) {
   root.querySelectorAll('input, select, button').forEach((field) => {
-    field.disabled = disabled;
+    field.disabled = disabled || field.dataset.locked === 'true';
   });
 }
 
@@ -2920,8 +2922,12 @@ function buildAccessCheckboxes(field, options, selected = new Set()) {
     input.name = field;
     input.value = option.id;
     input.checked = selected.has(option.id);
+    if (option.disabled) {
+      input.disabled = true;
+      input.dataset.locked = 'true';
+    }
     const text = document.createElement('span');
-    text.textContent = option.label;
+    text.textContent = option.note ? `${option.label} (${option.note})` : option.label;
     label.append(input, text);
     wrap.append(label);
   }
@@ -2932,13 +2938,38 @@ function buildAccessCheckboxes(field, options, selected = new Set()) {
 function renderEmployeeFormAccessControls() {
   const sectionTarget = document.querySelector('[data-access-form="sections"]');
   const pointTarget = document.querySelector('[data-access-form="points"]');
+  const role = els.employeeForm?.elements.role?.value || 'employee';
+  const pointsAvailable = role === 'admin';
   if (sectionTarget) {
     sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections));
   }
   if (pointTarget) {
-    const pointOptions = state.points.map((point) => ({ id: point.id, label: point.name }));
+    const pointOptions = pointAccessOptions();
     pointTarget.replaceChildren(buildAccessCheckboxes('allowedPoints', pointOptions));
+    pointTarget.closest('fieldset')?.classList.toggle('is-hidden', !pointsAvailable);
+    setInputsDisabled(pointTarget, !pointsAvailable);
   }
+}
+
+function pointAccessOptions(exceptUserId = '') {
+  return state.points.map((point) => {
+    const assigned = pointAssignedAdmin(point.id, exceptUserId);
+    return {
+      id: point.id,
+      label: point.name,
+      disabled: Boolean(assigned),
+      note: assigned ? `закреплена за ${assigned.fullName}` : '',
+    };
+  });
+}
+
+function pointAssignedAdmin(pointId, exceptUserId = '') {
+  return state.users.find((user) => (
+    user.role === 'admin'
+    && user.id !== exceptUserId
+    && Array.isArray(user.allowedPoints)
+    && user.allowedPoints.includes(pointId)
+  )) || null;
 }
 
 function employeeActionsCell(user, editable) {
@@ -2973,8 +3004,10 @@ async function handleEmployeeCreate(event) {
       body: employeePayloadFromForm(els.employeeForm),
     });
     els.employeeForm.reset();
+    renderEmployeeFormAccessControls();
     state.selectedEmployeeId = data.user.id;
     await loadUsers();
+    await refreshRetailPointsAfterEmployeeChange();
     showEmployeeDelivery(data, 'Сотрудник добавлен.');
   }, els.employeesNotice);
 }
@@ -3043,6 +3076,7 @@ async function updateEmployee(userId, button) {
     });
     state.selectedEmployeeId = data.user.id;
     await loadUsers();
+    await refreshRetailPointsAfterEmployeeChange();
     showNotice(
       els.employeesNotice,
       ['Карточка сотрудника обновлена.', storageWarningText(data.storage)].filter(Boolean).join(' '),
@@ -3060,12 +3094,19 @@ async function deleteEmployee(userId, button) {
     });
     state.selectedEmployeeId = null;
     await loadUsers();
+    await refreshRetailPointsAfterEmployeeChange();
     showNotice(
       els.employeesNotice,
       ['Сотрудник удален.', storageWarningText(data.storage)].filter(Boolean).join(' '),
       data.storage?.persistent === false ? 'warning' : 'success',
     );
   }, els.employeesNotice);
+}
+
+async function refreshRetailPointsAfterEmployeeChange() {
+  if (state.permissions.canViewRetailPoints) {
+    await loadRetailPoints();
+  }
 }
 
 function replaceUserInState(user) {
@@ -3082,7 +3123,7 @@ function employeePayloadFromForm(form) {
   values.officialEmployment = form.elements.officialEmployment.checked;
   values.premiumEnabled = form.elements.premiumEnabled.checked;
   values.allowedSections = formArrayValues(form, 'allowedSections');
-  values.allowedPoints = formArrayValues(form, 'allowedPoints');
+  values.allowedPoints = values.role === 'admin' ? formArrayValues(form, 'allowedPoints') : [];
   return values;
 }
 
@@ -3090,7 +3131,7 @@ function employeePayloadFromCard(form) {
   const values = formValues(form);
   values.officialEmployment = form.elements.officialEmployment.checked;
   values.allowedSections = checkedValues(form, 'allowedSections');
-  values.allowedPoints = checkedValues(form, 'allowedPoints');
+  values.allowedPoints = values.role === 'admin' ? checkedValues(form, 'allowedPoints') : [];
   values.premiumHistory = collectPremiumHistory();
 
   const latest = latestPremiumRecord(values.premiumHistory);
@@ -3124,7 +3165,7 @@ function employeePayloadFromRow(row) {
     payload[field.name] = field.type === 'checkbox' ? field.checked : field.value;
   });
   payload.allowedSections = checkedValues(row, 'allowedSections');
-  payload.allowedPoints = checkedValues(row, 'allowedPoints');
+  payload.allowedPoints = payload.role === 'admin' ? checkedValues(row, 'allowedPoints') : [];
   return payload;
 }
 

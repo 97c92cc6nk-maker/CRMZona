@@ -149,6 +149,47 @@ test('new account types are available', () => {
   assert.equal(partner.roleLabel, 'Партнер');
 });
 
+test('retail point access belongs only to one admin', () => {
+  const store = createTempStore();
+  store.createUser({
+    fullName: 'Owner User',
+    phone: '+79990000034',
+    email: 'owner-admin-points@example.com',
+    password: 'OwnerPass123',
+  });
+  store.createUser({
+    fullName: 'Admin One',
+    phone: '+79990000035',
+    email: 'admin-one@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['points'],
+    allowedPoints: ['moscow_6231'],
+  });
+  store.createUser({
+    fullName: 'Partner User',
+    phone: '+79990000037',
+    email: 'partner-with-points@example.com',
+    password: 'PartnerPass123',
+    role: 'partner',
+    allowedSections: ['points'],
+    allowedPoints: ['krasnogorsk_466'],
+  });
+
+  assert.throws(
+    () => store.createUser({
+      fullName: 'Admin Two',
+      phone: '+79990000036',
+      email: 'admin-two@example.com',
+      password: 'AdminPass123',
+      role: 'admin',
+      allowedSections: ['points'],
+      allowedPoints: ['moscow_6231'],
+    }),
+    (error) => error instanceof ApiError && error.status === 409,
+  );
+});
+
 test('admin payroll report calculates monthly payout fields', () => {
   const report = buildAdminPayrollReport([
     {
@@ -926,7 +967,6 @@ test('retail points can store cards and Google Drive documents', async () => {
     phone: '+79990000071',
     email: 'spb-point@example.com',
     comment: 'Rent test',
-    curatorAdminId: admin.id,
     internet: {
       provider: 'Ростелеком',
       payment: 'invoice',
@@ -948,12 +988,24 @@ test('retail points can store cards and Google Drive documents', async () => {
   });
 
   assert.equal(point.name, 'САНКТ-ПЕТЕРБУРГ_100');
-  assert.equal(point.curatorAdminId, admin.id);
-  assert.equal(point.curatorAdminName, 'Ольга Администратор');
+  assert.equal(point.curatorAdminId, '');
+  assert.equal(point.curatorAdminName, '');
   assert.equal(point.rentCost, '125000');
   assert.equal(point.comment, 'Rent test');
   assert.equal(point.internet.payment, 'invoice');
   assert.equal(point.video.camerasCount, '6');
+
+  const assignedAdmin = store.updateUser(owner, admin.id, {
+    fullName: admin.fullName,
+    phone: admin.phone,
+    email: admin.email,
+    role: 'admin',
+    allowedSections: admin.allowedSections,
+    allowedPoints: [...admin.allowedPoints, point.id],
+  });
+  const assignedPoint = store.listRetailPoints(owner).find((item) => item.id === point.id);
+  assert.equal(assignedPoint.curatorAdminId, assignedAdmin.id);
+  assert.equal(assignedPoint.curatorAdminName, assignedAdmin.fullName);
 
   const updated = store.updateRetailPoint(owner, point.id, {
     ...point,
