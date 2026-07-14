@@ -714,6 +714,76 @@ tbody tr:last-child td {
   min-width: 1180px;
 }
 
+.reports-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  max-width: 520px;
+}
+
+.report-link {
+  width: 100%;
+  justify-content: flex-start;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  font-weight: 700;
+  text-align: left;
+}
+
+.report-link:hover {
+  border-color: var(--accent);
+}
+
+.report-toolbar {
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
+.report-table-wrap {
+  margin-top: 16px;
+}
+
+.reports-table {
+  min-width: 1180px;
+}
+
+.reports-table th,
+.reports-table td {
+  padding: 8px;
+}
+
+.report-name-cell {
+  min-width: 220px;
+  font-weight: 700;
+}
+
+.report-number-input,
+.report-comment-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
+.report-number-input {
+  max-width: 110px;
+  text-align: center;
+}
+
+.report-comment-input {
+  min-width: 220px;
+}
+
+.report-payable-cell {
+  font-weight: 800;
+}
+
+.report-updated {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .expense-header-filter {
   display: grid;
   gap: 5px;

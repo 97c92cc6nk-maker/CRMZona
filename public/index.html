@@ -104,6 +104,7 @@
           <button class="tab" type="button" data-view="retailPointsView">Торговые точки</button>
           <button class="tab" type="button" data-view="companiesView">Компании</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
+          <button class="tab" type="button" data-view="reportsView">Отчеты</button>
           <button class="tab" type="button" data-view="claimsView">Претензии</button>
           <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
           <button class="tab" type="button" data-view="expensesView">Хозрасходы</button>
@@ -620,6 +621,36 @@
         </section>
 
         <div class="notice" id="scheduleNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="reportsView" aria-labelledby="reportsTitle">
+        <div class="section-head">
+          <h2 id="reportsTitle">Отчеты</h2>
+          <button class="secondary" type="button" id="refreshReports">Обновить</button>
+        </div>
+
+        <section class="panel" id="reportsListPanel" aria-labelledby="reportsListTitle">
+          <h3 id="reportsListTitle">Список отчетов</h3>
+          <div class="reports-list" id="reportsList"></div>
+        </section>
+
+        <section class="panel is-hidden" id="reportDetailsPanel" aria-labelledby="reportDetailsTitle">
+          <div class="panel-head">
+            <h3 id="reportDetailsTitle">Отчет</h3>
+            <button class="secondary" type="button" id="closeReport">К списку</button>
+          </div>
+          <div class="toolbar report-toolbar">
+            <label>
+              Месяц
+              <input id="reportMonthInput" type="month" required>
+            </label>
+            <button class="secondary" type="button" id="loadReport">Сформировать</button>
+            <button class="primary" type="button" id="saveAdminPayrollReport">Сохранить</button>
+          </div>
+          <div id="reportContent"></div>
+        </section>
+
+        <div class="notice" id="reportsNotice" role="status" aria-live="polite"></div>
       </section>
 
       <section class="view" id="claimsView" aria-labelledby="claimsTitle">

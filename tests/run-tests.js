@@ -9,6 +9,7 @@ const path = require('path');
 const {
   ApiError,
   Store,
+  buildAdminPayrollReport,
   createCaptchaChallenge,
   sendPasswordEmail,
   validateRegistration,
@@ -145,6 +146,49 @@ test('new account types are available', () => {
 
   assert.equal(installer.roleLabel, 'Монтажник');
   assert.equal(partner.roleLabel, 'Партнер');
+});
+
+test('admin payroll report calculates monthly payout fields', () => {
+  const report = buildAdminPayrollReport([
+    {
+      id: 'admin-1',
+      fullName: 'Anna Admin',
+      role: 'admin',
+      allowedPoints: ['moscow_6231', 'krasnogorsk_466'],
+      unofficialSalary: '50000',
+      premiumHistory: [
+        { active: true, amount: '7000', startDate: '2026-07-01' },
+      ],
+    },
+    {
+      id: 'employee-1',
+      fullName: 'Ivan Employee',
+      role: 'employee',
+      allowedPoints: ['moscow_6231'],
+      unofficialSalary: '30000',
+    },
+  ], {
+    adminPayroll: {
+      '2026-07': {
+        rows: {
+          'admin-1': {
+            advanceCard: '10000',
+            salaryCard: '5000',
+            advanceExtra: '2000',
+            fines: '1000',
+            comment: 'Checked',
+          },
+        },
+      },
+    },
+  }, '2026-07');
+
+  assert.equal(report.rows.length, 1);
+  assert.equal(report.rows[0].fullName, 'Anna Admin');
+  assert.equal(report.rows[0].bonusPoints, '6000');
+  assert.equal(report.rows[0].premium, '7000');
+  assert.equal(report.rows[0].payable, '45000');
+  assert.equal(report.rows[0].comment, 'Checked');
 });
 
 test('email is unique and password is stored as a hash', () => {

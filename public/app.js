@@ -15,6 +15,8 @@ const state = {
   repairs: [],
   expenses: [],
   claims: [],
+  reports: [],
+  adminPayrollReport: null,
   claimEmployees: [],
   employeeDocumentTypes: [],
   expenseFilters: {
@@ -32,6 +34,7 @@ const state = {
   selectedEmployeeId: null,
   selectedRetailPointId: null,
   selectedCompanyId: null,
+  selectedReportId: null,
 };
 
 const els = {};
@@ -115,6 +118,17 @@ function bindElements() {
     refreshCompanies: document.getElementById('refreshCompanies'),
     companiesBody: document.getElementById('companiesBody'),
     companiesNotice: document.getElementById('companiesNotice'),
+    reportsListPanel: document.getElementById('reportsListPanel'),
+    reportsList: document.getElementById('reportsList'),
+    reportsNotice: document.getElementById('reportsNotice'),
+    refreshReports: document.getElementById('refreshReports'),
+    reportDetailsPanel: document.getElementById('reportDetailsPanel'),
+    reportDetailsTitle: document.getElementById('reportDetailsTitle'),
+    reportMonthInput: document.getElementById('reportMonthInput'),
+    loadReport: document.getElementById('loadReport'),
+    saveAdminPayrollReport: document.getElementById('saveAdminPayrollReport'),
+    closeReport: document.getElementById('closeReport'),
+    reportContent: document.getElementById('reportContent'),
     repairForm: document.getElementById('repairForm'),
     repairPointSelect: document.getElementById('repairPointSelect'),
     refreshRepairs: document.getElementById('refreshRepairs'),
@@ -187,6 +201,13 @@ function bindEvents() {
   els.uploadCompanyDocument.addEventListener('click', handleCompanyDocumentUpload);
   els.companyDocumentsList.addEventListener('click', handleCompanyDocumentClick);
   els.refreshCompanies.addEventListener('click', loadCompanies);
+  els.refreshReports.addEventListener('click', loadReports);
+  els.reportsList.addEventListener('click', handleReportsListClick);
+  els.closeReport.addEventListener('click', closeReport);
+  els.loadReport.addEventListener('click', loadSelectedReport);
+  els.reportMonthInput.addEventListener('change', loadSelectedReport);
+  els.saveAdminPayrollReport.addEventListener('click', saveAdminPayrollReport);
+  els.reportContent.addEventListener('input', handleReportContentInput);
   els.repairForm.addEventListener('submit', handleRepairCreate);
   els.refreshRepairs.addEventListener('click', loadRepairs);
   els.repairsBody.addEventListener('change', handleRepairStatusChange);
@@ -217,6 +238,7 @@ function bindEvents() {
 
 async function bootstrap() {
   els.monthInput.value = currentMonth();
+  els.reportMonthInput.value = currentMonth();
   els.expenseDateInput.value = currentDate();
   els.claimDateInput.value = currentDate();
   try {
@@ -258,6 +280,11 @@ async function loadAppData() {
     loaders.push(loadCompanies());
   } else {
     renderCompanies();
+  }
+  if (state.permissions.canViewReports) {
+    loaders.push(loadReports());
+  } else {
+    renderReportsUnavailable();
   }
   if (state.permissions.canViewRepairs) {
     loaders.push(loadRepairs());
@@ -434,8 +461,11 @@ async function handleLogout() {
     state.schedule = null;
     state.expenses = [];
     state.claims = [];
+    state.reports = [];
+    state.adminPayrollReport = null;
     state.claimEmployees = [];
     state.selectedEmployeeId = null;
+    state.selectedReportId = null;
     showAuth();
   }, els.profileNotice);
 }
@@ -474,6 +504,7 @@ function renderProfile() {
   setTabVisibility('retailPointsView', Boolean(state.permissions.canViewRetailPoints));
   setTabVisibility('companiesView', Boolean(state.permissions.canViewCompanies));
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
+  setTabVisibility('reportsView', Boolean(state.permissions.canViewReports));
   setTabVisibility('repairsView', Boolean(state.permissions.canViewRepairs));
   setTabVisibility('expensesView', Boolean(state.permissions.canViewExpenses));
   setTabVisibility('claimsView', Boolean(state.permissions.canViewClaims));
@@ -1334,6 +1365,277 @@ function replaceCompanyInState(company) {
   } else {
     state.companies.splice(index, 1, company);
   }
+}
+
+async function loadReports() {
+  if (!state.permissions.canViewReports) return;
+  await runWithButton(els.refreshReports, async () => {
+    const data = await api('/api/reports');
+    state.reports = data.reports || [];
+    state.permissions.canManageReports = Boolean(data.canManage);
+    if (state.selectedReportId && !state.reports.some((report) => report.id === state.selectedReportId)) {
+      state.selectedReportId = null;
+      state.adminPayrollReport = null;
+    }
+    renderReportsList();
+  }, els.reportsNotice);
+}
+
+function renderReportsUnavailable() {
+  state.reports = [];
+  state.selectedReportId = null;
+  state.adminPayrollReport = null;
+  renderReportsList();
+}
+
+function renderReportsList() {
+  if (!els.reportsList || !els.reportsListPanel || !els.reportDetailsPanel) return;
+  const isReportOpen = Boolean(state.selectedReportId);
+  els.reportsListPanel.classList.toggle('is-hidden', isReportOpen);
+  els.reportDetailsPanel.classList.toggle('is-hidden', !isReportOpen);
+  els.reportsList.replaceChildren();
+
+  if (!state.permissions.canViewReports) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-state';
+    empty.textContent = 'Нет доступа к разделу отчетов.';
+    els.reportsList.append(empty);
+    return;
+  }
+
+  if (!state.reports.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-state';
+    empty.textContent = 'Отчеты пока не настроены.';
+    els.reportsList.append(empty);
+    return;
+  }
+
+  for (const report of state.reports) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'report-link';
+    button.dataset.reportId = report.id;
+    button.textContent = report.title;
+    els.reportsList.append(button);
+  }
+}
+
+function handleReportsListClick(event) {
+  const button = event.target.closest('[data-report-id]');
+  if (!button) return;
+  openReport(button.dataset.reportId);
+}
+
+async function openReport(reportId) {
+  state.selectedReportId = reportId;
+  state.adminPayrollReport = null;
+  if (!els.reportMonthInput.value) {
+    els.reportMonthInput.value = currentMonth();
+  }
+  renderReportsList();
+  await loadSelectedReport();
+}
+
+function closeReport() {
+  state.selectedReportId = null;
+  state.adminPayrollReport = null;
+  showNotice(els.reportsNotice, '');
+  renderReportsList();
+}
+
+async function loadSelectedReport() {
+  if (!state.selectedReportId || !state.permissions.canViewReports) return;
+  if (!els.reportMonthInput.value) {
+    els.reportMonthInput.value = currentMonth();
+  }
+  if (state.selectedReportId === 'admin-payroll') {
+    await loadAdminPayrollReport();
+    return;
+  }
+  renderEmployeePayrollReport();
+}
+
+async function loadAdminPayrollReport() {
+  await runWithButton(els.loadReport, async () => {
+    const month = els.reportMonthInput.value || currentMonth();
+    const data = await api(`/api/reports/admin-payroll?month=${encodeURIComponent(month)}`);
+    state.adminPayrollReport = data.report;
+    state.permissions.canManageReports = Boolean(data.canManage);
+    renderAdminPayrollReport();
+    showNotice(els.reportsNotice, '');
+  }, els.reportsNotice);
+}
+
+function renderEmployeePayrollReport() {
+  const report = state.reports.find((item) => item.id === state.selectedReportId);
+  els.reportDetailsTitle.textContent = report?.title || 'Отчет';
+  els.saveAdminPayrollReport.classList.add('is-hidden');
+  els.reportContent.replaceChildren();
+
+  const message = document.createElement('p');
+  message.className = 'empty-state';
+  message.textContent = 'Отчет "Расчет ЗП сотрудников" будет настроен отдельно.';
+  els.reportContent.append(message);
+}
+
+function renderAdminPayrollReport() {
+  const report = state.adminPayrollReport;
+  if (!report) return;
+  const canManage = Boolean(state.permissions.canManageReports);
+  els.reportDetailsTitle.textContent = `${report.title} · ${formatMonth(report.month)}`;
+  els.saveAdminPayrollReport.classList.toggle('is-hidden', !canManage);
+  els.reportContent.replaceChildren();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'table-wrap report-table-wrap';
+  const table = document.createElement('table');
+  table.className = 'reports-table admin-payroll-table';
+  const thead = document.createElement('thead');
+  const header = document.createElement('tr');
+  [
+    'ФИО',
+    'Бонус за точки',
+    'Неоф. оклад',
+    'Премия',
+    'Аванс на карту',
+    'ЗП на карту',
+    'Аванс экстра',
+    'Штрафы',
+    'К выплате',
+    'Комментарий',
+  ].forEach((title, index) => {
+    const th = document.createElement('th');
+    th.textContent = title;
+    if (index > 0 && index < 9) th.className = 'numeric-cell';
+    header.append(th);
+  });
+  thead.append(header);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  if (!report.rows.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 10;
+    cell.className = 'empty-state';
+    cell.textContent = 'Администраторы для отчета не найдены.';
+    row.append(cell);
+    tbody.append(row);
+  } else {
+    for (const rowData of report.rows) {
+      tbody.append(buildAdminPayrollRow(rowData, canManage));
+    }
+  }
+  table.append(tbody);
+  wrap.append(table);
+  els.reportContent.append(wrap);
+
+  if (report.updatedAt) {
+    const updated = document.createElement('p');
+    updated.className = 'report-updated';
+    updated.textContent = `Сохранено: ${formatDateTime(report.updatedAt)}`;
+    els.reportContent.append(updated);
+  }
+}
+
+function buildAdminPayrollRow(rowData, canManage) {
+  const row = document.createElement('tr');
+  row.dataset.employeeId = rowData.employeeId;
+  appendCell(row, rowData.fullName, 'report-name-cell');
+  appendCell(row, formatMoney(toNumber(rowData.bonusPoints)), 'numeric-cell');
+  appendCell(row, formatMoney(toNumber(rowData.unofficialSalary)), 'numeric-cell');
+  appendCell(row, formatMoney(toNumber(rowData.premium)), 'numeric-cell');
+
+  for (const field of ['advanceCard', 'salaryCard', 'advanceExtra', 'fines']) {
+    const cell = document.createElement('td');
+    cell.className = 'numeric-cell';
+    cell.append(reportNumberInput(rowData, field, canManage));
+    row.append(cell);
+  }
+
+  const payableCell = appendCell(row, formatMoney(calculateAdminPayrollPayable(rowData)), 'numeric-cell report-payable-cell');
+  payableCell.dataset.payable = rowData.employeeId;
+
+  const commentCell = document.createElement('td');
+  const comment = document.createElement('input');
+  comment.type = 'text';
+  comment.maxLength = 500;
+  comment.value = rowData.comment || '';
+  comment.disabled = !canManage;
+  comment.className = 'report-comment-input';
+  comment.dataset.employeeId = rowData.employeeId;
+  comment.dataset.reportField = 'comment';
+  commentCell.append(comment);
+  row.append(commentCell);
+
+  return row;
+}
+
+function reportNumberInput(rowData, field, canManage) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.inputMode = 'decimal';
+  input.pattern = '\\d*([,.]\\d+)?';
+  input.maxLength = 16;
+  input.value = rowData[field] || '';
+  input.disabled = !canManage;
+  input.className = 'report-number-input';
+  input.dataset.employeeId = rowData.employeeId;
+  input.dataset.reportField = field;
+  return input;
+}
+
+function handleReportContentInput(event) {
+  const input = event.target.closest('[data-report-field]');
+  if (!input || state.selectedReportId !== 'admin-payroll' || !state.adminPayrollReport) return;
+  const row = state.adminPayrollReport.rows.find((item) => item.employeeId === input.dataset.employeeId);
+  if (!row) return;
+  row[input.dataset.reportField] = input.value;
+  const rowElement = input.closest('tr');
+  const payableCell = rowElement?.querySelector('[data-payable]');
+  if (payableCell) {
+    payableCell.textContent = formatMoney(calculateAdminPayrollPayable(row));
+  }
+}
+
+function calculateAdminPayrollPayable(row) {
+  return toNumber(row.unofficialSalary)
+    + toNumber(row.premium)
+    + toNumber(row.bonusPoints)
+    - toNumber(row.advanceCard)
+    - toNumber(row.salaryCard)
+    - toNumber(row.fines)
+    - toNumber(row.advanceExtra);
+}
+
+async function saveAdminPayrollReport() {
+  if (!state.adminPayrollReport || !state.permissions.canManageReports) return;
+  await runWithButton(els.saveAdminPayrollReport, async () => {
+    const data = await api('/api/reports/admin-payroll', {
+      method: 'POST',
+      body: {
+        month: state.adminPayrollReport.month,
+        rows: state.adminPayrollReport.rows.map((row) => ({
+          employeeId: row.employeeId,
+          advanceCard: row.advanceCard || '',
+          salaryCard: row.salaryCard || '',
+          advanceExtra: row.advanceExtra || '',
+          fines: row.fines || '',
+          comment: row.comment || '',
+        })),
+      },
+    });
+    state.adminPayrollReport = data.report;
+    renderAdminPayrollReport();
+    await loadAudit();
+    const storageWarning = storageWarningText(data.storage);
+    showNotice(
+      els.reportsNotice,
+      ['Отчет сохранен.', storageWarning].filter(Boolean).join(' '),
+      storageWarning ? 'warning' : 'success',
+    );
+  }, els.reportsNotice);
 }
 
 async function loadRepairs() {

@@ -18,6 +18,7 @@ const FILES = [
   ['repairs.json', []],
   ['retail_points.json', []],
   ['companies.json', []],
+  ['reports.json', {}],
   ['expenses.json', []],
   ['claims.json', []],
   ['healthcheck.json', null],
