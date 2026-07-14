@@ -875,6 +875,24 @@ test('retail point legal entity options use company short names', () => {
   assert.equal(options[0].label, 'OIA');
 });
 
+test('retail point seed fills an empty store', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Seed Owner',
+    phone: '+79990000069',
+    email: 'owner-retail-seed@example.com',
+    password: 'OwnerPass123',
+  });
+
+  const points = store.listRetailPoints(owner);
+  const saved = store.loadJson('retail_points.json', []);
+
+  assert.equal(points.length, 26);
+  assert.equal(saved.length, 26);
+  assert.ok(points.some((point) => point.name.endsWith('_123')));
+  assert.ok(points.some((point) => point.rentCost === '125000'));
+});
+
 test('retail points can store cards and Google Drive documents', async () => {
   const store = createTempStore();
   const owner = store.createUser({
