@@ -1139,27 +1139,43 @@ test('owner can maintain employee directory records', () => {
     password: 'AdminPass123',
     role: 'admin',
     position: 'Управляющий',
+    officialSalary: '100000',
+    unofficialSalary: '25000',
     hireDate: '2026-01-15',
     officialEmployment: true,
   });
 
   assert.equal(employee.role, 'admin');
+  assert.equal(employee.lastName, 'Петр');
+  assert.equal(employee.firstName, 'Админ');
   assert.equal(employee.position, 'Управляющий');
+  assert.equal(employee.officialSalary, '100000');
+  assert.equal(employee.unofficialSalary, '25000');
   assert.equal(employee.hireDate, '2026-01-15');
   assert.equal(employee.officialEmployment, true);
 
   const updated = store.updateUser(owner, employee.id, {
-    fullName: 'Петр Администратор',
+    lastName: 'Петров',
+    firstName: 'Петр',
+    middleName: 'Петрович',
     phone: '+79990000023',
     email: 'admin-updated@example.com',
     position: 'Администратор',
+    officialSalary: '110000,50',
+    unofficialSalary: '30000',
     hireDate: '2026-02-01',
     officialEmployment: false,
     role: 'employee',
   });
 
   assert.equal(updated.role, 'employee');
+  assert.equal(updated.fullName, 'Петров Петр Петрович');
+  assert.equal(updated.lastName, 'Петров');
+  assert.equal(updated.firstName, 'Петр');
+  assert.equal(updated.middleName, 'Петрович');
   assert.equal(updated.position, 'Администратор');
+  assert.equal(updated.officialSalary, '110000.5');
+  assert.equal(updated.unofficialSalary, '30000');
   assert.equal(updated.officialEmployment, false);
 
   store.saveSchedule(owner, 'moscow_6231', '2026-06', [{

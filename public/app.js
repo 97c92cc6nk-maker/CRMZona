@@ -2067,7 +2067,7 @@ function renderEmployees() {
   if (!state.users.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 4;
+    cell.colSpan = 8;
     cell.className = 'empty-state';
     cell.textContent = 'Нет сотрудников.';
     row.append(cell);
@@ -2083,20 +2083,34 @@ function renderEmployees() {
 function buildEmployeeRow(user) {
   const row = document.createElement('tr');
   row.dataset.userId = user.id;
+  const nameParts = employeeNameParts(user);
 
-  const nameCell = document.createElement('td');
+  const lastNameCell = document.createElement('td');
   const nameButton = document.createElement('button');
   nameButton.className = 'text-link';
   nameButton.type = 'button';
-  nameButton.textContent = user.fullName;
+  nameButton.textContent = nameParts.lastName || user.fullName;
   nameButton.addEventListener('click', () => openEmployeeCard(user.id));
-  nameCell.append(nameButton);
-  row.append(nameCell);
+  lastNameCell.append(nameButton);
+  row.append(lastNameCell);
 
+  appendCell(row, nameParts.firstName || '');
+  appendCell(row, nameParts.middleName || '');
   appendCell(row, user.phone || '');
   appendCell(row, user.email || '');
   appendCell(row, user.roleLabel || user.role || '');
+  appendCell(row, user.officialSalary ? formatMoney(toNumber(user.officialSalary)) : '', 'numeric-cell');
+  appendCell(row, user.unofficialSalary ? formatMoney(toNumber(user.unofficialSalary)) : '', 'numeric-cell');
   return row;
+}
+
+function employeeNameParts(user) {
+  const parts = String(user.fullName || '').trim().split(/\s+/).filter(Boolean);
+  return {
+    lastName: user.lastName || parts[0] || '',
+    firstName: user.firstName || parts[1] || '',
+    middleName: user.middleName || parts.slice(2).join(' '),
+  };
 }
 
 function openEmployeeCard(userId) {
@@ -2131,12 +2145,17 @@ function renderEmployeeCard() {
 
   const editable = selectedEmployeeEditable(user);
   const form = els.employeeCardForm;
+  const nameParts = employeeNameParts(user);
   form.dataset.userId = user.id;
   els.employeeCardTitle.textContent = `Карточка сотрудника: ${user.fullName}`;
-  form.elements.fullName.value = user.fullName || '';
+  form.elements.lastName.value = nameParts.lastName;
+  form.elements.firstName.value = nameParts.firstName;
+  form.elements.middleName.value = nameParts.middleName;
   form.elements.phone.value = user.phone || '';
   form.elements.email.value = user.email || '';
   form.elements.position.value = user.position || '';
+  form.elements.officialSalary.value = user.officialSalary || '';
+  form.elements.unofficialSalary.value = user.unofficialSalary || '';
   form.elements.hireDate.value = user.hireDate || '';
   form.elements.officialEmployment.checked = Boolean(user.officialEmployment);
 
@@ -2412,11 +2431,12 @@ function employeeTextInputCell(user, field, editable, type = 'text') {
   input.name = field;
   input.type = type;
   input.value = user[field] || '';
-  input.required = ['fullName', 'phone', 'email'].includes(field);
-  if (field === 'fullName' || field === 'position') input.maxLength = 120;
+  input.required = ['lastName', 'firstName', 'middleName', 'phone', 'email'].includes(field);
+  if (['lastName', 'firstName', 'middleName'].includes(field)) input.maxLength = 60;
+  if (field === 'position') input.maxLength = 120;
   if (field === 'phone') input.maxLength = 32;
   if (field === 'email') input.maxLength = 180;
-  if (field === 'premiumAmount') {
+  if (['premiumAmount', 'officialSalary', 'unofficialSalary'].includes(field)) {
     input.inputMode = 'decimal';
     input.pattern = '\\d*([,.]\\d+)?';
     input.maxLength = 16;

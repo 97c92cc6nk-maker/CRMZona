@@ -185,8 +185,16 @@
           <h3 id="employeeAddTitle">Добавить сотрудника</h3>
           <form class="employee-form" id="employeeForm">
             <label>
-              ФИО
-              <input name="fullName" type="text" autocomplete="name" required maxlength="120">
+              Фамилия
+              <input name="lastName" type="text" autocomplete="family-name" required maxlength="60">
+            </label>
+            <label>
+              Имя
+              <input name="firstName" type="text" autocomplete="given-name" required maxlength="60">
+            </label>
+            <label>
+              Отчество
+              <input name="middleName" type="text" autocomplete="additional-name" required maxlength="60">
             </label>
             <label>
               Номер телефона
@@ -199,6 +207,14 @@
             <label>
               Должность
               <input name="position" type="text" maxlength="120">
+            </label>
+            <label>
+              Оф. оклад
+              <input name="officialSalary" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16">
+            </label>
+            <label>
+              Неоф. оклад
+              <input name="unofficialSalary" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16">
             </label>
             <label>
               Дата начала работы
@@ -248,8 +264,16 @@
           </div>
           <form class="employee-form employee-card-form" id="employeeCardForm">
             <label>
-              ФИО
-              <input name="fullName" type="text" autocomplete="name" required maxlength="120">
+              Фамилия
+              <input name="lastName" type="text" autocomplete="family-name" required maxlength="60">
+            </label>
+            <label>
+              Имя
+              <input name="firstName" type="text" autocomplete="given-name" required maxlength="60">
+            </label>
+            <label>
+              Отчество
+              <input name="middleName" type="text" autocomplete="additional-name" required maxlength="60">
             </label>
             <label>
               Номер телефона
@@ -262,6 +286,14 @@
             <label>
               Должность
               <input name="position" type="text" maxlength="120">
+            </label>
+            <label>
+              Оф. оклад
+              <input name="officialSalary" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16">
+            </label>
+            <label>
+              Неоф. оклад
+              <input name="unofficialSalary" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16">
             </label>
             <label>
               Дата начала работы
@@ -316,10 +348,14 @@
             <table class="employees-table">
               <thead>
                 <tr>
-                  <th>ФИО</th>
+                  <th>Фамилия</th>
+                  <th>Имя</th>
+                  <th>Отчество</th>
                   <th>Телефон</th>
                   <th>Email</th>
                   <th>Тип учетной записи</th>
+                  <th>Оф. оклад</th>
+                  <th>Неоф. оклад</th>
                 </tr>
               </thead>
               <tbody id="employeesBody"></tbody>
