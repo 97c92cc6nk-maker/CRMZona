@@ -2581,6 +2581,10 @@ function canManageEmployeeRoles() {
   return state.user?.role === 'owner';
 }
 
+function canManageEmployeePoints() {
+  return state.user?.role === 'owner' || state.user?.role === 'admin';
+}
+
 function renderEmployeeCard() {
   const user = selectedEmployee();
   if (!user) {
@@ -2641,7 +2645,6 @@ function renderEmployeeCardAccess(user, editable) {
   const sectionTarget = document.querySelector('[data-access-card="sections"]');
   const pointTarget = document.querySelector('[data-access-card="points"]');
   const role = els.employeeCardForm.elements.role.value || user?.role || 'employee';
-  const pointsAvailable = role === 'admin';
   if (sectionTarget) {
     const canEditSections = editable && canManageEmployeeSections();
     sectionTarget.closest('fieldset')?.classList.toggle('is-hidden', !canManageEmployeeSections());
@@ -2649,22 +2652,22 @@ function renderEmployeeCardAccess(user, editable) {
     setInputsDisabled(sectionTarget, !canEditSections);
   }
   if (pointTarget) {
-    const pointOptions = pointAccessOptions(user?.id);
-    pointTarget.replaceChildren(buildAccessCheckboxes('allowedPoints', pointOptions, new Set(user?.allowedPoints || [])));
-    pointTarget.closest('fieldset')?.classList.toggle('is-hidden', !pointsAvailable);
-    setInputsDisabled(pointTarget, !editable || !pointsAvailable);
+    const pointOptions = pointAccessOptions(user?.id, role);
+    const canEditPoints = editable && canManageEmployeePoints();
+    pointTarget.replaceChildren(buildPointAccessDropdown('allowedPoints', pointOptions, new Set(user?.allowedPoints || []), canEditPoints));
+    pointTarget.closest('fieldset')?.classList.remove('is-hidden');
+    setInputsDisabled(pointTarget, !canEditPoints);
   }
 }
 
 function setEmployeeCardEditable(editable) {
-  const pointsAvailable = els.employeeCardForm.elements.role.value === 'admin';
   els.employeeCardForm
     .querySelectorAll('input, select')
     .forEach((field) => {
       field.disabled = !editable
         || field.dataset.locked === 'true'
         || (field.name === 'role' && !canManageEmployeeRoles())
-        || (field.name === 'allowedPoints' && !pointsAvailable);
+        || (field.name === 'allowedPoints' && !canManageEmployeePoints());
     });
   els.addPremiumRow.disabled = !editable;
   els.addPremiumRow.classList.toggle('is-hidden', !editable);
@@ -3001,6 +3004,39 @@ function buildAccessCheckboxes(field, options, selected = new Set()) {
   return wrap;
 }
 
+function buildPointAccessDropdown(field, options, selected = new Set(), editable = false) {
+  const selectedLabels = options
+    .filter((option) => selected.has(option.id))
+    .map((option) => option.label);
+  const summaryText = selectedLabels.length ? selectedLabels.join(', ') : 'Нет доступных точек';
+
+  if (!editable) {
+    const readonly = document.createElement('div');
+    readonly.className = 'point-dropdown-readonly';
+    readonly.textContent = summaryText;
+    return readonly;
+  }
+
+  const details = document.createElement('details');
+  details.className = 'point-dropdown';
+  const summary = document.createElement('summary');
+  summary.textContent = summaryText;
+  details.append(summary);
+
+  const menu = document.createElement('div');
+  menu.className = 'point-dropdown-menu';
+  const optionsWrap = buildAccessCheckboxes(field, options, selected);
+  optionsWrap.addEventListener('change', () => {
+    const checkedLabels = Array.from(optionsWrap.querySelectorAll(`input[name="${field}"]:checked`))
+      .map((input) => options.find((option) => option.id === input.value)?.label)
+      .filter(Boolean);
+    summary.textContent = checkedLabels.length ? checkedLabels.join(', ') : 'Нет доступных точек';
+  });
+  menu.append(optionsWrap);
+  details.append(menu);
+  return details;
+}
+
 function renderEmployeeFormAccessControls() {
   const sectionTarget = document.querySelector('[data-access-form="sections"]');
   const pointTarget = document.querySelector('[data-access-form="points"]');
@@ -3011,28 +3047,29 @@ function renderEmployeeFormAccessControls() {
     els.employeeForm.elements.role.disabled = !canManageEmployeeRoles();
   }
   const role = els.employeeForm?.elements.role?.value || 'employee';
-  const pointsAvailable = role === 'admin';
   if (sectionTarget) {
     sectionTarget.closest('fieldset')?.classList.toggle('is-hidden', !canManageEmployeeSections());
     sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections));
     setInputsDisabled(sectionTarget, !canManageEmployeeSections());
   }
   if (pointTarget) {
-    const pointOptions = pointAccessOptions();
-    pointTarget.replaceChildren(buildAccessCheckboxes('allowedPoints', pointOptions));
-    pointTarget.closest('fieldset')?.classList.toggle('is-hidden', !pointsAvailable);
-    setInputsDisabled(pointTarget, !pointsAvailable);
+    const pointOptions = pointAccessOptions('', role);
+    const canEditPoints = canManageEmployeePoints();
+    pointTarget.replaceChildren(buildPointAccessDropdown('allowedPoints', pointOptions, new Set(), canEditPoints));
+    pointTarget.closest('fieldset')?.classList.remove('is-hidden');
+    setInputsDisabled(pointTarget, !canEditPoints);
   }
 }
 
-function pointAccessOptions(exceptUserId = '') {
+function pointAccessOptions(exceptUserId = '', targetRole = '') {
   return state.points.map((point) => {
     const assigned = pointAssignedAdmin(point.id, exceptUserId);
+    const lockedByAdmin = targetRole === 'admin' && Boolean(assigned);
     return {
       id: point.id,
       label: point.name,
-      disabled: Boolean(assigned),
-      note: assigned ? `закреплена за ${assigned.fullName}` : '',
+      disabled: lockedByAdmin,
+      note: lockedByAdmin ? `закреплена за ${assigned.fullName}` : '',
     };
   });
 }
@@ -3223,7 +3260,11 @@ function employeePayloadFromForm(form) {
   } else {
     delete values.allowedSections;
   }
-  values.allowedPoints = values.role === 'admin' ? formArrayValues(form, 'allowedPoints') : [];
+  if (canManageEmployeePoints()) {
+    values.allowedPoints = formArrayValues(form, 'allowedPoints');
+  } else {
+    delete values.allowedPoints;
+  }
   return values;
 }
 
@@ -3240,7 +3281,11 @@ function employeePayloadFromCard(form) {
   } else {
     delete values.allowedSections;
   }
-  values.allowedPoints = effectiveRole === 'admin' ? checkedValues(form, 'allowedPoints') : [];
+  if (canManageEmployeePoints()) {
+    values.allowedPoints = checkedValues(form, 'allowedPoints');
+  } else {
+    delete values.allowedPoints;
+  }
   values.premiumHistory = collectPremiumHistory();
 
   const latest = latestPremiumRecord(values.premiumHistory);

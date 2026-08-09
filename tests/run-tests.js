@@ -166,6 +166,7 @@ test('admin can manage employees but cannot change employee section access', () 
     email: 'admin-employee-access@example.com',
     password: 'AdminPass123',
     role: 'admin',
+    allowedPoints: ['moscow_6231'],
   });
   const employee = store.createUser({
     fullName: 'Employee With Sections',
@@ -174,6 +175,7 @@ test('admin can manage employees but cannot change employee section access', () 
     password: 'EmployeePass123',
     role: 'employee',
     allowedSections: ['schedule', 'claims'],
+    allowedPoints: ['krasnogorsk_466'],
   });
 
   const adminPermissions = permissionsFor(admin);
@@ -186,11 +188,13 @@ test('admin can manage employees but cannot change employee section access', () 
     position: 'Senior employee',
     role: 'admin',
     allowedSections: ['expenses'],
+    allowedPoints: ['moscow_6231'],
   });
 
   assert.equal(updated.position, 'Senior employee');
   assert.equal(updated.role, 'employee');
   assert.deepEqual(updated.allowedSections, ['schedule', 'claims']);
+  assert.deepEqual(updated.allowedPoints, ['krasnogorsk_466', 'moscow_6231']);
   assert.throws(
     () => store.updateUserRole(admin, employee.id, 'admin'),
     (error) => error instanceof ApiError && error.status === 403,
