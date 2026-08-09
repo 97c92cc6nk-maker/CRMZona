@@ -841,6 +841,24 @@ tbody tr:last-child td {
   min-height: 18px;
 }
 
+.password-reset-cell {
+  min-width: 150px;
+}
+
+.password-reset-value {
+  display: block;
+  margin-bottom: 6px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  color: var(--accent-strong);
+  word-break: break-all;
+}
+
+.password-reset-button {
+  min-height: 34px;
+  padding: 6px 10px;
+}
+
 .text-link {
   min-height: 0;
   padding: 0;

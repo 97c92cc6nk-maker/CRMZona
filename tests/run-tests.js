@@ -13,6 +13,7 @@ const {
   buildAdminPayrollReport,
   createCaptchaChallenge,
   retailPointCompanyOptions,
+  resetUserPasswordAsOwner,
   sendPasswordEmail,
   validateRegistration,
   validateScheduleRows,
@@ -284,6 +285,53 @@ test('password email falls back to local outbox when SMTP is unavailable', async
     : path.join(path.dirname(__dirname), delivery.outboxPath);
   assert.equal(fs.existsSync(outboxFile), true);
   assert.match(fs.readFileSync(outboxFile, 'utf8'), /MailPass123/);
+});
+
+test('owner can reset employee password without exposing stored passwords', async () => {
+  delete process.env.SMTP_HOST;
+  delete process.env.SMTP_PORT;
+
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Password',
+    phone: '+79990000121',
+    email: 'owner-password-reset@example.com',
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Password',
+    phone: '+79990000122',
+    email: 'admin-password-reset@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['employees'],
+  });
+  const employee = store.createUser({
+    fullName: 'Employee Password',
+    phone: '+79990000123',
+    email: 'employee-password-reset@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+  });
+  const sessionId = store.createSession(employee.id);
+
+  const result = await resetUserPasswordAsOwner(store, owner, employee.id);
+  const rawEmployee = store.getUserById(employee.id);
+
+  assert.equal(result.user.id, employee.id);
+  assert.equal(result.user.password, undefined);
+  assert.equal(result.emailDelivery.status, 'outbox');
+  assert.equal(verifyPassword(result.password, rawEmployee.password), true);
+  assert.equal(verifyPassword('EmployeePass123', rawEmployee.password), false);
+  assert.equal(store.getSession(sessionId), null);
+  await assert.rejects(
+    () => resetUserPasswordAsOwner(store, admin, employee.id),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
+  await assert.rejects(
+    () => resetUserPasswordAsOwner(store, owner, owner.id),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
 });
 
 test('schedule rows use employees from the directory and respect month boundaries', () => {

@@ -32,6 +32,7 @@ const state = {
   canEditSchedule: false,
   canManageAllSchedule: false,
   employeeOptions: [],
+  revealedEmployeePasswords: {},
   selectedEmployeeId: null,
   selectedRetailPointId: null,
   selectedCompanyId: null,
@@ -71,6 +72,7 @@ function bindElements() {
     profileNotice: document.getElementById('profileNotice'),
     passwordForm: document.getElementById('passwordForm'),
     employeesTab: document.getElementById('employeesTab'),
+    employeePasswordHeader: document.getElementById('employeePasswordHeader'),
     employeesBody: document.getElementById('employeesBody'),
     employeesNotice: document.getElementById('employeesNotice'),
     employeeAddPanel: document.getElementById('employeeAddPanel'),
@@ -472,6 +474,7 @@ async function handleLogout() {
     state.reports = [];
     state.adminPayrollReport = null;
     state.claimEmployees = [];
+    state.revealedEmployeePasswords = {};
     state.selectedEmployeeId = null;
     state.selectedReportId = null;
     showAuth();
@@ -2435,11 +2438,13 @@ async function loadUsers() {
 
 function renderEmployees() {
   els.employeesBody.replaceChildren();
+  const canResetPasswords = canResetEmployeePasswords();
+  els.employeePasswordHeader?.classList.toggle('is-hidden', !canResetPasswords);
 
   if (!state.users.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 7;
+    cell.colSpan = canResetPasswords ? 8 : 7;
     cell.className = 'empty-state';
     cell.textContent = 'Нет сотрудников.';
     row.append(cell);
@@ -2470,9 +2475,37 @@ function buildEmployeeRow(user) {
   appendCell(row, nameParts.middleName || '');
   appendCell(row, user.phone || '');
   appendCell(row, user.email || '');
+  if (canResetEmployeePasswords()) {
+    row.append(employeePasswordCell(user));
+  }
   appendCell(row, user.roleLabel || user.role || '');
   row.append(employeeListActionsCell(user));
   return row;
+}
+
+function employeePasswordCell(user) {
+  const cell = document.createElement('td');
+  cell.className = 'password-reset-cell';
+  if (user.role === 'owner') {
+    cell.textContent = 'Личный кабинет';
+    return cell;
+  }
+
+  const password = state.revealedEmployeePasswords[user.id];
+  if (password) {
+    const value = document.createElement('span');
+    value.className = 'password-reset-value';
+    value.textContent = password;
+    cell.append(value);
+  }
+
+  const reset = document.createElement('button');
+  reset.className = 'secondary password-reset-button';
+  reset.type = 'button';
+  reset.textContent = password ? 'Сбросить еще' : 'Сбросить';
+  reset.addEventListener('click', () => resetEmployeePassword(user, reset));
+  cell.append(reset);
+  return cell;
 }
 
 function employeeListActionsCell(user) {
@@ -2518,6 +2551,10 @@ function selectedEmployee() {
 
 function selectedEmployeeEditable(user = selectedEmployee()) {
   return Boolean(user && state.permissions.canManageRoles && user.role !== 'owner');
+}
+
+function canResetEmployeePasswords() {
+  return state.user?.role === 'owner';
 }
 
 function renderEmployeeCard() {
@@ -3103,6 +3140,22 @@ async function deleteEmployee(userId, button) {
   }, els.employeesNotice);
 }
 
+async function resetEmployeePassword(user, button) {
+  if (!user?.id) return;
+  if (!window.confirm(`Сбросить пароль для ${user.fullName}? Старый пароль перестанет работать.`)) return;
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/users/${encodeURIComponent(user.id)}/password-reset`, {
+      method: 'POST',
+    });
+    state.revealedEmployeePasswords[data.user.id] = data.password;
+    replaceUserInState(data.user);
+    renderEmployees();
+    showEmployeePasswordReset(data);
+    await loadAudit();
+  }, els.employeesNotice);
+}
+
 async function refreshRetailPointsAfterEmployeeChange() {
   if (state.permissions.canViewRetailPoints) {
     await loadRetailPoints();
@@ -3185,6 +3238,19 @@ function showEmployeeDelivery(data, fallbackMessage) {
   showNotice(
     els.employeesNotice,
     [deliveryText, storageWarning].filter(Boolean).join(' '),
+    data.emailDelivery?.status === 'outbox' || storageWarning ? 'warning' : 'success',
+  );
+}
+
+function showEmployeePasswordReset(data) {
+  const storageWarning = storageWarningText(data.storage);
+  const passwordText = `Новый пароль для ${data.user.fullName}: ${data.password}`;
+  const deliveryText = data.emailDelivery?.status === 'outbox'
+    ? `${data.message} Причина: ${data.emailDelivery.reason}. Файл: ${data.emailDelivery.outboxPath}.`
+    : data.message;
+  showNotice(
+    els.employeesNotice,
+    [passwordText, deliveryText, storageWarning].filter(Boolean).join(' '),
     data.emailDelivery?.status === 'outbox' || storageWarning ? 'warning' : 'success',
   );
 }
