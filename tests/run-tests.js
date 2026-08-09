@@ -13,7 +13,7 @@ const {
   buildAdminPayrollReport,
   createCaptchaChallenge,
   retailPointCompanyOptions,
-  resetUserPasswordAsOwner,
+  resetUserPasswordAsManager,
   sendPasswordEmail,
   validateRegistration,
   validateScheduleRows,
@@ -287,7 +287,7 @@ test('password email falls back to local outbox when SMTP is unavailable', async
   assert.match(fs.readFileSync(outboxFile, 'utf8'), /MailPass123/);
 });
 
-test('owner can reset employee password without exposing stored passwords', async () => {
+test('owner and permitted admin can reset employee password without exposing stored passwords', async () => {
   delete process.env.SMTP_HOST;
   delete process.env.SMTP_PORT;
 
@@ -315,7 +315,7 @@ test('owner can reset employee password without exposing stored passwords', asyn
   });
   const sessionId = store.createSession(employee.id);
 
-  const result = await resetUserPasswordAsOwner(store, owner, employee.id);
+  const result = await resetUserPasswordAsManager(store, owner, employee.id);
   const rawEmployee = store.getUserById(employee.id);
 
   assert.equal(result.user.id, employee.id);
@@ -324,12 +324,12 @@ test('owner can reset employee password without exposing stored passwords', asyn
   assert.equal(verifyPassword(result.password, rawEmployee.password), true);
   assert.equal(verifyPassword('EmployeePass123', rawEmployee.password), false);
   assert.equal(store.getSession(sessionId), null);
+  const adminResult = await resetUserPasswordAsManager(store, admin, employee.id);
+  const rawEmployeeAfterAdminReset = store.getUserById(employee.id);
+  assert.equal(verifyPassword(adminResult.password, rawEmployeeAfterAdminReset.password), true);
+  assert.equal(verifyPassword(result.password, rawEmployeeAfterAdminReset.password), false);
   await assert.rejects(
-    () => resetUserPasswordAsOwner(store, admin, employee.id),
-    (error) => error instanceof ApiError && error.status === 403,
-  );
-  await assert.rejects(
-    () => resetUserPasswordAsOwner(store, owner, owner.id),
+    () => resetUserPasswordAsManager(store, owner, owner.id),
     (error) => error instanceof ApiError && error.status === 403,
   );
 });

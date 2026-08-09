@@ -854,9 +854,14 @@ tbody tr:last-child td {
   word-break: break-all;
 }
 
+.password-reveal-button,
 .password-reset-button {
   min-height: 34px;
   padding: 6px 10px;
+}
+
+.password-reveal-button {
+  margin-right: 6px;
 }
 
 .text-link {

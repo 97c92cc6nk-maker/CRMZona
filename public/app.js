@@ -2491,21 +2491,37 @@ function employeePasswordCell(user) {
     return cell;
   }
 
-  const password = state.revealedEmployeePasswords[user.id];
-  if (password) {
+  const passwordRecord = state.revealedEmployeePasswords[user.id];
+  if (passwordRecord?.value) {
     const value = document.createElement('span');
     value.className = 'password-reset-value';
-    value.textContent = password;
+    value.textContent = passwordRecord.visible
+      ? passwordRecord.value
+      : '*'.repeat(passwordRecord.value.length);
     cell.append(value);
+
+    const reveal = document.createElement('button');
+    reveal.className = 'secondary password-reveal-button';
+    reveal.type = 'button';
+    reveal.textContent = passwordRecord.visible ? 'Скрыть' : 'Показать';
+    reveal.addEventListener('click', () => toggleEmployeePasswordVisibility(user.id));
+    cell.append(reveal);
   }
 
   const reset = document.createElement('button');
   reset.className = 'secondary password-reset-button';
   reset.type = 'button';
-  reset.textContent = password ? 'Сбросить еще' : 'Сбросить';
+  reset.textContent = passwordRecord?.value ? 'Сбросить еще' : 'Сбросить';
   reset.addEventListener('click', () => resetEmployeePassword(user, reset));
   cell.append(reset);
   return cell;
+}
+
+function toggleEmployeePasswordVisibility(userId) {
+  const passwordRecord = state.revealedEmployeePasswords[userId];
+  if (!passwordRecord) return;
+  passwordRecord.visible = !passwordRecord.visible;
+  renderEmployees();
 }
 
 function employeeListActionsCell(user) {
@@ -2554,7 +2570,8 @@ function selectedEmployeeEditable(user = selectedEmployee()) {
 }
 
 function canResetEmployeePasswords() {
-  return state.user?.role === 'owner';
+  return state.user?.role === 'owner'
+    || (state.user?.role === 'admin' && Boolean(state.permissions.canManageRoles));
 }
 
 function renderEmployeeCard() {
@@ -3148,7 +3165,10 @@ async function resetEmployeePassword(user, button) {
     const data = await api(`/api/users/${encodeURIComponent(user.id)}/password-reset`, {
       method: 'POST',
     });
-    state.revealedEmployeePasswords[data.user.id] = data.password;
+    state.revealedEmployeePasswords[data.user.id] = {
+      value: data.password,
+      visible: false,
+    };
     replaceUserInState(data.user);
     renderEmployees();
     showEmployeePasswordReset(data);
@@ -3244,7 +3264,7 @@ function showEmployeeDelivery(data, fallbackMessage) {
 
 function showEmployeePasswordReset(data) {
   const storageWarning = storageWarningText(data.storage);
-  const passwordText = `Новый пароль для ${data.user.fullName}: ${data.password}`;
+  const passwordText = `Новый пароль для ${data.user.fullName} сгенерирован. В таблице он скрыт под звездочками.`;
   const deliveryText = data.emailDelivery?.status === 'outbox'
     ? `${data.message} Причина: ${data.emailDelivery.reason}. Файл: ${data.emailDelivery.outboxPath}.`
     : data.message;
