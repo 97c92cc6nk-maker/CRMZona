@@ -502,6 +502,52 @@ test('employee can save only own schedule row without overwriting others', () =>
   assert.equal(employeeRow.claims, '');
 });
 
+test('assigned retail point grants employee schedule access without section flag', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Point Schedule',
+    phone: '+79990000141',
+    email: 'owner-point-schedule@example.com',
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Maxim Tokarev',
+    phone: '+79990000142',
+    email: 'tokarev-schedule@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+  });
+  const point = store.createRetailPoint(owner, {
+    name: 'MOSCOW_5863',
+  });
+
+  store.updateUser(owner, employee.id, {
+    ...employee,
+    allowedPoints: [point.id],
+  });
+  const assignedEmployee = store.getUserById(employee.id);
+  const permissions = permissionsFor(assignedEmployee);
+
+  assert.deepEqual(assignedEmployee.allowedSections, []);
+  assert.equal(permissions.canViewSchedule, true);
+  assert.equal(permissions.canEditSchedule, true);
+  assert.deepEqual(permissions.allowedPoints, [point.id]);
+
+  const employeeView = store.getSchedule(point.id, '2026-07', assignedEmployee);
+  assert.equal(employeeView.rows.length, 1);
+  assert.equal(employeeView.rows[0].employeeId, employee.id);
+
+  store.saveSchedule(assignedEmployee, point.id, '2026-07', [{
+    employeeId: employee.id,
+    days: { 1: { rateRub: '1000', issuedCount: '10' } },
+  }]);
+
+  const ownerView = store.getSchedule(point.id, '2026-07', owner);
+  const savedRow = ownerView.rows.find((row) => row.employeeId === employee.id);
+  assert.equal(savedRow.days['1'].rateRub, '1000');
+  assert.equal(savedRow.days['1'].issuedCount, '10');
+});
+
 test('schedule keeps removed employee rows after save', () => {
   const store = createTempStore();
   const owner = store.createUser({
