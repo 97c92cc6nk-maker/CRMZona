@@ -496,10 +496,66 @@ test('employee can save only own schedule row without overwriting others', () =>
 
   assert.equal(ownerRow.days['1'].rateRub, '15');
   assert.equal(employeeRow.days['2'].issuedCount, '4');
-  assert.equal(employeeRow.advanceCard, '60');
-  assert.equal(employeeRow.salaryCard, '90');
+  assert.equal(employeeRow.advanceCard, '50');
+  assert.equal(employeeRow.salaryCard, '75');
   assert.equal(employeeRow.bonusExtra, '');
   assert.equal(employeeRow.claims, '');
+});
+
+test('employee schedule view hides and preserves financial summary fields', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Finance Schedule',
+    phone: '+79990000151',
+    email: 'owner-finance-schedule@example.com',
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Employee Finance Hidden',
+    phone: '+79990000152',
+    email: 'employee-finance-hidden@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['schedule'],
+    allowedPoints: ['moscow_6231'],
+    premiumHistory: [
+      { active: true, amount: '5000', startDate: '2026-06-01' },
+    ],
+  });
+
+  store.saveSchedule(owner, 'moscow_6231', '2026-06', [{
+    employeeId: employee.id,
+    advanceCard: '100',
+    salaryCard: '200',
+    days: { 1: { rateRub: '10', issuedCount: '2' } },
+  }]);
+
+  const employeeView = store.getSchedule('moscow_6231', '2026-06', employee);
+  const hiddenRow = employeeView.rows.find((row) => row.employeeId === employee.id);
+
+  assert.equal(permissionsFor(employee).canViewScheduleFinancials, false);
+  assert.equal(hiddenRow.advanceCard, '');
+  assert.equal(hiddenRow.salaryCard, '');
+  assert.equal(hiddenRow.bonusExtra, '');
+  assert.equal(hiddenRow.premiumActive, false);
+  assert.equal(employeeView.employeeOptions[0].premium.active, false);
+
+  store.saveSchedule(employee, 'moscow_6231', '2026-06', [{
+    employeeId: employee.id,
+    advanceCard: '999',
+    salaryCard: '888',
+    bonusExtra: '777',
+    days: { 2: { rateRub: '11', issuedCount: '3' } },
+  }]);
+
+  const ownerView = store.getSchedule('moscow_6231', '2026-06', owner);
+  const ownerRow = ownerView.rows.find((row) => row.employeeId === employee.id);
+
+  assert.equal(permissionsFor(owner).canViewScheduleFinancials, true);
+  assert.equal(ownerRow.advanceCard, '100');
+  assert.equal(ownerRow.salaryCard, '200');
+  assert.equal(ownerRow.bonusExtra, '5000');
+  assert.equal(ownerRow.days['2'].issuedCount, '3');
 });
 
 test('assigned retail point grants employee schedule access without section flag', () => {

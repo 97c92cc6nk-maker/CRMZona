@@ -31,6 +31,7 @@ const state = {
   schedule: null,
   canEditSchedule: false,
   canManageAllSchedule: false,
+  canViewScheduleFinancials: false,
   employeeOptions: [],
   revealedEmployeePasswords: {},
   selectedEmployeeId: null,
@@ -3407,6 +3408,7 @@ async function loadSchedule() {
     state.schedule = data.schedule;
     state.canEditSchedule = data.canEdit;
     state.canManageAllSchedule = data.canManageAll;
+    state.canViewScheduleFinancials = Boolean(data.canViewFinancials);
     state.employeeOptions = data.employeeOptions || data.schedule.employeeOptions || [];
     renderSchedule();
     showNotice(els.scheduleNotice, '');
@@ -3417,6 +3419,7 @@ function renderUnavailableSchedule(message = 'Нет доступа к граф�
   state.schedule = null;
   state.canEditSchedule = false;
   state.canManageAllSchedule = false;
+  state.canViewScheduleFinancials = false;
   state.employeeOptions = [];
   els.scheduleCaption.textContent = '';
   els.scheduleUpdated.textContent = '';
@@ -3439,8 +3442,41 @@ function renderSchedule() {
   els.addRowButton.classList.toggle('is-hidden', !state.canEditSchedule);
   els.saveScheduleButton.classList.toggle('is-hidden', !state.canEditSchedule);
   syncSummaryWidth(schedule);
+  renderSummaryHead();
   els.scheduleTable.replaceChildren(buildScheduleHead(schedule), buildScheduleBody(schedule));
   renderScheduleSummary();
+}
+
+function canViewScheduleFinancials() {
+  return Boolean(state.canViewScheduleFinancials);
+}
+
+function visibleSummaryColumns() {
+  const columns = [
+    { key: 'employee', label: 'Сотрудник' },
+    { key: 'issuedTotal', label: 'Выдано' },
+    { key: 'rateFirstHalf', label: 'Ставка 1-15' },
+    { key: 'advanceCard', label: 'Аванс на карту', financial: true },
+    { key: 'rateSecondHalf', label: 'Ставка 16+' },
+    { key: 'salaryCard', label: 'ЗП на карту', financial: true },
+    { key: 'issuedPay', label: 'Бонус' },
+    { key: 'bonusExtra', label: 'Премия', financial: true },
+    { key: 'claims', label: 'Претензии' },
+    { key: 'advanceTotal', label: 'Итого аванс' },
+    { key: 'salaryTotal', label: 'Итого ЗП' },
+    { key: 'payrollFund', label: 'Фонд оплаты', financial: true },
+  ];
+  return columns.filter((column) => !column.financial || canViewScheduleFinancials());
+}
+
+function renderSummaryHead() {
+  const thead = els.summaryTable.querySelector('thead');
+  if (!thead) return;
+  const row = document.createElement('tr');
+  for (const column of visibleSummaryColumns()) {
+    row.append(headerCell(column.label, ''));
+  }
+  thead.replaceChildren(row);
 }
 
 function syncSummaryWidth(schedule) {
@@ -3662,7 +3698,7 @@ function renderScheduleSummary() {
   if (!state.schedule.rows.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 12;
+    cell.colSpan = visibleSummaryColumns().length;
     cell.className = 'empty-state';
     cell.textContent = 'Нет данных для итогов.';
     row.append(cell);
@@ -3677,15 +3713,17 @@ function renderScheduleSummary() {
     appendCell(row, scheduleRow.employeeName || 'Сотрудник не выбран');
     appendCell(row, formatMoney(totals.issuedTotal), 'numeric-cell');
     appendCell(row, formatMoney(totals.rateFirstHalf), 'numeric-cell');
-    row.append(summaryInputCell(scheduleRow, 'advanceCard'));
+    if (canViewScheduleFinancials()) row.append(summaryInputCell(scheduleRow, 'advanceCard'));
     appendCell(row, formatMoney(totals.rateSecondHalf), 'numeric-cell');
-    row.append(summaryInputCell(scheduleRow, 'salaryCard'));
+    if (canViewScheduleFinancials()) row.append(summaryInputCell(scheduleRow, 'salaryCard'));
     appendCell(row, formatMoney(totals.issuedPay), 'numeric-cell');
-    row.append(summaryInputCell(scheduleRow, 'bonusExtra'));
+    if (canViewScheduleFinancials()) row.append(summaryInputCell(scheduleRow, 'bonusExtra'));
     row.append(summaryInputCell(scheduleRow, 'claims'));
     appendCell(row, formatMoney(totals.advanceTotal), 'numeric-cell advance-total-cell');
     appendCell(row, formatMoney(totals.salaryTotal), 'numeric-cell salary-total-cell');
-    appendCell(row, formatMoney(totals.payrollFund), 'numeric-cell payroll-fund-cell');
+    if (canViewScheduleFinancials()) {
+      appendCell(row, formatMoney(totals.payrollFund), 'numeric-cell payroll-fund-cell');
+    }
     els.summaryBody.append(row);
   }
   renderSummaryFooter();
@@ -3727,15 +3765,15 @@ function renderSummaryFooter() {
   appendCell(row, 'Итого', 'summary-total-label');
   appendCell(row, formatMoney(totals.issuedTotal), 'numeric-cell');
   appendCell(row, formatMoney(totals.rateFirstHalf), 'numeric-cell');
-  appendCell(row, formatMoney(totals.advanceCard), 'numeric-cell');
+  if (canViewScheduleFinancials()) appendCell(row, formatMoney(totals.advanceCard), 'numeric-cell');
   appendCell(row, formatMoney(totals.rateSecondHalf), 'numeric-cell');
-  appendCell(row, formatMoney(totals.salaryCard), 'numeric-cell');
+  if (canViewScheduleFinancials()) appendCell(row, formatMoney(totals.salaryCard), 'numeric-cell');
   appendCell(row, formatMoney(totals.issuedPay), 'numeric-cell');
-  appendCell(row, formatMoney(totals.bonusExtra), 'numeric-cell');
+  if (canViewScheduleFinancials()) appendCell(row, formatMoney(totals.bonusExtra), 'numeric-cell');
   appendCell(row, formatMoney(totals.claims), 'numeric-cell');
   appendCell(row, formatMoney(totals.advanceTotal), 'numeric-cell');
   appendCell(row, formatMoney(totals.salaryTotal), 'numeric-cell');
-  appendCell(row, formatMoney(totals.payrollFund), 'numeric-cell');
+  if (canViewScheduleFinancials()) appendCell(row, formatMoney(totals.payrollFund), 'numeric-cell');
   els.summaryFooter.append(row);
 }
 
