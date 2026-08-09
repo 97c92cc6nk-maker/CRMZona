@@ -9,6 +9,7 @@ const path = require('path');
 const {
   ApiError,
   Store,
+  SupabaseStore,
   buildAdminPayrollReport,
   createCaptchaChallenge,
   retailPointCompanyOptions,
@@ -1355,6 +1356,50 @@ test('store uses persistent disk fallback when primary data directory is not wri
       delete process.env.FALLBACK_DATA_DIR;
     } else {
       process.env.FALLBACK_DATA_DIR = previousFallback;
+    }
+  }
+});
+
+test('supabase store falls back when remote fetch fails', async () => {
+  const fallbackDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-supabase-fallback-'));
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFallbackDir = process.env.SUPABASE_FALLBACK_DATA_DIR;
+  const previousFetch = global.fetch;
+
+  process.env.SUPABASE_URL = 'https://unavailable.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
+  process.env.SUPABASE_FALLBACK_DATA_DIR = fallbackDir;
+  global.fetch = async () => {
+    throw new TypeError('fetch failed');
+  };
+
+  try {
+    const store = new SupabaseStore();
+    await store.saveJson('users.json', [{ id: 'u1', fullName: 'Fallback User' }]);
+    const users = await store.loadJson('users.json', []);
+    const status = store.storageStatus();
+
+    assert.deepEqual(users, [{ id: 'u1', fullName: 'Fallback User' }]);
+    assert.equal(status.persistent, false);
+    assert.equal(status.fallback, 'supabase-unavailable');
+    assert.match(status.message, /Supabase/);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) {
+      delete process.env.SUPABASE_URL;
+    } else {
+      process.env.SUPABASE_URL = previousUrl;
+    }
+    if (previousKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+    }
+    if (previousFallbackDir === undefined) {
+      delete process.env.SUPABASE_FALLBACK_DATA_DIR;
+    } else {
+      process.env.SUPABASE_FALLBACK_DATA_DIR = previousFallbackDir;
     }
   }
 });
