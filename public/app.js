@@ -2577,6 +2577,10 @@ function canManageEmployeeSections() {
   return state.user?.role === 'owner';
 }
 
+function canManageEmployeeRoles() {
+  return state.user?.role === 'owner';
+}
+
 function renderEmployeeCard() {
   const user = selectedEmployee();
   if (!user) {
@@ -2630,7 +2634,7 @@ function renderEmployeeCardRole(user, editable) {
     option.selected = role.value === user.role;
     select.append(option);
   }
-  select.disabled = !editable;
+  select.disabled = !editable || !canManageEmployeeRoles();
 }
 
 function renderEmployeeCardAccess(user, editable) {
@@ -2657,7 +2661,10 @@ function setEmployeeCardEditable(editable) {
   els.employeeCardForm
     .querySelectorAll('input, select')
     .forEach((field) => {
-      field.disabled = !editable || field.dataset.locked === 'true' || (field.name === 'allowedPoints' && !pointsAvailable);
+      field.disabled = !editable
+        || field.dataset.locked === 'true'
+        || (field.name === 'role' && !canManageEmployeeRoles())
+        || (field.name === 'allowedPoints' && !pointsAvailable);
     });
   els.addPremiumRow.disabled = !editable;
   els.addPremiumRow.classList.toggle('is-hidden', !editable);
@@ -2997,6 +3004,12 @@ function buildAccessCheckboxes(field, options, selected = new Set()) {
 function renderEmployeeFormAccessControls() {
   const sectionTarget = document.querySelector('[data-access-form="sections"]');
   const pointTarget = document.querySelector('[data-access-form="points"]');
+  if (els.employeeForm?.elements.role) {
+    if (!canManageEmployeeRoles()) {
+      els.employeeForm.elements.role.value = 'employee';
+    }
+    els.employeeForm.elements.role.disabled = !canManageEmployeeRoles();
+  }
   const role = els.employeeForm?.elements.role?.value || 'employee';
   const pointsAvailable = role === 'admin';
   if (sectionTarget) {
@@ -3202,6 +3215,9 @@ function employeePayloadFromForm(form) {
   const values = formValues(form);
   values.officialEmployment = form.elements.officialEmployment.checked;
   values.premiumEnabled = form.elements.premiumEnabled.checked;
+  if (!canManageEmployeeRoles()) {
+    delete values.role;
+  }
   if (canManageEmployeeSections()) {
     values.allowedSections = formArrayValues(form, 'allowedSections');
   } else {
@@ -3213,13 +3229,18 @@ function employeePayloadFromForm(form) {
 
 function employeePayloadFromCard(form) {
   const values = formValues(form);
+  const currentRole = selectedEmployee()?.role || form.elements.role.value || values.role || 'employee';
+  const effectiveRole = canManageEmployeeRoles() ? values.role || currentRole : currentRole;
   values.officialEmployment = form.elements.officialEmployment.checked;
+  if (!canManageEmployeeRoles()) {
+    delete values.role;
+  }
   if (canManageEmployeeSections()) {
     values.allowedSections = checkedValues(form, 'allowedSections');
   } else {
     delete values.allowedSections;
   }
-  values.allowedPoints = values.role === 'admin' ? checkedValues(form, 'allowedPoints') : [];
+  values.allowedPoints = effectiveRole === 'admin' ? checkedValues(form, 'allowedPoints') : [];
   values.premiumHistory = collectPremiumHistory();
 
   const latest = latestPremiumRecord(values.premiumHistory);

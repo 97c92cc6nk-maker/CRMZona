@@ -184,11 +184,17 @@ test('admin can manage employees but cannot change employee section access', () 
   const updated = store.updateUser(admin, employee.id, {
     ...employee,
     position: 'Senior employee',
+    role: 'admin',
     allowedSections: ['expenses'],
   });
 
   assert.equal(updated.position, 'Senior employee');
+  assert.equal(updated.role, 'employee');
   assert.deepEqual(updated.allowedSections, ['schedule', 'claims']);
+  assert.throws(
+    () => store.updateUserRole(admin, employee.id, 'admin'),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
   assert.equal(owner.role, 'owner');
 });
 
