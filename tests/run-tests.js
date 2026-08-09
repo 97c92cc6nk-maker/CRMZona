@@ -1404,6 +1404,67 @@ test('supabase store falls back when remote fetch fails', async () => {
   }
 });
 
+test('supabase store recovers after fallback when remote returns', async () => {
+  const fallbackDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-supabase-recovery-'));
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const previousFallbackDir = process.env.SUPABASE_FALLBACK_DATA_DIR;
+  const previousFetch = global.fetch;
+  let online = false;
+  const remote = new Map();
+
+  process.env.SUPABASE_URL = 'https://recovered.supabase.co';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
+  process.env.SUPABASE_FALLBACK_DATA_DIR = fallbackDir;
+  global.fetch = async (url, options = {}) => {
+    if (!online) throw new TypeError('fetch failed');
+    if (options.method === 'POST') {
+      const body = JSON.parse(options.body);
+      remote.set(body.key, body.value);
+      return { ok: true, text: async () => '' };
+    }
+    const key = String(url).match(/key=eq\.([^&]+)/)?.[1];
+    const value = key ? remote.get(decodeURIComponent(key)) : undefined;
+    return {
+      ok: true,
+      json: async () => (value === undefined ? [] : [{ value }]),
+      text: async () => '',
+    };
+  };
+
+  try {
+    const store = new SupabaseStore();
+    await store.saveJson('users.json', [{ id: 'fallback' }]);
+    assert.equal(store.storageStatus().fallback, 'supabase-unavailable');
+
+    store.lastRecoveryAttemptAt = 0;
+    online = true;
+    await store.saveJson('users.json', [{ id: 'remote' }]);
+    const users = await store.loadJson('users.json', []);
+
+    assert.deepEqual(users, [{ id: 'remote' }]);
+    assert.equal(store.storageStatus().persistent, true);
+    assert.equal(store.storageStatus().fallback, 'supabase');
+  } finally {
+    global.fetch = previousFetch;
+    if (previousUrl === undefined) {
+      delete process.env.SUPABASE_URL;
+    } else {
+      process.env.SUPABASE_URL = previousUrl;
+    }
+    if (previousKey === undefined) {
+      delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    } else {
+      process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+    }
+    if (previousFallbackDir === undefined) {
+      delete process.env.SUPABASE_FALLBACK_DATA_DIR;
+    } else {
+      process.env.SUPABASE_FALLBACK_DATA_DIR = previousFallbackDir;
+    }
+  }
+});
+
 test('store selects existing disk fallback during startup when primary data directory is not writable', () => {
   const primaryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-primary-'));
   const fallbackDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-fallback-'));
