@@ -2570,8 +2570,11 @@ function selectedEmployeeEditable(user = selectedEmployee()) {
 }
 
 function canResetEmployeePasswords() {
-  return state.user?.role === 'owner'
-    || (state.user?.role === 'admin' && Boolean(state.permissions.canManageRoles));
+  return state.user?.role === 'owner';
+}
+
+function canManageEmployeeSections() {
+  return state.user?.role === 'owner';
 }
 
 function renderEmployeeCard() {
@@ -2636,8 +2639,10 @@ function renderEmployeeCardAccess(user, editable) {
   const role = els.employeeCardForm.elements.role.value || user?.role || 'employee';
   const pointsAvailable = role === 'admin';
   if (sectionTarget) {
+    const canEditSections = editable && canManageEmployeeSections();
+    sectionTarget.closest('fieldset')?.classList.toggle('is-hidden', !canManageEmployeeSections());
     sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections, new Set(user?.allowedSections || [])));
-    setInputsDisabled(sectionTarget, !editable);
+    setInputsDisabled(sectionTarget, !canEditSections);
   }
   if (pointTarget) {
     const pointOptions = pointAccessOptions(user?.id);
@@ -2995,7 +3000,9 @@ function renderEmployeeFormAccessControls() {
   const role = els.employeeForm?.elements.role?.value || 'employee';
   const pointsAvailable = role === 'admin';
   if (sectionTarget) {
+    sectionTarget.closest('fieldset')?.classList.toggle('is-hidden', !canManageEmployeeSections());
     sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections));
+    setInputsDisabled(sectionTarget, !canManageEmployeeSections());
   }
   if (pointTarget) {
     const pointOptions = pointAccessOptions();
@@ -3195,7 +3202,11 @@ function employeePayloadFromForm(form) {
   const values = formValues(form);
   values.officialEmployment = form.elements.officialEmployment.checked;
   values.premiumEnabled = form.elements.premiumEnabled.checked;
-  values.allowedSections = formArrayValues(form, 'allowedSections');
+  if (canManageEmployeeSections()) {
+    values.allowedSections = formArrayValues(form, 'allowedSections');
+  } else {
+    delete values.allowedSections;
+  }
   values.allowedPoints = values.role === 'admin' ? formArrayValues(form, 'allowedPoints') : [];
   return values;
 }
@@ -3203,7 +3214,11 @@ function employeePayloadFromForm(form) {
 function employeePayloadFromCard(form) {
   const values = formValues(form);
   values.officialEmployment = form.elements.officialEmployment.checked;
-  values.allowedSections = checkedValues(form, 'allowedSections');
+  if (canManageEmployeeSections()) {
+    values.allowedSections = checkedValues(form, 'allowedSections');
+  } else {
+    delete values.allowedSections;
+  }
   values.allowedPoints = values.role === 'admin' ? checkedValues(form, 'allowedPoints') : [];
   values.premiumHistory = collectPremiumHistory();
 

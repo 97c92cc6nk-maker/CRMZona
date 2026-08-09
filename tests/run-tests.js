@@ -12,8 +12,9 @@ const {
   SupabaseStore,
   buildAdminPayrollReport,
   createCaptchaChallenge,
+  permissionsFor,
   retailPointCompanyOptions,
-  resetUserPasswordAsManager,
+  resetUserPasswordAsOwner,
   sendPasswordEmail,
   validateRegistration,
   validateScheduleRows,
@@ -149,6 +150,46 @@ test('new account types are available', () => {
 
   assert.equal(installer.roleLabel, 'Монтажник');
   assert.equal(partner.roleLabel, 'Партнер');
+});
+
+test('admin can manage employees but cannot change employee section access', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Employee Access',
+    phone: '+79990000131',
+    email: 'owner-employee-access@example.com',
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Employee Access',
+    phone: '+79990000132',
+    email: 'admin-employee-access@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+  });
+  const employee = store.createUser({
+    fullName: 'Employee With Sections',
+    phone: '+79990000133',
+    email: 'employee-with-sections@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['schedule', 'claims'],
+  });
+
+  const adminPermissions = permissionsFor(admin);
+  assert.equal(adminPermissions.canViewUsers, true);
+  assert.equal(adminPermissions.canManageRoles, true);
+  assert.equal(adminPermissions.allowedSections.includes('employees'), true);
+
+  const updated = store.updateUser(admin, employee.id, {
+    ...employee,
+    position: 'Senior employee',
+    allowedSections: ['expenses'],
+  });
+
+  assert.equal(updated.position, 'Senior employee');
+  assert.deepEqual(updated.allowedSections, ['schedule', 'claims']);
+  assert.equal(owner.role, 'owner');
 });
 
 test('retail point access belongs only to one admin', () => {
@@ -287,7 +328,7 @@ test('password email falls back to local outbox when SMTP is unavailable', async
   assert.match(fs.readFileSync(outboxFile, 'utf8'), /MailPass123/);
 });
 
-test('owner and permitted admin can reset employee password without exposing stored passwords', async () => {
+test('owner can reset employee password without exposing stored passwords', async () => {
   delete process.env.SMTP_HOST;
   delete process.env.SMTP_PORT;
 
@@ -315,7 +356,7 @@ test('owner and permitted admin can reset employee password without exposing sto
   });
   const sessionId = store.createSession(employee.id);
 
-  const result = await resetUserPasswordAsManager(store, owner, employee.id);
+  const result = await resetUserPasswordAsOwner(store, owner, employee.id);
   const rawEmployee = store.getUserById(employee.id);
 
   assert.equal(result.user.id, employee.id);
@@ -324,12 +365,12 @@ test('owner and permitted admin can reset employee password without exposing sto
   assert.equal(verifyPassword(result.password, rawEmployee.password), true);
   assert.equal(verifyPassword('EmployeePass123', rawEmployee.password), false);
   assert.equal(store.getSession(sessionId), null);
-  const adminResult = await resetUserPasswordAsManager(store, admin, employee.id);
-  const rawEmployeeAfterAdminReset = store.getUserById(employee.id);
-  assert.equal(verifyPassword(adminResult.password, rawEmployeeAfterAdminReset.password), true);
-  assert.equal(verifyPassword(result.password, rawEmployeeAfterAdminReset.password), false);
   await assert.rejects(
-    () => resetUserPasswordAsManager(store, owner, owner.id),
+    () => resetUserPasswordAsOwner(store, admin, employee.id),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
+  await assert.rejects(
+    () => resetUserPasswordAsOwner(store, owner, owner.id),
     (error) => error instanceof ApiError && error.status === 403,
   );
 });
