@@ -3450,10 +3450,15 @@ function updateScheduleFromInput(event) {
   }
 
   if (input.dataset.field === 'employeeId') {
+    const previousEmployeeId = row.employeeId;
     const employee = state.employeeOptions.find((item) => item.id === input.value);
     row.employeeId = employee ? employee.id : '';
     row.employeeName = employee ? employee.fullName : '';
     applyEmployeePremium(row, employee);
+    if (previousEmployeeId && previousEmployeeId !== row.employeeId) {
+      rememberRemovedScheduleEmployee(previousEmployeeId);
+    }
+    forgetRemovedScheduleEmployee(row.employeeId);
     renderScheduleSummary();
   }
 }
@@ -3461,8 +3466,25 @@ function updateScheduleFromInput(event) {
 function handleScheduleClick(event) {
   const button = event.target.closest('[data-remove-row]');
   if (!button || !state.schedule) return;
+  const removedRow = state.schedule.rows.find((row) => row.id === button.dataset.removeRow);
   state.schedule.rows = state.schedule.rows.filter((row) => row.id !== button.dataset.removeRow);
+  rememberRemovedScheduleEmployee(removedRow?.employeeId);
   renderSchedule();
+}
+
+function rememberRemovedScheduleEmployee(employeeId) {
+  if (!state.schedule || !employeeId) return;
+  const stillUsed = state.schedule.rows.some((row) => row.employeeId === employeeId);
+  if (stillUsed) return;
+  const removed = new Set(state.schedule.removedEmployeeIds || []);
+  removed.add(employeeId);
+  state.schedule.removedEmployeeIds = [...removed];
+}
+
+function forgetRemovedScheduleEmployee(employeeId) {
+  if (!state.schedule || !employeeId) return;
+  state.schedule.removedEmployeeIds = (state.schedule.removedEmployeeIds || [])
+    .filter((id) => id !== employeeId);
 }
 
 function renderScheduleSummary() {
@@ -3654,6 +3676,7 @@ function addScheduleRow() {
     showNotice(els.scheduleNotice, 'Все доступные сотрудники уже добавлены в график.', 'warning');
     return;
   }
+  forgetRemovedScheduleEmployee(defaultEmployee.id);
   state.schedule.rows.push({
     id: window.crypto?.randomUUID?.() || String(Date.now()),
     employeeId: defaultEmployee?.id || '',
@@ -3690,6 +3713,7 @@ async function saveSchedule() {
         pointId: state.schedule.pointId,
         month: state.schedule.month,
         rows: state.schedule.rows,
+        removedEmployeeIds: state.schedule.removedEmployeeIds || [],
       },
     });
     state.employeeOptions = data.schedule.employeeOptions || state.employeeOptions;

@@ -403,6 +403,47 @@ test('employee can save only own schedule row without overwriting others', () =>
   assert.equal(employeeRow.claims, '');
 });
 
+test('schedule keeps removed employee rows after save', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Schedule',
+    phone: '+79990000111',
+    email: 'owner-remove-schedule@example.com',
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Employee Removed',
+    phone: '+79990000112',
+    email: 'employee-remove-schedule@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['schedule'],
+    allowedPoints: ['moscow_6231'],
+  });
+
+  const initial = store.getSchedule('moscow_6231', '2026-06', owner);
+  assert.equal(initial.rows.some((row) => row.employeeId === employee.id), true);
+
+  const rowsWithoutEmployee = initial.rows.filter((row) => row.employeeId !== employee.id);
+  store.saveSchedule(owner, 'moscow_6231', '2026-06', rowsWithoutEmployee, [employee.id]);
+
+  const afterRemove = store.getSchedule('moscow_6231', '2026-06', owner);
+  assert.equal(afterRemove.rows.some((row) => row.employeeId === employee.id), false);
+  assert.equal(afterRemove.removedEmployeeIds.includes(employee.id), true);
+
+  store.saveSchedule(owner, 'moscow_6231', '2026-06', [
+    ...afterRemove.rows,
+    {
+      employeeId: employee.id,
+      days: { 1: { rateRub: '10', issuedCount: '1' } },
+    },
+  ], afterRemove.removedEmployeeIds);
+
+  const afterRestore = store.getSchedule('moscow_6231', '2026-06', owner);
+  assert.equal(afterRestore.rows.some((row) => row.employeeId === employee.id), true);
+  assert.equal(afterRestore.removedEmployeeIds.includes(employee.id), false);
+});
+
 test('claims are created in directory and distributed to the busiest point', () => {
   const store = createTempStore();
   const owner = store.createUser({
