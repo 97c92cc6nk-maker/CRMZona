@@ -473,9 +473,18 @@ test('employee can save only own schedule row without overwriting others', () =>
     allowedSections: ['schedule'],
     allowedPoints: ['moscow_6231'],
   });
+  const coworker = store.createUser({
+    fullName: 'Second Schedule Employee',
+    phone: '+79990000013',
+    email: 'second-schedule@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['schedule'],
+    allowedPoints: ['moscow_6231'],
+  });
 
   store.saveSchedule(owner, 'moscow_6231', '2026-06', [{
-    employeeId: owner.id,
+    employeeId: coworker.id,
     advanceCard: '100',
     salaryCard: '200',
     bonusExtra: '10',
@@ -492,7 +501,7 @@ test('employee can save only own schedule row without overwriting others', () =>
 
   assert.throws(
     () => store.saveSchedule(employee, 'moscow_6231', '2026-06', [{
-      employeeId: owner.id,
+      employeeId: coworker.id,
       days: { 2: { rateRub: '20', issuedCount: '5' } },
     }]),
     (error) => error instanceof ApiError && error.status === 403,
@@ -508,10 +517,10 @@ test('employee can save only own schedule row without overwriting others', () =>
   }]);
 
   const ownerView = store.getSchedule('moscow_6231', '2026-06', owner);
-  const ownerRow = ownerView.rows.find((row) => row.employeeId === owner.id);
+  const coworkerRow = ownerView.rows.find((row) => row.employeeId === coworker.id);
   const employeeRow = ownerView.rows.find((row) => row.employeeId === employee.id);
 
-  assert.equal(ownerRow.days['1'].rateRub, '15');
+  assert.equal(coworkerRow.days['1'].rateRub, '15');
   assert.equal(employeeRow.days['2'].issuedCount, '4');
   assert.equal(employeeRow.advanceCard, '50');
   assert.equal(employeeRow.salaryCard, '75');
@@ -619,6 +628,66 @@ test('assigned retail point grants employee schedule access without section flag
   const savedRow = ownerView.rows.find((row) => row.employeeId === employee.id);
   assert.equal(savedRow.days['1'].rateRub, '1000');
   assert.equal(savedRow.days['1'].issuedCount, '10');
+});
+
+test('schedule defaults include only employees assigned to the selected point', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Schedule Defaults',
+    phone: '+79990000191',
+    email: 'owner-schedule-defaults@example.com',
+    password: 'OwnerPass123',
+  });
+  const moscowEmployee = store.createUser({
+    fullName: 'Moscow Employee',
+    phone: '+79990000192',
+    email: 'moscow-defaults@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedPoints: ['moscow_6231'],
+  });
+  const krasnogorskEmployee = store.createUser({
+    fullName: 'Krasnogorsk Employee',
+    phone: '+79990000193',
+    email: 'krasnogorsk-defaults@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedPoints: ['krasnogorsk_466'],
+  });
+  const unassignedEmployee = store.createUser({
+    fullName: 'Unassigned Employee',
+    phone: '+79990000194',
+    email: 'unassigned-defaults@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+  });
+
+  const moscow = store.getSchedule('moscow_6231', '2026-09', owner);
+  assert.deepEqual(moscow.rows.map((row) => row.employeeId), [moscowEmployee.id]);
+  assert.deepEqual(moscow.employeeOptions.map((employee) => employee.id), [moscowEmployee.id]);
+
+  const krasnogorsk = store.getSchedule('krasnogorsk_466', '2026-09', owner);
+  assert.deepEqual(krasnogorsk.rows.map((row) => row.employeeId), [krasnogorskEmployee.id]);
+  assert.deepEqual(krasnogorsk.employeeOptions.map((employee) => employee.id), [krasnogorskEmployee.id]);
+  assert.equal(moscow.rows.some((row) => row.employeeId === owner.id), false);
+  assert.equal(moscow.rows.some((row) => row.employeeId === unassignedEmployee.id), false);
+
+  store.saveJson('schedules.json', {
+    'moscow_6231:2026-10': {
+      pointId: 'moscow_6231',
+      month: '2026-10',
+      rows: [
+        { employeeId: moscowEmployee.id, days: {} },
+        { employeeId: krasnogorskEmployee.id, days: {} },
+        { employeeId: unassignedEmployee.id, days: {} },
+      ],
+      removedEmployeeIds: [],
+      updatedAt: new Date().toISOString(),
+      updatedBy: owner.id,
+    },
+  });
+  const cleaned = store.getSchedule('moscow_6231', '2026-10', owner);
+  assert.deepEqual(cleaned.rows.map((row) => row.employeeId), [moscowEmployee.id]);
 });
 
 test('schedule keeps removed employee rows after save', () => {
@@ -1841,6 +1910,7 @@ test('owner can maintain employee directory records', () => {
     hireDate: '2026-02-01',
     officialEmployment: false,
     role: 'employee',
+    allowedPoints: ['moscow_6231'],
   });
 
   assert.equal(updated.role, 'employee');
