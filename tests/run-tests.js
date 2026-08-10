@@ -28,6 +28,22 @@ function createTempStore() {
   return new Store(dir);
 }
 
+function googleDrivePublicPermissionRequests(requests, fileId) {
+  return requests.filter((request) => (
+    request.url === `https://www.googleapis.com/drive/v3/files/${fileId}/permissions?supportsAllDrives=true&fields=id`
+    && request.options.method === 'POST'
+  ));
+}
+
+function assertGoogleDrivePublicPermission(request) {
+  assert.equal(request.options.headers.Authorization.startsWith('Bearer '), true);
+  assert.deepEqual(JSON.parse(request.options.body), {
+    role: 'reader',
+    type: 'anyone',
+    allowFileDiscovery: false,
+  });
+}
+
 test('registration validates all required fields', () => {
   assert.throws(
     () => validateRegistration({ fullName: '', phone: '', email: '' }),
@@ -1041,6 +1057,87 @@ test('deleting housekeeping expense removes archived Google Drive file', async (
   }
 });
 
+test('housekeeping receipt upload is shared by link in Google Drive', async () => {
+  const store = createTempStore();
+  const admin = store.createUser({
+    fullName: 'Admin Public Receipt',
+    phone: '+79990000183',
+    email: 'admin-public-receipt@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['expenses'],
+    allowedPoints: ['moscow_6231'],
+  });
+
+  const previousFetch = global.fetch;
+  const previousToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  const previousFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  const requests = [];
+  let folderCounter = 0;
+  process.env.GOOGLE_DRIVE_ACCESS_TOKEN = 'test-drive-token';
+  process.env.GOOGLE_DRIVE_FOLDER_ID = 'root-folder-1';
+
+  global.fetch = async (url, options = {}) => {
+    const request = { url: String(url), options };
+    requests.push(request);
+    if (request.url.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'expense-receipt-file-1',
+          webViewLink: 'https://drive.google.com/file/d/expense-receipt-file-1/view',
+        }),
+      };
+    }
+    if (request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true') && options.method === 'POST') {
+      folderCounter += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ id: `expense-folder-${folderCounter}`, name: JSON.parse(options.body).name }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ files: [] }),
+    };
+  };
+
+  try {
+    const expense = await store.createExpense(admin, {
+      pointId: 'moscow_6231',
+      expenseDate: '2026-07-11',
+      amount: '900',
+      paymentMethod: 'card',
+      receipt: {
+        fileName: 'receipt.pdf',
+        dataUrl: `data:application/pdf;base64,${Buffer.from('%PDF-public-receipt').toString('base64')}`,
+      },
+    });
+
+    assert.equal(expense.googleDrive.status, 'uploaded');
+    assert.equal(expense.googleDrive.fileId, 'expense-receipt-file-1');
+    assert.equal(expense.googleDrive.publicAccess, 'anyone_with_link');
+    const publicPermissionRequests = googleDrivePublicPermissionRequests(requests, 'expense-receipt-file-1');
+    assert.equal(publicPermissionRequests.length, 1);
+    assertGoogleDrivePublicPermission(publicPermissionRequests[0]);
+  } finally {
+    global.fetch = previousFetch;
+    if (previousToken === undefined) {
+      delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    } else {
+      process.env.GOOGLE_DRIVE_ACCESS_TOKEN = previousToken;
+    }
+    if (previousFolderId === undefined) {
+      delete process.env.GOOGLE_DRIVE_FOLDER_ID;
+    } else {
+      process.env.GOOGLE_DRIVE_FOLDER_ID = previousFolderId;
+    }
+  }
+});
+
 test('employee documents are archived and deleted in Google Drive', async () => {
   const store = createTempStore();
   const owner = store.createUser({
@@ -1115,8 +1212,12 @@ test('employee documents are archived and deleted in Google Drive', async () => 
     assert.equal(added.document.type, 'passport_first');
     assert.equal(added.document.typeLabel, 'Паспорт 1-ая');
     assert.equal(added.document.googleDrive.fileId, 'employee-document-file-1');
+    assert.equal(added.document.googleDrive.publicAccess, 'anyone_with_link');
     assert.match(added.document.fileName, /^\d{4}-\d{2}-\d{2}-Паспорт_1-ая-[a-f0-9]+\.pdf$/);
     assert.equal(added.user.employeeDocuments.length, 1);
+    const publicPermissionRequests = googleDrivePublicPermissionRequests(requests, 'employee-document-file-1');
+    assert.equal(publicPermissionRequests.length, 1);
+    assertGoogleDrivePublicPermission(publicPermissionRequests[0]);
 
     const createdFolderNames = requests
       .filter((request) => request.options.method === 'POST' && request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true'))
@@ -1180,6 +1281,7 @@ test('employee document upload falls back to service account when OAuth refresh 
   ];
   const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
   const tokenGrantTypes = [];
+  const requests = [];
   process.env.GOOGLE_DRIVE_CLIENT_ID = 'broken-client-id';
   process.env.GOOGLE_DRIVE_CLIENT_SECRET = 'broken-client-secret';
   process.env.GOOGLE_DRIVE_REFRESH_TOKEN = 'broken-refresh-token';
@@ -1192,6 +1294,7 @@ test('employee document upload falls back to service account when OAuth refresh 
 
   global.fetch = async (url, options = {}) => {
     const requestUrl = String(url);
+    requests.push({ url: requestUrl, options });
     if (requestUrl === 'https://oauth2.googleapis.com/token') {
       const body = new URLSearchParams(String(options.body));
       const grantType = body.get('grant_type');
@@ -1257,7 +1360,14 @@ test('employee document upload falls back to service account when OAuth refresh 
     ]);
     assert.equal(added.document.googleDrive.status, 'uploaded');
     assert.equal(added.document.googleDrive.fileId, 'employee-document-service-account-file');
+    assert.equal(added.document.googleDrive.publicAccess, 'anyone_with_link');
     assert.equal(added.user.employeeDocuments.length, 1);
+    const publicPermissionRequests = requests.filter((request) => (
+      request.url === 'https://www.googleapis.com/drive/v3/files/employee-document-service-account-file/permissions?supportsAllDrives=true&fields=id'
+      && request.options.method === 'POST'
+    ));
+    assert.equal(publicPermissionRequests.length, 1);
+    assertGoogleDrivePublicPermission(publicPermissionRequests[0]);
   } finally {
     global.fetch = previousFetch;
     for (const [key, value] of Object.entries(previousEnv)) {
@@ -1495,8 +1605,12 @@ test('retail points can store cards and Google Drive documents', async () => {
       },
     });
     assert.equal(added.document.googleDrive.fileId, 'retail-point-document-file-1');
+    assert.equal(added.document.googleDrive.publicAccess, 'anyone_with_link');
     assert.match(added.document.fileName, /^\d{4}-\d{2}-\d{2}-lease-[a-f0-9]+\.pdf$/);
     assert.equal(added.point.documents.length, 1);
+    const publicPermissionRequests = googleDrivePublicPermissionRequests(requests, 'retail-point-document-file-1');
+    assert.equal(publicPermissionRequests.length, 1);
+    assertGoogleDrivePublicPermission(publicPermissionRequests[0]);
 
     const createdFolderNames = requests
       .filter((request) => request.options.method === 'POST' && request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true'))
@@ -1639,8 +1753,12 @@ test('companies can store requisites, point links and Google Drive documents', a
       },
     });
     assert.equal(added.document.googleDrive.fileId, 'company-document-file-1');
+    assert.equal(added.document.googleDrive.publicAccess, 'anyone_with_link');
     assert.match(added.document.fileName, /^\d{4}-\d{2}-\d{2}-requisites-[a-f0-9]+\.pdf$/);
     assert.equal(added.company.documents.length, 1);
+    const publicPermissionRequests = googleDrivePublicPermissionRequests(requests, 'company-document-file-1');
+    assert.equal(publicPermissionRequests.length, 1);
+    assertGoogleDrivePublicPermission(publicPermissionRequests[0]);
 
     const createdFolderNames = requests
       .filter((request) => request.options.method === 'POST' && request.url.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true'))
