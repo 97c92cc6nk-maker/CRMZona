@@ -1270,6 +1270,60 @@ test('employee document upload falls back to service account when OAuth refresh 
   }
 });
 
+test('employee document upload stores a site copy when Google Drive rejects the file', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Local Document',
+    phone: '+79990000171',
+    email: 'owner-local-document@example.com',
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Employee Local Document',
+    phone: '+79990000172',
+    email: 'employee-local-document@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+  });
+  const previousFetch = global.fetch;
+  const previousToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  process.env.GOOGLE_DRIVE_ACCESS_TOKEN = 'test-drive-token';
+  global.fetch = async () => ({
+    ok: false,
+    status: 403,
+    json: async () => ({
+      error: { message: 'Service Accounts do not have storage quota.' },
+    }),
+  });
+
+  try {
+    const fileBytes = Buffer.from('%PDF-site-copy-doc');
+    const added = await store.addEmployeeDocument(owner, employee.id, {
+      documentType: 'snils',
+      file: {
+        fileName: 'snils.pdf',
+        dataUrl: `data:application/pdf;base64,${fileBytes.toString('base64')}`,
+      },
+    });
+    const savedUser = store.getUserById(employee.id);
+    const savedDocument = savedUser.employeeDocuments[0];
+    const file = await store.getEmployeeDocumentFile(owner, employee.id, savedDocument.id);
+
+    assert.equal(added.document.googleDrive.status, 'failed');
+    assert.equal(added.document.localUrl.includes(`/api/users/${employee.id}/documents/`), true);
+    assert.equal(savedUser.employeeDocuments.length, 1);
+    assert.equal(file.mimeType, 'application/pdf');
+    assert.equal(file.buffer.toString('utf8'), fileBytes.toString('utf8'));
+  } finally {
+    global.fetch = previousFetch;
+    if (previousToken === undefined) {
+      delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    } else {
+      process.env.GOOGLE_DRIVE_ACCESS_TOKEN = previousToken;
+    }
+  }
+});
+
 test('retail point legal entity options use company short names', () => {
   const options = retailPointCompanyOptions([
     { id: 'company-a', shortName: 'OIA', name: 'Company OIA', pointIds: ['moscow_6231'] },

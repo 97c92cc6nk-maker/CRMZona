@@ -812,9 +812,9 @@ function buildRetailPointDocumentRow(documentItem, editable) {
   size.textContent = documentItem.size ? formatFileSize(documentItem.size) : '';
 
   const linkWrap = document.createElement('span');
-  if (documentItem.googleDrive?.webViewLink) {
+  if (documentItem.googleDrive?.webViewLink || documentItem.localUrl) {
     const link = document.createElement('a');
-    link.href = documentItem.googleDrive.webViewLink;
+    link.href = documentItem.googleDrive?.webViewLink || documentItem.localUrl;
     link.target = '_blank';
     link.rel = 'noopener';
     link.textContent = 'Открыть';
@@ -3146,10 +3146,15 @@ async function handleEmployeeDocumentUpload() {
     els.employeeDocumentFile.value = '';
     renderEmployees();
     renderEmployeeCard();
+    const googleDrive = data.document?.googleDrive || {};
+    const driveUploaded = googleDrive.status === 'uploaded';
+    const message = driveUploaded
+      ? 'Документ загружен в Google Drive.'
+      : `Документ сохранен на сайте. Google Drive недоступен: ${googleDrive.reason || 'архив не создан.'}`;
     showNotice(
       els.employeesNotice,
-      ['Документ загружен в Google Drive.', storageWarningText(data.storage)].filter(Boolean).join(' '),
-      data.storage?.persistent === false ? 'warning' : 'success',
+      [message, storageWarningText(data.storage)].filter(Boolean).join(' '),
+      driveUploaded && data.storage?.persistent !== false ? 'success' : 'warning',
     );
   }, els.employeesNotice);
 }
