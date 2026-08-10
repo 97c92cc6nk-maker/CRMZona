@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -1140,6 +1141,131 @@ test('employee documents are archived and deleted in Google Drive', async () => 
       delete process.env.GOOGLE_DRIVE_FOLDER_ID;
     } else {
       process.env.GOOGLE_DRIVE_FOLDER_ID = previousFolderId;
+    }
+  }
+});
+
+test('employee document upload falls back to service account when OAuth refresh fails', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner OAuth Fallback',
+    phone: '+79990000161',
+    email: 'owner-oauth-fallback@example.com',
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Employee OAuth Fallback',
+    phone: '+79990000162',
+    email: 'employee-oauth-fallback@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+  });
+  const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const serviceAccount = {
+    client_email: 'crmzona-test@example.iam.gserviceaccount.com',
+    private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }),
+  };
+
+  const previousFetch = global.fetch;
+  const envKeys = [
+    'GOOGLE_DRIVE_ACCESS_TOKEN',
+    'GOOGLE_DRIVE_CLIENT_ID',
+    'GOOGLE_DRIVE_CLIENT_SECRET',
+    'GOOGLE_DRIVE_REFRESH_TOKEN',
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON',
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_BASE64',
+    'GOOGLE_SERVICE_ACCOUNT_JSON',
+    'GOOGLE_SERVICE_ACCOUNT_BASE64',
+    'GOOGLE_DRIVE_FOLDER_ID',
+  ];
+  const previousEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  const tokenGrantTypes = [];
+  process.env.GOOGLE_DRIVE_CLIENT_ID = 'broken-client-id';
+  process.env.GOOGLE_DRIVE_CLIENT_SECRET = 'broken-client-secret';
+  process.env.GOOGLE_DRIVE_REFRESH_TOKEN = 'broken-refresh-token';
+  process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = JSON.stringify(serviceAccount);
+  process.env.GOOGLE_DRIVE_FOLDER_ID = 'employee-docs-root';
+  delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  delete process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_BASE64;
+  delete process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  delete process.env.GOOGLE_SERVICE_ACCOUNT_BASE64;
+
+  global.fetch = async (url, options = {}) => {
+    const requestUrl = String(url);
+    if (requestUrl === 'https://oauth2.googleapis.com/token') {
+      const body = new URLSearchParams(String(options.body));
+      const grantType = body.get('grant_type');
+      tokenGrantTypes.push(grantType);
+      if (grantType === 'refresh_token') {
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ error: 'invalid_grant' }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: 'service-account-token' }),
+      };
+    }
+    if (requestUrl.startsWith('https://www.googleapis.com/upload/drive/v3/files')) {
+      assert.equal(options.headers.Authorization, 'Bearer service-account-token');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: 'employee-document-service-account-file',
+          webViewLink: 'https://drive.google.com/file/d/employee-document-service-account-file/view',
+        }),
+      };
+    }
+    if (requestUrl.startsWith('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true')) {
+      if (options.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: `folder-${JSON.parse(options.body).name}` }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ files: [] }),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ files: [] }),
+    };
+  };
+
+  try {
+    const dataUrl = `data:application/pdf;base64,${Buffer.from('%PDF-fallback-doc').toString('base64')}`;
+    const added = await store.addEmployeeDocument(owner, employee.id, {
+      documentType: 'inn',
+      file: {
+        fileName: 'inn.pdf',
+        dataUrl,
+      },
+    });
+
+    assert.deepEqual(tokenGrantTypes, [
+      'refresh_token',
+      'urn:ietf:params:oauth:grant-type:jwt-bearer',
+    ]);
+    assert.equal(added.document.googleDrive.status, 'uploaded');
+    assert.equal(added.document.googleDrive.fileId, 'employee-document-service-account-file');
+    assert.equal(added.user.employeeDocuments.length, 1);
+  } finally {
+    global.fetch = previousFetch;
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
     }
   }
 });
