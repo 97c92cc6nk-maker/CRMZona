@@ -9,6 +9,7 @@ const { execFile } = require('child_process');
 const clientPath = process.argv[2] || process.env.GOOGLE_OAUTH_CLIENT_PATH;
 const outPath = process.argv[3] || process.env.GOOGLE_OAUTH_OUT_PATH || path.resolve(process.cwd(), 'vercel-google-oauth.env');
 const statusPath = process.argv[4] || process.env.GOOGLE_OAUTH_STATUS_PATH || path.resolve(process.cwd(), 'google-drive-oauth-status.json');
+let pendingAuthUrl = '';
 
 if (!clientPath) {
   throw new Error('Usage: node scripts/google-drive-oauth-local.js <client_secret.json> [out.env] [status.json]');
@@ -20,7 +21,7 @@ function writeStatus(status) {
 
 function browserOpen(url) {
   const command = process.platform === 'win32'
-    ? ['powershell.exe', ['-NoProfile', '-Command', 'Start-Process', url]]
+    ? ['powershell.exe', ['-NoProfile', '-Command', '$url = $args[0]; Start-Process -FilePath $url', url]]
     : process.platform === 'darwin'
       ? ['open', [url]]
       : ['xdg-open', [url]];
@@ -48,8 +49,14 @@ async function main() {
   authUrl.searchParams.set('access_type', 'offline');
   authUrl.searchParams.set('prompt', 'consent');
   authUrl.searchParams.set('state', state);
+  pendingAuthUrl = authUrl.toString();
 
   const code = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('OAuth timeout: Google did not return an authorization code in 10 minutes.'));
+      server.close();
+    }, 10 * 60 * 1000);
+
     const server = http.createServer((req, res) => {
       const requestUrl = new URL(req.url, redirectUri);
       const requestState = requestUrl.searchParams.get('state');
@@ -59,6 +66,7 @@ async function main() {
       if (requestState !== state) {
         res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('OAuth state mismatch.');
+        clearTimeout(timeout);
         reject(new Error('OAuth state mismatch.'));
         server.close();
         return;
@@ -66,6 +74,7 @@ async function main() {
       if (error) {
         res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end(`OAuth error: ${error}`);
+        clearTimeout(timeout);
         reject(new Error(`OAuth error: ${error}`));
         server.close();
         return;
@@ -73,6 +82,7 @@ async function main() {
       if (!authCode) {
         res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('OAuth code missing.');
+        clearTimeout(timeout);
         reject(new Error('OAuth code missing.'));
         server.close();
         return;
@@ -80,14 +90,15 @@ async function main() {
 
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end('<h1>Google Drive подключен</h1><p>Можно закрыть эту вкладку и вернуться в Codex.</p>');
+      clearTimeout(timeout);
       resolve(authCode);
       server.close();
     });
 
     server.on('error', reject);
     server.listen(80, '127.0.0.1', () => {
-      writeStatus({ status: 'waiting', message: 'Waiting for Google OAuth callback.' });
-      browserOpen(authUrl.toString());
+      writeStatus({ status: 'waiting', message: 'Waiting for Google OAuth callback.', authUrl: pendingAuthUrl });
+      browserOpen(pendingAuthUrl);
     });
   });
 
@@ -120,6 +131,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  writeStatus({ status: 'failed', message: error.message });
+  writeStatus({ status: 'failed', message: error.message, ...(pendingAuthUrl ? { authUrl: pendingAuthUrl } : {}) });
   process.exit(1);
 });
