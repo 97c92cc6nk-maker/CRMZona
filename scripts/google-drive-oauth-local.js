@@ -21,7 +21,7 @@ function writeStatus(status) {
 
 function browserOpen(url) {
   const command = process.platform === 'win32'
-    ? ['powershell.exe', ['-NoProfile', '-Command', '$url = $args[0]; Start-Process -FilePath $url', url]]
+    ? ['rundll32.exe', ['url.dll,FileProtocolHandler', url]]
     : process.platform === 'darwin'
       ? ['open', [url]]
       : ['xdg-open', [url]];
