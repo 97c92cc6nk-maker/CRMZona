@@ -12,6 +12,7 @@ const {
   Store,
   SupabaseStore,
   buildAdminPayrollReport,
+  buildEmployeePayrollReport,
   createCaptchaChallenge,
   permissionsFor,
   retailPointCompanyOptions,
@@ -301,6 +302,76 @@ test('admin payroll report calculates monthly payout fields', () => {
   assert.equal(report.rows[0].premium, '7000');
   assert.equal(report.rows[0].payable, '45000');
   assert.equal(report.rows[0].comment, 'Checked');
+});
+
+test('employee payroll report calculates monthly schedule totals', () => {
+  const users = [
+    {
+      id: 'owner-1',
+      fullName: 'Owner User',
+      role: 'owner',
+      allowedPoints: ['moscow_6231', 'krasnogorsk_466'],
+      allowedSections: ['reports', 'schedule'],
+    },
+    {
+      id: 'employee-1',
+      fullName: 'Ivan Employee',
+      role: 'employee',
+      allowedPoints: ['moscow_6231'],
+      premiumHistory: [
+        { active: true, amount: '500', startDate: '2026-07-01' },
+      ],
+    },
+  ];
+  const schedules = {
+    'moscow_6231:2026-07': {
+      pointId: 'moscow_6231',
+      month: '2026-07',
+      removedEmployeeIds: [],
+      rows: [
+        {
+          id: 'row-1',
+          employeeId: 'employee-1',
+          employeeName: 'Ivan Employee',
+          advanceCard: '50',
+          salaryCard: '20',
+          bonusExtra: '500',
+          claims: '30',
+          days: {
+            1: { rateRub: '100', issuedCount: '2' },
+            16: { rateRub: '200', issuedCount: '3' },
+          },
+        },
+      ],
+    },
+  };
+  const claims = [
+    {
+      id: 'claim-1',
+      date: '2026-07-20',
+      amount: '30',
+      pointId: 'moscow_6231',
+      guiltyEmployeeId: 'employee-1',
+    },
+  ];
+
+  const report = buildEmployeePayrollReport(users, schedules, claims, '2026-07', users[0]);
+
+  assert.equal(report.rows.length, 1);
+  assert.equal(report.rows[0].fullName, 'Ivan Employee');
+  assert.equal(report.rows[0].pointId, 'moscow_6231');
+  assert.equal(report.rows[0].issuedTotal, '5');
+  assert.equal(report.rows[0].rateFirstHalf, '100');
+  assert.equal(report.rows[0].advanceCard, '50');
+  assert.equal(report.rows[0].rateSecondHalf, '200');
+  assert.equal(report.rows[0].salaryCard, '20');
+  assert.equal(report.rows[0].bonus, '25');
+  assert.equal(report.rows[0].premium, '500');
+  assert.equal(report.rows[0].claims, '30');
+  assert.equal(report.rows[0].advanceTotal, '50');
+  assert.equal(report.rows[0].salaryTotal, '675');
+  assert.equal(report.rows[0].payrollFund, '795');
+  assert.equal(report.totals.payrollFund, '795');
 });
 
 test('email is unique and password is stored as a hash', () => {

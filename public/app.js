@@ -18,6 +18,7 @@ const state = {
   claims: [],
   reports: [],
   adminPayrollReport: null,
+  employeePayrollReport: null,
   claimEmployees: [],
   employeeDocumentTypes: [],
   expenseFilters: {
@@ -474,6 +475,7 @@ async function handleLogout() {
     state.claims = [];
     state.reports = [];
     state.adminPayrollReport = null;
+    state.employeePayrollReport = null;
     state.claimEmployees = [];
     state.revealedEmployeePasswords = {};
     state.selectedEmployeeId = null;
@@ -1450,6 +1452,7 @@ async function loadReports() {
     if (state.selectedReportId && !state.reports.some((report) => report.id === state.selectedReportId)) {
       state.selectedReportId = null;
       state.adminPayrollReport = null;
+      state.employeePayrollReport = null;
     }
     renderReportsList();
   }, els.reportsNotice);
@@ -1459,6 +1462,7 @@ function renderReportsUnavailable() {
   state.reports = [];
   state.selectedReportId = null;
   state.adminPayrollReport = null;
+  state.employeePayrollReport = null;
   renderReportsList();
 }
 
@@ -1504,6 +1508,7 @@ function handleReportsListClick(event) {
 async function openReport(reportId) {
   state.selectedReportId = reportId;
   state.adminPayrollReport = null;
+  state.employeePayrollReport = null;
   if (!els.reportMonthInput.value) {
     els.reportMonthInput.value = currentMonth();
   }
@@ -1514,6 +1519,7 @@ async function openReport(reportId) {
 function closeReport() {
   state.selectedReportId = null;
   state.adminPayrollReport = null;
+  state.employeePayrollReport = null;
   showNotice(els.reportsNotice, '');
   renderReportsList();
 }
@@ -1527,7 +1533,9 @@ async function loadSelectedReport() {
     await loadAdminPayrollReport();
     return;
   }
-  renderEmployeePayrollReport();
+  if (state.selectedReportId === 'employee-payroll') {
+    await loadEmployeePayrollReport();
+  }
 }
 
 async function loadAdminPayrollReport() {
@@ -1541,16 +1549,114 @@ async function loadAdminPayrollReport() {
   }, els.reportsNotice);
 }
 
+async function loadEmployeePayrollReport() {
+  await runWithButton(els.loadReport, async () => {
+    const month = els.reportMonthInput.value || currentMonth();
+    const data = await api(`/api/reports/employee-payroll?month=${encodeURIComponent(month)}`);
+    state.employeePayrollReport = data.report;
+    state.permissions.canManageReports = Boolean(data.canManage);
+    renderEmployeePayrollReport();
+    showNotice(els.reportsNotice, '');
+  }, els.reportsNotice);
+}
+
 function renderEmployeePayrollReport() {
-  const report = state.reports.find((item) => item.id === state.selectedReportId);
-  els.reportDetailsTitle.textContent = report?.title || 'Отчет';
+  const employeeReport = state.employeePayrollReport;
+  if (!employeeReport) return;
+  els.reportDetailsTitle.textContent = `${employeeReport.title} · ${formatMonth(employeeReport.month)}`;
   els.saveAdminPayrollReport.classList.add('is-hidden');
   els.reportContent.replaceChildren();
 
-  const message = document.createElement('p');
-  message.className = 'empty-state';
-  message.textContent = 'Отчет "Расчет ЗП сотрудников" будет настроен отдельно.';
-  els.reportContent.append(message);
+  const columns = employeePayrollColumns();
+  const wrap = document.createElement('div');
+  wrap.className = 'table-wrap report-table-wrap';
+  const table = document.createElement('table');
+  table.className = 'reports-table employee-payroll-table';
+  const thead = document.createElement('thead');
+  const header = document.createElement('tr');
+  columns.forEach((column) => {
+    const th = document.createElement('th');
+    th.textContent = column.label;
+    if (column.numeric) th.className = 'numeric-cell';
+    header.append(th);
+  });
+  thead.append(header);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  if (!employeeReport.rows.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = columns.length;
+    cell.className = 'empty-state';
+    cell.textContent = 'Сотрудники для отчета не найдены.';
+    row.append(cell);
+    tbody.append(row);
+  } else {
+    for (const rowData of employeeReport.rows) {
+      tbody.append(buildEmployeePayrollRow(rowData, columns));
+    }
+  }
+  table.append(tbody);
+
+  if (employeeReport.rows.length) {
+    table.append(buildEmployeePayrollFooter(employeeReport.totals || {}, columns));
+  }
+
+  wrap.append(table);
+  els.reportContent.append(wrap);
+
+  if (employeeReport.generatedAt) {
+    const generated = document.createElement('p');
+    generated.className = 'report-updated';
+    generated.textContent = `Сформировано: ${formatDateTime(employeeReport.generatedAt)}`;
+    els.reportContent.append(generated);
+  }
+}
+
+function employeePayrollColumns() {
+  return [
+    { key: 'fullName', label: 'ФИО' },
+    { key: 'pointName', label: 'Точка' },
+    { key: 'issuedTotal', label: 'Выдано', numeric: true },
+    { key: 'rateFirstHalf', label: 'Ставка 1-15', numeric: true },
+    { key: 'advanceCard', label: 'Аванс на карту', numeric: true },
+    { key: 'rateSecondHalf', label: 'Ставка 16+', numeric: true },
+    { key: 'salaryCard', label: 'ЗП на карту', numeric: true },
+    { key: 'bonus', label: 'Бонус', numeric: true },
+    { key: 'premium', label: 'Премия', numeric: true },
+    { key: 'claims', label: 'Претензии', numeric: true },
+    { key: 'advanceTotal', label: 'Итого аванс', numeric: true },
+    { key: 'salaryTotal', label: 'Итого ЗП', numeric: true },
+    { key: 'payrollFund', label: 'Фонд оплаты', numeric: true },
+  ];
+}
+
+function buildEmployeePayrollRow(rowData, columns) {
+  const row = document.createElement('tr');
+  for (const column of columns) {
+    const value = column.numeric
+      ? formatMoney(toNumber(rowData[column.key]))
+      : rowData[column.key] || '';
+    appendCell(row, value, column.numeric ? 'numeric-cell' : column.key === 'fullName' ? 'report-name-cell' : '');
+  }
+  return row;
+}
+
+function buildEmployeePayrollFooter(totals, columns) {
+  const tfoot = document.createElement('tfoot');
+  const row = document.createElement('tr');
+  for (const column of columns) {
+    if (column.key === 'fullName') {
+      appendCell(row, 'Итого', 'summary-total-label');
+    } else if (column.numeric) {
+      appendCell(row, formatMoney(toNumber(totals[column.key])), 'numeric-cell');
+    } else {
+      appendCell(row, '');
+    }
+  }
+  tfoot.append(row);
+  return tfoot;
 }
 
 function renderAdminPayrollReport() {
