@@ -1623,6 +1623,7 @@ test('retail points can store cards and Google Drive documents', async () => {
     email: 'retail-admin@example.com',
     password: 'AdminPass123',
     role: 'admin',
+    unofficialSalary: '25000',
     allowedSections: ['points'],
     allowedPoints: ['moscow_6231', 'krasnogorsk_466'],
   });
@@ -1673,6 +1674,7 @@ test('retail points can store cards and Google Drive documents', async () => {
     phone: admin.phone,
     email: admin.email,
     role: 'admin',
+    unofficialSalary: admin.unofficialSalary,
     allowedSections: admin.allowedSections,
     allowedPoints: [...admin.allowedPoints, point.id],
   });
@@ -1969,6 +1971,15 @@ test('owner can maintain employee directory records', () => {
   assert.equal(employee.hireDate, '2026-01-15');
   assert.equal(employee.officialEmployment, true);
 
+  assert.throws(
+    () => store.updateUser(owner, employee.id, {
+      ...employee,
+      unofficialSalary: '',
+      role: 'admin',
+    }),
+    (error) => error instanceof ApiError && error.status === 400,
+  );
+
   const updated = store.updateUser(owner, employee.id, {
     lastName: 'Петров',
     firstName: 'Петр',
@@ -1991,7 +2002,7 @@ test('owner can maintain employee directory records', () => {
   assert.equal(updated.middleName, 'Петрович');
   assert.equal(updated.position, 'Администратор');
   assert.equal(updated.officialSalary, '110000.5');
-  assert.equal(updated.unofficialSalary, '30000');
+  assert.equal(updated.unofficialSalary, '');
   assert.equal(updated.officialEmployment, false);
 
   store.saveSchedule(owner, 'moscow_6231', '2026-06', [{

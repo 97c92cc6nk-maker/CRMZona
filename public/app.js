@@ -190,7 +190,10 @@ function bindEvents() {
   els.employeeForm.elements.role.addEventListener('change', renderEmployeeFormAccessControls);
   els.employeeCardForm.addEventListener('submit', handleEmployeeCardSave);
   els.employeeCardForm.elements.role.addEventListener('change', () => {
-    renderEmployeeCardAccess(selectedEmployee(), selectedEmployeeEditable());
+    const editable = selectedEmployeeEditable();
+    renderEmployeeCardAccess(selectedEmployee(), editable);
+    setEmployeeCardEditable(editable);
+    syncUnofficialSalaryField(els.employeeCardForm, { editable });
   });
   els.closeEmployeeCard.addEventListener('click', closeEmployeeCard);
   els.addPremiumRow.addEventListener('click', () => addPremiumHistoryRow());
@@ -2692,6 +2695,30 @@ function canManageEmployeePoints() {
   return state.user?.role === 'owner' || state.user?.role === 'admin';
 }
 
+function roleRequiresUnofficialSalary(role) {
+  return ['owner', 'admin', 'installer'].includes(role);
+}
+
+function shouldShowUnofficialSalary(role) {
+  return role !== 'employee';
+}
+
+function syncUnofficialSalaryField(form, options = {}) {
+  const field = form?.elements?.unofficialSalary;
+  if (!field) return;
+  const role = form.elements.role?.value || selectedEmployee()?.role || 'employee';
+  const editable = options.editable !== false;
+  const visible = shouldShowUnofficialSalary(role);
+  const label = field.closest('label');
+
+  label?.classList.toggle('is-hidden', !visible);
+  field.required = visible && roleRequiresUnofficialSalary(role);
+  if (!visible) {
+    field.value = '';
+  }
+  field.disabled = !visible || !editable;
+}
+
 function renderEmployeeCard() {
   const user = selectedEmployee();
   if (!user) {
@@ -2725,6 +2752,7 @@ function renderEmployeeCard() {
   renderEmployeeDocumentTypeOptions();
   renderEmployeeDocuments(user.employeeDocuments || [], editable);
   setEmployeeCardEditable(editable);
+  syncUnofficialSalaryField(form, { editable });
   els.employeeCardPanel.classList.remove('is-hidden');
 }
 
@@ -3166,6 +3194,7 @@ function renderEmployeeFormAccessControls() {
     pointTarget.closest('fieldset')?.classList.remove('is-hidden');
     setInputsDisabled(pointTarget, !canEditPoints);
   }
+  syncUnofficialSalaryField(els.employeeForm, { editable: true });
 }
 
 function pointAccessOptions(exceptUserId = '', targetRole = '') {
@@ -3362,8 +3391,12 @@ function replaceUserInState(user) {
 
 function employeePayloadFromForm(form) {
   const values = formValues(form);
+  const role = canManageEmployeeRoles() ? values.role || 'employee' : 'employee';
   values.officialEmployment = form.elements.officialEmployment.checked;
   values.premiumEnabled = form.elements.premiumEnabled.checked;
+  if (role === 'employee') {
+    delete values.unofficialSalary;
+  }
   if (!canManageEmployeeRoles()) {
     delete values.role;
   }
@@ -3385,6 +3418,9 @@ function employeePayloadFromCard(form) {
   const currentRole = selectedEmployee()?.role || form.elements.role.value || values.role || 'employee';
   const effectiveRole = canManageEmployeeRoles() ? values.role || currentRole : currentRole;
   values.officialEmployment = form.elements.officialEmployment.checked;
+  if (effectiveRole === 'employee') {
+    delete values.unofficialSalary;
+  }
   if (!canManageEmployeeRoles()) {
     delete values.role;
   }
