@@ -21,6 +21,7 @@ const state = {
   employeePayrollReport: null,
   claimEmployees: [],
   employeeDocumentTypes: [],
+  employeeSortMode: 'name',
   expenseFilters: {
     point: '',
     payment: '',
@@ -74,6 +75,7 @@ function bindElements() {
     profileNotice: document.getElementById('profileNotice'),
     passwordForm: document.getElementById('passwordForm'),
     employeesTab: document.getElementById('employeesTab'),
+    employeeSortSelect: document.getElementById('employeeSortSelect'),
     employeePasswordHeader: document.getElementById('employeePasswordHeader'),
     employeesBody: document.getElementById('employeesBody'),
     employeesNotice: document.getElementById('employeesNotice'),
@@ -187,6 +189,10 @@ function bindEvents() {
   els.logoutButton.addEventListener('click', handleLogout);
   els.passwordForm.addEventListener('submit', handlePasswordChange);
   els.employeeForm.addEventListener('submit', handleEmployeeCreate);
+  els.employeeSortSelect?.addEventListener('change', () => {
+    state.employeeSortMode = els.employeeSortSelect.value || 'name';
+    renderEmployees();
+  });
   els.employeeForm.elements.role.addEventListener('change', renderEmployeeFormAccessControls);
   els.employeeCardForm.addEventListener('submit', handleEmployeeCardSave);
   els.employeeCardForm.elements.role.addEventListener('change', () => {
@@ -2550,11 +2556,14 @@ function renderEmployees() {
   els.employeesBody.replaceChildren();
   const canResetPasswords = canResetEmployeePasswords();
   els.employeePasswordHeader?.classList.toggle('is-hidden', !canResetPasswords);
+  if (els.employeeSortSelect) {
+    els.employeeSortSelect.value = state.employeeSortMode || 'name';
+  }
 
   if (!state.users.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = canResetPasswords ? 8 : 7;
+    cell.colSpan = canResetPasswords ? 9 : 8;
     cell.className = 'empty-state';
     cell.textContent = 'Нет сотрудников.';
     row.append(cell);
@@ -2562,7 +2571,7 @@ function renderEmployees() {
     return;
   }
 
-  for (const user of state.users) {
+  for (const user of sortedEmployeesForList(state.users)) {
     els.employeesBody.append(buildEmployeeRow(user));
   }
 }
@@ -2585,6 +2594,7 @@ function buildEmployeeRow(user) {
   appendCell(row, nameParts.middleName || '');
   appendCell(row, user.phone || '');
   appendCell(row, user.email || '');
+  appendCell(row, employeePointListText(user), 'employee-points-cell');
   if (canResetEmployeePasswords()) {
     row.append(employeePasswordCell(user));
   }
@@ -2658,6 +2668,46 @@ function employeeNameParts(user) {
     firstName: user.firstName || parts[1] || '',
     middleName: user.middleName || parts.slice(2).join(' '),
   };
+}
+
+function sortedEmployeesForList(users) {
+  const sortMode = state.employeeSortMode || 'name';
+  return [...users].sort((left, right) => {
+    if (sortMode === 'point') {
+      const pointCompare = employeePointSortValue(left).localeCompare(employeePointSortValue(right), 'ru');
+      if (pointCompare) return pointCompare;
+    }
+    return employeeNameSortValue(left).localeCompare(employeeNameSortValue(right), 'ru');
+  });
+}
+
+function employeeNameSortValue(user) {
+  const parts = employeeNameParts(user);
+  return [parts.lastName, parts.firstName, parts.middleName, user.fullName || '']
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase('ru');
+}
+
+function employeePointSortValue(user) {
+  const labels = employeePointLabels(user);
+  if (!labels.length) return 'яяя';
+  return labels[0].toLocaleLowerCase('ru');
+}
+
+function employeePointListText(user) {
+  if (user.role === 'owner') return 'Все';
+  const labels = employeePointLabels(user);
+  return labels.length ? labels.join(', ') : 'Нет';
+}
+
+function employeePointLabels(user) {
+  if (user.role === 'owner') return ['Все'];
+  const allowedPoints = Array.isArray(user.allowedPoints) ? user.allowedPoints : [];
+  return allowedPoints
+    .map((pointId) => pointLabel(pointId))
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right, 'ru'));
 }
 
 function openEmployeeCard(userId) {

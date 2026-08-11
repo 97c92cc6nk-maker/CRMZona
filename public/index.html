@@ -345,6 +345,15 @@
 
         <section class="panel" aria-labelledby="employeesListTitle">
           <h3 id="employeesListTitle">Список сотрудников</h3>
+          <div class="toolbar employee-list-toolbar">
+            <label>
+              Сортировка
+              <select id="employeeSortSelect">
+                <option value="name">ФИО А-Я</option>
+                <option value="point">Торговая точка</option>
+              </select>
+            </label>
+          </div>
           <div class="table-wrap employees-wrap">
             <table class="employees-table">
               <thead>
@@ -354,6 +363,7 @@
                   <th>Отчество</th>
                   <th>Телефон</th>
                   <th>Email</th>
+                  <th>Торговые точки</th>
                   <th class="is-hidden" id="employeePasswordHeader">Пароль</th>
                   <th>Тип учетной записи</th>
                   <th>Действие</th>

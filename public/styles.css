@@ -729,7 +729,7 @@ tbody tr:last-child td {
 }
 
 .employees-table {
-  min-width: 980px;
+  min-width: 1160px;
 }
 
 .retail-points-table {
@@ -883,6 +883,17 @@ tbody tr:last-child td {
   min-width: 18px;
   width: 18px;
   min-height: 18px;
+}
+
+.employee-list-toolbar {
+  margin: 10px 0 12px;
+}
+
+.employee-points-cell {
+  min-width: 220px;
+  max-width: 340px;
+  color: var(--muted);
+  white-space: normal;
 }
 
 .password-reset-cell {
