@@ -17,6 +17,7 @@ const state = {
   expenses: [],
   claims: [],
   reports: [],
+  reportOptions: [],
   adminPayrollReport: null,
   employeePayrollReport: null,
   employeePayrollFilters: {
@@ -89,6 +90,8 @@ function bindElements() {
     employeeCardTitle: document.getElementById('employeeCardTitle'),
     employeeCardForm: document.getElementById('employeeCardForm'),
     employeeCardPremiumRows: document.getElementById('employeeCardPremiumRows'),
+    employeeCardReports: document.getElementById('employeeCardReports'),
+    employeeFormReports: document.getElementById('employeeFormReports'),
     employeeDocumentType: document.getElementById('employeeDocumentType'),
     employeeDocumentFile: document.getElementById('employeeDocumentFile'),
     uploadEmployeeDocument: document.getElementById('uploadEmployeeDocument'),
@@ -498,6 +501,7 @@ async function handleLogout() {
     state.expenses = [];
     state.claims = [];
     state.reports = [];
+    state.reportOptions = [];
     state.adminPayrollReport = null;
     state.employeePayrollReport = null;
     state.claimEmployees = [];
@@ -2655,6 +2659,7 @@ async function loadUsers() {
     state.roles = data.roles;
     state.employeeDocumentTypes = data.documentTypes || [];
     state.sections = data.sections || state.sections;
+    state.reportOptions = data.reports || state.reportOptions;
     state.points = data.points || state.points;
     renderEmployeeFormAccessControls();
     renderEmployees();
@@ -2938,13 +2943,21 @@ function renderEmployeeCardRole(user, editable) {
 
 function renderEmployeeCardAccess(user, editable) {
   const sectionTarget = document.querySelector('[data-access-card="sections"]');
+  const reportTarget = document.querySelector('[data-access-card="reports"]');
   const pointTarget = document.querySelector('[data-access-card="points"]');
   const role = els.employeeCardForm.elements.role.value || user?.role || 'employee';
   if (sectionTarget) {
     const canEditSections = editable && canManageEmployeeSections();
     sectionTarget.closest('fieldset')?.classList.toggle('is-hidden', !canManageEmployeeSections());
     sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections, new Set(user?.allowedSections || [])));
+    sectionTarget.onchange = syncEmployeeCardReportAccess;
     setInputsDisabled(sectionTarget, !canEditSections);
+  }
+  if (reportTarget) {
+    const canEditReports = editable && canManageEmployeeSections();
+    reportTarget.replaceChildren(buildAccessCheckboxes('allowedReports', reportAccessOptions(), new Set(user?.allowedReports || [])));
+    syncEmployeeCardReportAccess();
+    setInputsDisabled(reportTarget, !canEditReports || !employeeCardReportsSectionChecked());
   }
   if (pointTarget) {
     const pointOptions = pointAccessOptions(user?.id, role);
@@ -2962,6 +2975,8 @@ function setEmployeeCardEditable(editable) {
       field.disabled = !editable
         || field.dataset.locked === 'true'
         || (field.name === 'role' && !canManageEmployeeRoles())
+        || (field.name === 'allowedSections' && !canManageEmployeeSections())
+        || (field.name === 'allowedReports' && (!canManageEmployeeSections() || !employeeCardReportsSectionChecked()))
         || (field.name === 'allowedPoints' && !canManageEmployeePoints());
     });
   els.addPremiumRow.disabled = !editable;
@@ -3334,6 +3349,7 @@ function buildPointAccessDropdown(field, options, selected = new Set(), editable
 
 function renderEmployeeFormAccessControls() {
   const sectionTarget = document.querySelector('[data-access-form="sections"]');
+  const reportTarget = document.querySelector('[data-access-form="reports"]');
   const pointTarget = document.querySelector('[data-access-form="points"]');
   if (els.employeeForm?.elements.role) {
     if (!canManageEmployeeRoles()) {
@@ -3345,7 +3361,13 @@ function renderEmployeeFormAccessControls() {
   if (sectionTarget) {
     sectionTarget.closest('fieldset')?.classList.toggle('is-hidden', !canManageEmployeeSections());
     sectionTarget.replaceChildren(buildAccessCheckboxes('allowedSections', state.sections));
+    sectionTarget.onchange = syncEmployeeFormReportAccess;
     setInputsDisabled(sectionTarget, !canManageEmployeeSections());
+  }
+  if (reportTarget) {
+    reportTarget.replaceChildren(buildAccessCheckboxes('allowedReports', reportAccessOptions()));
+    syncEmployeeFormReportAccess();
+    setInputsDisabled(reportTarget, !canManageEmployeeSections() || !employeeFormReportsSectionChecked());
   }
   if (pointTarget) {
     const pointOptions = pointAccessOptions('', role);
@@ -3355,6 +3377,49 @@ function renderEmployeeFormAccessControls() {
     setInputsDisabled(pointTarget, !canEditPoints);
   }
   syncUnofficialSalaryField(els.employeeForm, { editable: true });
+}
+
+function reportAccessOptions() {
+  return (state.reportOptions || []).map((report) => ({
+    id: report.id,
+    label: report.title || report.label || report.id,
+  }));
+}
+
+function employeeCardReportsSectionChecked() {
+  return Boolean(els.employeeCardForm?.querySelector('input[name="allowedSections"][value="reports"]:checked'));
+}
+
+function employeeFormReportsSectionChecked() {
+  return Boolean(els.employeeForm?.querySelector('input[name="allowedSections"][value="reports"]:checked'));
+}
+
+function syncEmployeeCardReportAccess() {
+  const reportTarget = document.querySelector('[data-access-card="reports"]');
+  if (!reportTarget) return;
+  const visible = canManageEmployeeSections() && employeeCardReportsSectionChecked();
+  reportTarget.closest('fieldset')?.classList.toggle('is-hidden', !visible);
+  setInputsDisabled(reportTarget, !visible || !selectedEmployeeEditable());
+  if (!visible) {
+    clearCheckedValues(reportTarget, 'allowedReports');
+  }
+}
+
+function syncEmployeeFormReportAccess() {
+  const reportTarget = document.querySelector('[data-access-form="reports"]');
+  if (!reportTarget) return;
+  const visible = canManageEmployeeSections() && employeeFormReportsSectionChecked();
+  reportTarget.closest('fieldset')?.classList.toggle('is-hidden', !visible);
+  setInputsDisabled(reportTarget, !visible || !canManageEmployeeSections());
+  if (!visible) {
+    clearCheckedValues(reportTarget, 'allowedReports');
+  }
+}
+
+function clearCheckedValues(root, name) {
+  root.querySelectorAll(`input[name="${name}"]:checked`).forEach((input) => {
+    input.checked = false;
+  });
 }
 
 function pointAccessOptions(exceptUserId = '', targetRole = '') {
@@ -3562,8 +3627,12 @@ function employeePayloadFromForm(form) {
   }
   if (canManageEmployeeSections()) {
     values.allowedSections = formArrayValues(form, 'allowedSections');
+    values.allowedReports = values.allowedSections.includes('reports')
+      ? formArrayValues(form, 'allowedReports')
+      : [];
   } else {
     delete values.allowedSections;
+    delete values.allowedReports;
   }
   if (canManageEmployeePoints()) {
     values.allowedPoints = formArrayValues(form, 'allowedPoints');
@@ -3586,8 +3655,12 @@ function employeePayloadFromCard(form) {
   }
   if (canManageEmployeeSections()) {
     values.allowedSections = checkedValues(form, 'allowedSections');
+    values.allowedReports = values.allowedSections.includes('reports')
+      ? checkedValues(form, 'allowedReports')
+      : [];
   } else {
     delete values.allowedSections;
+    delete values.allowedReports;
   }
   if (canManageEmployeePoints()) {
     values.allowedPoints = checkedValues(form, 'allowedPoints');

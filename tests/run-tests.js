@@ -15,6 +15,7 @@ const {
   buildEmployeePayrollReport,
   createCaptchaChallenge,
   permissionsFor,
+  reportDirectoryForUser,
   retailPointCompanyOptions,
   resetUserPasswordAsOwner,
   sendPasswordEmail,
@@ -372,6 +373,37 @@ test('employee payroll report calculates monthly schedule totals', () => {
   assert.equal(report.rows[0].salaryTotal, '675');
   assert.equal(report.rows[0].payrollFund, '795');
   assert.equal(report.totals.payrollFund, '795');
+});
+
+test('report access can be scoped per employee', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Reports Scope',
+    phone: '+79990000201',
+    email: 'owner-report-scope@example.com',
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Employee Reports Scope',
+    phone: '+79990000202',
+    email: 'employee-report-scope@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['reports'],
+    allowedReports: ['employee-payroll'],
+  });
+
+  assert.deepEqual(employee.allowedReports, ['employee-payroll']);
+  assert.deepEqual(reportDirectoryForUser(employee).map((report) => report.id), ['employee-payroll']);
+
+  const updated = store.updateUser(owner, employee.id, {
+    ...employee,
+    allowedSections: [],
+    allowedReports: ['admin-payroll'],
+  });
+
+  assert.deepEqual(updated.allowedReports, []);
+  assert.deepEqual(reportDirectoryForUser(updated).map((report) => report.id), []);
 });
 
 test('email is unique and password is stored as a hash', () => {
