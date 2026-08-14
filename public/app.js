@@ -19,6 +19,10 @@ const state = {
   reports: [],
   adminPayrollReport: null,
   employeePayrollReport: null,
+  employeePayrollFilters: {
+    pointId: '',
+    employeeId: '',
+  },
   claimEmployees: [],
   employeeDocumentTypes: [],
   employeeSortMode: 'name',
@@ -138,6 +142,9 @@ function bindElements() {
     loadReport: document.getElementById('loadReport'),
     saveAdminPayrollReport: document.getElementById('saveAdminPayrollReport'),
     closeReport: document.getElementById('closeReport'),
+    employeePayrollFilters: document.getElementById('employeePayrollFilters'),
+    employeePayrollPointFilter: document.getElementById('employeePayrollPointFilter'),
+    employeePayrollEmployeeFilter: document.getElementById('employeePayrollEmployeeFilter'),
     reportContent: document.getElementById('reportContent'),
     repairForm: document.getElementById('repairForm'),
     repairPointSelect: document.getElementById('repairPointSelect'),
@@ -228,6 +235,14 @@ function bindEvents() {
   els.loadReport.addEventListener('click', loadSelectedReport);
   els.reportMonthInput.addEventListener('change', loadSelectedReport);
   els.saveAdminPayrollReport.addEventListener('click', saveAdminPayrollReport);
+  els.employeePayrollPointFilter?.addEventListener('change', () => {
+    state.employeePayrollFilters.pointId = els.employeePayrollPointFilter.value || '';
+    renderEmployeePayrollReport();
+  });
+  els.employeePayrollEmployeeFilter?.addEventListener('change', () => {
+    state.employeePayrollFilters.employeeId = els.employeePayrollEmployeeFilter.value || '';
+    renderEmployeePayrollReport();
+  });
   els.reportContent.addEventListener('input', handleReportContentInput);
   els.repairForm.addEventListener('submit', handleRepairCreate);
   els.refreshRepairs.addEventListener('click', loadRepairs);
@@ -1462,6 +1477,8 @@ async function loadReports() {
       state.selectedReportId = null;
       state.adminPayrollReport = null;
       state.employeePayrollReport = null;
+      resetEmployeePayrollFilters();
+      els.employeePayrollFilters?.classList.add('is-hidden');
     }
     renderReportsList();
   }, els.reportsNotice);
@@ -1472,6 +1489,8 @@ function renderReportsUnavailable() {
   state.selectedReportId = null;
   state.adminPayrollReport = null;
   state.employeePayrollReport = null;
+  resetEmployeePayrollFilters();
+  els.employeePayrollFilters?.classList.add('is-hidden');
   renderReportsList();
 }
 
@@ -1518,6 +1537,7 @@ async function openReport(reportId) {
   state.selectedReportId = reportId;
   state.adminPayrollReport = null;
   state.employeePayrollReport = null;
+  resetEmployeePayrollFilters();
   if (!els.reportMonthInput.value) {
     els.reportMonthInput.value = currentMonth();
   }
@@ -1529,6 +1549,8 @@ function closeReport() {
   state.selectedReportId = null;
   state.adminPayrollReport = null;
   state.employeePayrollReport = null;
+  resetEmployeePayrollFilters();
+  els.employeePayrollFilters?.classList.add('is-hidden');
   showNotice(els.reportsNotice, '');
   renderReportsList();
 }
@@ -1575,8 +1597,10 @@ function renderEmployeePayrollReport() {
   els.reportDetailsTitle.textContent = `${employeeReport.title} · ${formatMonth(employeeReport.month)}`;
   els.saveAdminPayrollReport.classList.add('is-hidden');
   els.reportContent.replaceChildren();
+  syncEmployeePayrollFilters(employeeReport);
 
   const columns = employeePayrollColumns();
+  const filteredRows = filteredEmployeePayrollRows(employeeReport.rows || []);
   const wrap = document.createElement('div');
   wrap.className = 'table-wrap report-table-wrap';
   const table = document.createElement('table');
@@ -1593,23 +1617,25 @@ function renderEmployeePayrollReport() {
   table.append(thead);
 
   const tbody = document.createElement('tbody');
-  if (!employeeReport.rows.length) {
+  if (!filteredRows.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
     cell.colSpan = columns.length;
     cell.className = 'empty-state';
-    cell.textContent = 'Сотрудники для отчета не найдены.';
+    cell.textContent = employeeReport.rows.length
+      ? 'Нет строк по выбранному отбору.'
+      : 'Сотрудники для отчета не найдены.';
     row.append(cell);
     tbody.append(row);
   } else {
-    for (const rowData of employeeReport.rows) {
+    for (const rowData of filteredRows) {
       tbody.append(buildEmployeePayrollRow(rowData, columns));
     }
   }
   table.append(tbody);
 
-  if (employeeReport.rows.length) {
-    table.append(buildEmployeePayrollFooter(employeeReport.totals || {}, columns));
+  if (filteredRows.length) {
+    table.append(buildEmployeePayrollFooter(calculateEmployeePayrollTotals(filteredRows, columns), columns));
   }
 
   wrap.append(table);
@@ -1639,6 +1665,89 @@ function employeePayrollColumns() {
     { key: 'salaryTotal', label: 'Итого ЗП', numeric: true },
     { key: 'payrollFund', label: 'Фонд оплаты', numeric: true },
   ];
+}
+
+function resetEmployeePayrollFilters() {
+  state.employeePayrollFilters = { pointId: '', employeeId: '' };
+}
+
+function syncEmployeePayrollFilters(report) {
+  if (!els.employeePayrollFilters || !els.employeePayrollPointFilter || !els.employeePayrollEmployeeFilter) return;
+  els.employeePayrollFilters.classList.remove('is-hidden');
+
+  const rows = Array.isArray(report?.rows) ? report.rows : [];
+  const pointOptions = uniqueReportOptions(rows, 'pointId', 'pointName');
+  if (state.employeePayrollFilters.pointId && !pointOptions.some((option) => option.value === state.employeePayrollFilters.pointId)) {
+    state.employeePayrollFilters.pointId = '';
+  }
+  fillReportFilterSelect(
+    els.employeePayrollPointFilter,
+    'Все точки',
+    pointOptions,
+    state.employeePayrollFilters.pointId,
+  );
+
+  const rowsForEmployeeOptions = state.employeePayrollFilters.pointId
+    ? rows.filter((row) => row.pointId === state.employeePayrollFilters.pointId)
+    : rows;
+  const employeeOptions = uniqueReportOptions(rowsForEmployeeOptions, 'employeeId', 'fullName');
+  if (state.employeePayrollFilters.employeeId && !employeeOptions.some((option) => option.value === state.employeePayrollFilters.employeeId)) {
+    state.employeePayrollFilters.employeeId = '';
+  }
+  fillReportFilterSelect(
+    els.employeePayrollEmployeeFilter,
+    'Все сотрудники',
+    employeeOptions,
+    state.employeePayrollFilters.employeeId,
+  );
+}
+
+function uniqueReportOptions(rows, valueKey, labelKey) {
+  const byValue = new Map();
+  for (const row of rows) {
+    const value = row?.[valueKey] || '';
+    const label = row?.[labelKey] || value;
+    if (!value || byValue.has(value)) continue;
+    byValue.set(value, { value, label });
+  }
+  return [...byValue.values()].sort((left, right) => left.label.localeCompare(right.label, 'ru'));
+}
+
+function fillReportFilterSelect(select, allLabel, options, selectedValue) {
+  select.replaceChildren();
+  const all = document.createElement('option');
+  all.value = '';
+  all.textContent = allLabel;
+  select.append(all);
+  for (const item of options) {
+    const option = document.createElement('option');
+    option.value = item.value;
+    option.textContent = item.label;
+    select.append(option);
+  }
+  select.value = selectedValue || '';
+}
+
+function filteredEmployeePayrollRows(rows) {
+  const filters = state.employeePayrollFilters || {};
+  return rows.filter((row) => {
+    if (filters.pointId && row.pointId !== filters.pointId) return false;
+    if (filters.employeeId && row.employeeId !== filters.employeeId) return false;
+    return true;
+  });
+}
+
+function calculateEmployeePayrollTotals(rows, columns) {
+  const totals = {};
+  for (const column of columns) {
+    if (column.numeric) totals[column.key] = 0;
+  }
+  for (const row of rows) {
+    for (const key of Object.keys(totals)) {
+      totals[key] += toNumber(row[key]);
+    }
+  }
+  return totals;
 }
 
 function buildEmployeePayrollRow(rowData, columns) {
@@ -1674,6 +1783,7 @@ function renderAdminPayrollReport() {
   const canManage = Boolean(state.permissions.canManageReports);
   els.reportDetailsTitle.textContent = `${report.title} · ${formatMonth(report.month)}`;
   els.saveAdminPayrollReport.classList.toggle('is-hidden', !canManage);
+  els.employeePayrollFilters?.classList.add('is-hidden');
   els.reportContent.replaceChildren();
 
   const wrap = document.createElement('div');

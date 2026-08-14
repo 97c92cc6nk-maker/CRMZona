@@ -778,6 +778,20 @@ tbody tr:last-child td {
   margin-top: 12px;
 }
 
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.report-filters.is-hidden {
+  display: none;
+}
+
+.report-filters label {
+  min-width: 190px;
+}
+
 .report-table-wrap {
   margin-top: 16px;
 }
