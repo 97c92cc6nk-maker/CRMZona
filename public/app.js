@@ -1760,9 +1760,18 @@ function buildEmployeePayrollRow(rowData, columns) {
     const value = column.numeric
       ? formatMoney(toNumber(rowData[column.key]))
       : rowData[column.key] || '';
-    appendCell(row, value, column.numeric ? 'numeric-cell' : column.key === 'fullName' ? 'report-name-cell' : '');
+    const classNames = [
+      column.numeric ? 'numeric-cell' : '',
+      column.key === 'fullName' ? 'report-name-cell' : '',
+      isNegativeEmployeePayrollTotal(column.key, rowData[column.key]) ? 'report-negative-cell' : '',
+    ].filter(Boolean).join(' ');
+    appendCell(row, value, classNames);
   }
   return row;
+}
+
+function isNegativeEmployeePayrollTotal(key, value) {
+  return ['advanceTotal', 'salaryTotal'].includes(key) && toNumber(value) < 0;
 }
 
 function buildEmployeePayrollFooter(totals, columns) {
