@@ -3933,7 +3933,9 @@ function buildMetricRow(schedule, scheduleRow, metric, label, isFirstMetricRow) 
     const cell = document.createElement('td');
     cell.className = 'day-col';
     const dayValue = scheduleRow.days[String(day)] || {};
-    const value = dayValue[metric] || '';
+    const value = dayValue[metric] ?? '';
+    const isFilledRate = metric === 'rateRub' && String(value).trim() !== '';
+    cell.classList.toggle('rate-filled', isFilledRate);
     if (state.canEditSchedule) {
       const input = document.createElement('input');
       input.className = 'day-input';
@@ -4015,6 +4017,10 @@ function updateScheduleFromInput(event) {
   if (input.dataset.field === 'dayMetric') {
     const value = input.value.trim();
     input.title = value;
+    rowElement
+      .querySelector(`input[data-metric="${input.dataset.metric}"][data-day="${input.dataset.day}"]`)
+      ?.closest('td')
+      ?.classList.toggle('rate-filled', input.dataset.metric === 'rateRub' && value !== '');
     const day = input.dataset.day;
     const metric = input.dataset.metric;
     row.days[day] = row.days[day] && typeof row.days[day] === 'object'
