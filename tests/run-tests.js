@@ -406,7 +406,7 @@ test('report access can be scoped per employee', () => {
   assert.deepEqual(reportDirectoryForUser(updated).map((report) => report.id), []);
 });
 
-test('development proposals are scoped to admins and reviewed by owner', async () => {
+test('development proposals are scoped by access and reviewed by owner', async () => {
   const store = createTempStore();
   const owner = store.createUser({
     fullName: 'Owner Development',
@@ -435,11 +435,21 @@ test('development proposals are scoped to admins and reviewed by owner', async (
     password: 'EmployeePass123',
     role: 'employee',
   });
+  const employeeWithDevelopment = store.createUser({
+    fullName: 'Employee With Development Access',
+    phone: '+79990000217',
+    email: 'employee-development-access@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['development'],
+  });
 
   assert.equal(permissionsFor(admin).canViewDevelopment, true);
   assert.equal(permissionsFor(admin).canCreateDevelopmentProposals, true);
   assert.equal(permissionsFor(admin).canManageDevelopment, false);
   assert.equal(permissionsFor(employee).canViewDevelopment, false);
+  assert.equal(permissionsFor(employeeWithDevelopment).canViewDevelopment, true);
+  assert.equal(permissionsFor(employeeWithDevelopment).canCreateDevelopmentProposals, true);
 
   const proposal = store.createDevelopmentProposal(admin, {
     title: 'Добавить быстрый фильтр',
@@ -457,6 +467,14 @@ test('development proposals are scoped to admins and reviewed by owner', async (
     }),
     (error) => error instanceof ApiError && error.status === 403,
   );
+  const employeeProposal = store.createDevelopmentProposal(employeeWithDevelopment, {
+    title: 'Employee idea',
+    description: 'Employee can submit proposals after Development access is enabled.',
+  });
+  assert.equal(employeeProposal.status, 'new');
+  assert.equal(store.listDevelopmentProposals(employeeWithDevelopment).length, 1);
+  assert.equal(store.listDevelopmentProposals(otherAdmin).length, 0);
+  assert.equal(store.listDevelopmentProposals(owner).length, 2);
   assert.throws(
     () => store.updateDevelopmentProposal(admin, proposal.id, {
       status: 'implemented',
