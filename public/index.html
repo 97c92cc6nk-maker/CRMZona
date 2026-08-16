@@ -105,6 +105,7 @@
           <button class="tab" type="button" data-view="companiesView">Компании</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="reportsView">Отчеты</button>
+          <button class="tab" type="button" data-view="developmentView">Разработка</button>
           <button class="tab" type="button" data-view="claimsView">Претензии</button>
           <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
           <button class="tab" type="button" data-view="expensesView">Хозрасходы</button>
@@ -684,6 +685,103 @@
         </section>
 
         <div class="notice" id="reportsNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="developmentView" aria-labelledby="developmentTitle">
+        <div class="section-head">
+          <h2 id="developmentTitle">Разработка</h2>
+          <button class="secondary" type="button" id="refreshDevelopment">Обновить</button>
+        </div>
+
+        <section class="panel" id="developmentAddPanel" aria-labelledby="developmentCreateTitle">
+          <h3 id="developmentCreateTitle">Новое предложение</h3>
+          <form class="development-form" id="developmentForm">
+            <label>
+              Тема
+              <input name="title" type="text" maxlength="160" required>
+            </label>
+            <label class="development-description-field">
+              Описание
+              <textarea name="description" maxlength="4000" required></textarea>
+            </label>
+            <label>
+              Файл
+              <input name="initialFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+            </label>
+            <button class="primary" type="submit">Создать предложение</button>
+          </form>
+        </section>
+
+        <section class="panel is-hidden" id="developmentCardPanel" aria-labelledby="developmentCardTitle">
+          <div class="panel-head">
+            <h3 id="developmentCardTitle">Предложение</h3>
+            <button class="secondary" type="button" id="closeDevelopmentCard">К списку</button>
+          </div>
+          <form class="development-card-form" id="developmentCardForm">
+            <label>
+              Тема
+              <input name="title" type="text" readonly>
+            </label>
+            <label>
+              Автор
+              <input name="createdByName" type="text" readonly>
+            </label>
+            <label>
+              Создано
+              <input name="createdAt" type="text" readonly>
+            </label>
+            <label class="development-description-field">
+              Описание
+              <textarea name="description" readonly></textarea>
+            </label>
+            <label>
+              Статус
+              <select name="status" id="developmentStatus"></select>
+            </label>
+            <label class="development-description-field">
+              Комментарий владельца
+              <textarea name="ownerComment" maxlength="2000"></textarea>
+            </label>
+            <label class="development-description-field">
+              ТЗ для Codex
+              <textarea name="codexTask" maxlength="6000"></textarea>
+            </label>
+            <div class="employee-card-actions development-card-actions">
+              <button class="primary" type="submit">Сохранить решение</button>
+            </div>
+          </form>
+
+          <div class="development-attachment-upload">
+            <label>
+              Файл
+              <input id="developmentAttachmentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+            </label>
+            <button class="secondary" type="button" id="uploadDevelopmentAttachment">Загрузить</button>
+          </div>
+          <div class="development-attachments-list" id="developmentAttachmentsList"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="developmentListTitle">
+          <h3 id="developmentListTitle">Список предложений</h3>
+          <div class="table-wrap">
+            <table class="development-table">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Тема</th>
+                  <th>Статус</th>
+                  <th>Автор</th>
+                  <th>Описание</th>
+                  <th>Файлы</th>
+                  <th>Обновлено</th>
+                </tr>
+              </thead>
+              <tbody id="developmentBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="notice" id="developmentNotice" role="status" aria-live="polite"></div>
       </section>
 
       <section class="view" id="claimsView" aria-labelledby="claimsTitle">

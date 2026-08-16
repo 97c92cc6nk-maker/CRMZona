@@ -14,6 +14,8 @@ const state = {
   companies: [],
   companyPoints: [],
   repairs: [],
+  developmentProposals: [],
+  developmentStatuses: [],
   expenses: [],
   claims: [],
   reports: [],
@@ -44,6 +46,7 @@ const state = {
   selectedEmployeeId: null,
   selectedRetailPointId: null,
   selectedCompanyId: null,
+  selectedDevelopmentProposalId: null,
   selectedReportId: null,
   retailPointsLoading: false,
 };
@@ -149,6 +152,19 @@ function bindElements() {
     employeePayrollPointFilter: document.getElementById('employeePayrollPointFilter'),
     employeePayrollEmployeeFilter: document.getElementById('employeePayrollEmployeeFilter'),
     reportContent: document.getElementById('reportContent'),
+    developmentForm: document.getElementById('developmentForm'),
+    developmentAddPanel: document.getElementById('developmentAddPanel'),
+    refreshDevelopment: document.getElementById('refreshDevelopment'),
+    developmentBody: document.getElementById('developmentBody'),
+    developmentNotice: document.getElementById('developmentNotice'),
+    developmentCardPanel: document.getElementById('developmentCardPanel'),
+    developmentCardTitle: document.getElementById('developmentCardTitle'),
+    developmentCardForm: document.getElementById('developmentCardForm'),
+    developmentStatus: document.getElementById('developmentStatus'),
+    developmentAttachmentFile: document.getElementById('developmentAttachmentFile'),
+    uploadDevelopmentAttachment: document.getElementById('uploadDevelopmentAttachment'),
+    developmentAttachmentsList: document.getElementById('developmentAttachmentsList'),
+    closeDevelopmentCard: document.getElementById('closeDevelopmentCard'),
     repairForm: document.getElementById('repairForm'),
     repairPointSelect: document.getElementById('repairPointSelect'),
     refreshRepairs: document.getElementById('refreshRepairs'),
@@ -247,6 +263,13 @@ function bindEvents() {
     renderEmployeePayrollReport();
   });
   els.reportContent.addEventListener('input', handleReportContentInput);
+  els.developmentForm?.addEventListener('submit', handleDevelopmentCreate);
+  els.refreshDevelopment?.addEventListener('click', loadDevelopmentProposals);
+  els.developmentBody?.addEventListener('click', handleDevelopmentTableClick);
+  els.developmentCardForm?.addEventListener('submit', handleDevelopmentCardSave);
+  els.uploadDevelopmentAttachment?.addEventListener('click', handleDevelopmentAttachmentUpload);
+  els.developmentAttachmentsList?.addEventListener('click', handleDevelopmentAttachmentClick);
+  els.closeDevelopmentCard?.addEventListener('click', closeDevelopmentCard);
   els.repairForm.addEventListener('submit', handleRepairCreate);
   els.refreshRepairs.addEventListener('click', loadRepairs);
   els.repairsBody.addEventListener('change', handleRepairStatusChange);
@@ -324,6 +347,11 @@ async function loadAppData() {
     loaders.push(loadReports());
   } else {
     renderReportsUnavailable();
+  }
+  if (state.permissions.canViewDevelopment) {
+    loaders.push(loadDevelopmentProposals());
+  } else {
+    renderDevelopmentProposals();
   }
   if (state.permissions.canViewRepairs) {
     loaders.push(loadRepairs());
@@ -500,6 +528,8 @@ async function handleLogout() {
     state.schedule = null;
     state.expenses = [];
     state.claims = [];
+    state.developmentProposals = [];
+    state.developmentStatuses = [];
     state.reports = [];
     state.reportOptions = [];
     state.adminPayrollReport = null;
@@ -507,6 +537,7 @@ async function handleLogout() {
     state.claimEmployees = [];
     state.revealedEmployeePasswords = {};
     state.selectedEmployeeId = null;
+    state.selectedDevelopmentProposalId = null;
     state.selectedReportId = null;
     showAuth();
   }, els.profileNotice);
@@ -539,6 +570,9 @@ function refreshViewData(viewId) {
   if (viewId === 'retailPointsView') {
     loadRetailPoints();
   }
+  if (viewId === 'developmentView') {
+    loadDevelopmentProposals();
+  }
 }
 
 function renderProfile() {
@@ -554,12 +588,14 @@ function renderProfile() {
   setTabVisibility('companiesView', Boolean(state.permissions.canViewCompanies));
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('reportsView', Boolean(state.permissions.canViewReports));
+  setTabVisibility('developmentView', Boolean(state.permissions.canViewDevelopment));
   setTabVisibility('repairsView', Boolean(state.permissions.canViewRepairs));
   setTabVisibility('expensesView', Boolean(state.permissions.canViewExpenses));
   setTabVisibility('claimsView', Boolean(state.permissions.canViewClaims));
   els.employeeAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRoles);
   els.retailPointAddPanel.classList.toggle('is-hidden', !state.permissions.canManageRetailPoints);
   els.companyAddPanel.classList.toggle('is-hidden', !state.permissions.canManageCompanies);
+  els.developmentAddPanel?.classList.toggle('is-hidden', !state.permissions.canCreateDevelopmentProposals);
   if (els.usersPanel) {
     els.usersPanel.classList.add('is-hidden');
   }
@@ -1469,6 +1505,394 @@ function companyOptionsFromCompanies(companies) {
     }
   }
   return [...byValue.values()].sort((left, right) => left.label.localeCompare(right.label, 'ru'));
+}
+
+async function loadDevelopmentProposals() {
+  if (!state.permissions.canViewDevelopment) return;
+  await runWithButton(els.refreshDevelopment, async () => {
+    const data = await api('/api/development');
+    state.developmentProposals = data.proposals || [];
+    state.developmentStatuses = data.statuses || [];
+    state.permissions.canCreateDevelopmentProposals = Boolean(data.canCreate);
+    state.permissions.canManageDevelopment = Boolean(data.canManage);
+    renderDevelopmentProposals();
+    renderDevelopmentCard();
+  }, els.developmentNotice);
+}
+
+function renderDevelopmentProposals() {
+  if (!els.developmentBody) return;
+  els.developmentBody.replaceChildren();
+  const canView = Boolean(state.permissions.canViewDevelopment);
+  const canCreate = Boolean(state.permissions.canCreateDevelopmentProposals);
+  els.developmentAddPanel?.classList.toggle('is-hidden', !canCreate);
+  if (els.developmentForm) {
+    Array.from(els.developmentForm.elements).forEach((field) => {
+      field.disabled = !canCreate;
+    });
+  }
+
+  if (!canView) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty-state';
+    cell.textContent = 'Нет доступа к разделу Разработка.';
+    row.append(cell);
+    els.developmentBody.append(row);
+    closeDevelopmentCard();
+    return;
+  }
+
+  if (!state.developmentProposals.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty-state';
+    cell.textContent = 'Предложения пока не добавлены.';
+    row.append(cell);
+    els.developmentBody.append(row);
+    return;
+  }
+
+  for (const proposal of [...state.developmentProposals].sort(compareDevelopmentProposals)) {
+    els.developmentBody.append(buildDevelopmentProposalRow(proposal));
+  }
+}
+
+function compareDevelopmentProposals(left, right) {
+  return String(right.updatedAt || right.createdAt || '').localeCompare(String(left.updatedAt || left.createdAt || ''));
+}
+
+function buildDevelopmentProposalRow(proposal) {
+  const row = document.createElement('tr');
+  const titleCell = document.createElement('td');
+  const title = document.createElement('button');
+  title.type = 'button';
+  title.className = 'text-link';
+  title.dataset.developmentProposalId = proposal.id;
+  title.textContent = proposal.title || 'Без темы';
+  titleCell.append(title);
+
+  appendCell(row, formatDateTime(proposal.createdAt));
+  row.append(titleCell);
+  appendCell(row, developmentStatusLabel(proposal.status), `status-cell status-${proposal.status}`);
+  appendCell(row, proposal.createdByName || '');
+  appendCell(row, shortText(proposal.description, 140), 'development-description-cell');
+  appendCell(row, String((proposal.attachments || []).length), 'center-cell');
+  appendCell(row, formatDateTime(proposal.updatedAt));
+  return row;
+}
+
+function handleDevelopmentTableClick(event) {
+  const button = event.target.closest('[data-development-proposal-id]');
+  if (!button) return;
+  state.selectedDevelopmentProposalId = button.dataset.developmentProposalId;
+  renderDevelopmentCard();
+}
+
+function selectedDevelopmentProposal() {
+  return state.developmentProposals.find((proposal) => proposal.id === state.selectedDevelopmentProposalId) || null;
+}
+
+function renderDevelopmentCard() {
+  if (!els.developmentCardPanel || !els.developmentCardForm) return;
+  const proposal = selectedDevelopmentProposal();
+  els.developmentCardPanel.classList.toggle('is-hidden', !proposal);
+  if (!proposal) {
+    els.developmentCardForm.dataset.proposalId = '';
+    return;
+  }
+
+  const canManage = Boolean(state.permissions.canManageDevelopment);
+  const canAttach = canManage || !['rejected', 'implemented'].includes(proposal.status);
+  els.developmentCardForm.dataset.proposalId = proposal.id;
+  els.developmentCardTitle.textContent = proposal.title || 'Предложение';
+  setFormValue(els.developmentCardForm, 'title', proposal.title);
+  setFormValue(els.developmentCardForm, 'description', proposal.description);
+  setFormValue(els.developmentCardForm, 'createdByName', proposal.createdByName);
+  setFormValue(els.developmentCardForm, 'createdAt', formatDateTime(proposal.createdAt));
+  setFormValue(els.developmentCardForm, 'ownerComment', proposal.ownerComment);
+  setFormValue(els.developmentCardForm, 'codexTask', proposal.codexTask);
+  fillDevelopmentStatusSelect(els.developmentStatus, proposal.status);
+
+  Array.from(els.developmentCardForm.elements).forEach((field) => {
+    if (field.type === 'submit') {
+      field.disabled = !canManage;
+      return;
+    }
+    const ownerField = ['status', 'ownerComment', 'codexTask'].includes(field.name);
+    field.disabled = !ownerField || !canManage;
+  });
+  els.developmentCardForm.querySelector('button[type="submit"]')?.classList.toggle('is-hidden', !canManage);
+  els.uploadDevelopmentAttachment.disabled = !canAttach;
+  els.uploadDevelopmentAttachment.classList.toggle('is-hidden', !canAttach);
+  renderDevelopmentAttachments(proposal.attachments || [], canAttach);
+}
+
+function fillDevelopmentStatusSelect(select, selected) {
+  if (!select) return;
+  select.replaceChildren(...(state.developmentStatuses || []).map((status) => {
+    const option = document.createElement('option');
+    option.value = status.value;
+    option.textContent = status.label;
+    return option;
+  }));
+  select.value = selected || 'new';
+}
+
+function renderDevelopmentAttachments(attachments, editable) {
+  if (!els.developmentAttachmentsList) return;
+  els.developmentAttachmentsList.replaceChildren();
+  if (!Array.isArray(attachments) || !attachments.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state development-attachments-empty';
+    empty.textContent = 'Файлы не прикреплены.';
+    els.developmentAttachmentsList.append(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'development-attachments-table';
+  for (const attachment of [...attachments].sort(compareRetailPointDocuments)) {
+    list.append(buildDevelopmentAttachmentRow(attachment, editable));
+  }
+  els.developmentAttachmentsList.append(list);
+}
+
+function buildDevelopmentAttachmentRow(attachment, editable) {
+  const row = document.createElement('div');
+  row.className = 'development-attachment-row';
+
+  const file = document.createElement('strong');
+  file.textContent = attachment.fileName || attachment.originalFileName || 'Файл';
+
+  const date = document.createElement('span');
+  date.textContent = attachment.createdAt ? formatDateTime(attachment.createdAt) : '';
+
+  const size = document.createElement('span');
+  size.textContent = attachment.size ? formatFileSize(attachment.size) : '';
+
+  const linkWrap = document.createElement('span');
+  if (attachment.googleDrive?.webViewLink || attachment.localUrl) {
+    const link = document.createElement('a');
+    link.href = attachment.googleDrive?.webViewLink || attachment.localUrl;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'Открыть';
+    linkWrap.append(link);
+  } else {
+    linkWrap.textContent = attachment.googleDrive?.reason || 'Нет ссылки';
+  }
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'danger development-attachment-remove';
+  remove.dataset.deleteDevelopmentAttachment = attachment.id;
+  remove.textContent = 'Удалить';
+  remove.disabled = !editable;
+  remove.classList.toggle('is-hidden', !editable);
+
+  row.append(file, date, size, linkWrap, remove);
+  return row;
+}
+
+async function handleDevelopmentCreate(event) {
+  event.preventDefault();
+  await runWithButton(event.submitter, async () => {
+    const values = formValues(els.developmentForm);
+    const data = await api('/api/development', {
+      method: 'POST',
+      body: {
+        title: values.title,
+        description: values.description,
+      },
+    });
+    replaceDevelopmentProposalInState(data.proposal);
+    state.selectedDevelopmentProposalId = data.proposal.id;
+    const file = els.developmentForm.elements.initialFile?.files?.[0];
+    els.developmentForm.reset();
+    renderDevelopmentProposals();
+    renderDevelopmentCard();
+
+    let driveWarning = '';
+    if (file) {
+      const attachmentData = await uploadDevelopmentAttachment(data.proposal.id, file);
+      driveWarning = developmentDriveWarning(attachmentData.attachment?.googleDrive);
+    }
+    const storageWarning = storageWarningText(data.storage);
+    showNotice(
+      els.developmentNotice,
+      ['Предложение создано.', driveWarning, storageWarning].filter(Boolean).join(' '),
+      driveWarning || storageWarning ? 'warning' : 'success',
+    );
+  }, els.developmentNotice);
+}
+
+async function handleDevelopmentCardSave(event) {
+  event.preventDefault();
+  const proposalId = els.developmentCardForm.dataset.proposalId;
+  if (!proposalId || !state.permissions.canManageDevelopment) return;
+  await runWithButton(event.submitter, async () => {
+    const values = formValues(els.developmentCardForm);
+    const data = await api(`/api/development/${encodeURIComponent(proposalId)}`, {
+      method: 'PATCH',
+      body: {
+        status: values.status,
+        ownerComment: values.ownerComment,
+        codexTask: values.codexTask,
+      },
+    });
+    replaceDevelopmentProposalInState(data.proposal);
+    state.selectedDevelopmentProposalId = data.proposal.id;
+    renderDevelopmentProposals();
+    renderDevelopmentCard();
+    const storageWarning = storageWarningText(data.storage);
+    showNotice(
+      els.developmentNotice,
+      ['Предложение обновлено.', storageWarning].filter(Boolean).join(' '),
+      storageWarning ? 'warning' : 'success',
+    );
+  }, els.developmentNotice);
+}
+
+async function handleDevelopmentAttachmentUpload() {
+  const proposalId = els.developmentCardForm.dataset.proposalId;
+  if (!proposalId) return;
+  const file = els.developmentAttachmentFile.files[0];
+  await runWithButton(els.uploadDevelopmentAttachment, async () => {
+    const data = await uploadDevelopmentAttachment(proposalId, file);
+    els.developmentAttachmentFile.value = '';
+    renderDevelopmentProposals();
+    renderDevelopmentCard();
+    const driveWarning = developmentDriveWarning(data.attachment?.googleDrive);
+    showNotice(
+      els.developmentNotice,
+      [driveWarning ? 'Файл сохранен на сайте.' : 'Файл загружен в Google Drive.', driveWarning, storageWarningText(data.storage)].filter(Boolean).join(' '),
+      driveWarning || data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.developmentNotice);
+}
+
+async function uploadDevelopmentAttachment(proposalId, file) {
+  const payload = await developmentAttachmentPayloadFromFile(file);
+  const data = await api(`/api/development/${encodeURIComponent(proposalId)}/attachments`, {
+    method: 'POST',
+    body: { file: payload },
+  });
+  replaceDevelopmentProposalInState(data.proposal);
+  state.selectedDevelopmentProposalId = data.proposal.id;
+  return data;
+}
+
+async function handleDevelopmentAttachmentClick(event) {
+  const button = event.target.closest('[data-delete-development-attachment]');
+  if (!button) return;
+  const proposalId = els.developmentCardForm.dataset.proposalId;
+  const attachmentId = button.dataset.deleteDevelopmentAttachment;
+  const proposal = selectedDevelopmentProposal();
+  const attachment = proposal?.attachments?.find((item) => item.id === attachmentId);
+  const label = attachment?.fileName || 'файл';
+  if (!window.confirm(`Удалить ${label} из предложения и Google Drive?`)) return;
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/development/${encodeURIComponent(proposalId)}/attachments/${encodeURIComponent(attachmentId)}`, {
+      method: 'DELETE',
+    });
+    replaceDevelopmentProposalInState(data.proposal);
+    state.selectedDevelopmentProposalId = data.proposal.id;
+    renderDevelopmentProposals();
+    renderDevelopmentCard();
+    const driveWarning = retailPointDriveDeleteWarning(data.googleDriveCleanup);
+    showNotice(
+      els.developmentNotice,
+      ['Файл удален из предложения и Google Drive.', driveWarning, storageWarningText(data.storage)].filter(Boolean).join(' '),
+      driveWarning || data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.developmentNotice);
+}
+
+function closeDevelopmentCard() {
+  state.selectedDevelopmentProposalId = null;
+  renderDevelopmentCard();
+  showNotice(els.developmentNotice, '');
+}
+
+function replaceDevelopmentProposalInState(proposal) {
+  const index = state.developmentProposals.findIndex((item) => item.id === proposal.id);
+  if (index === -1) {
+    state.developmentProposals.push(proposal);
+  } else {
+    state.developmentProposals.splice(index, 1, proposal);
+  }
+}
+
+function developmentStatusLabel(status) {
+  return (state.developmentStatuses || []).find((item) => item.value === status)?.label || status || '';
+}
+
+function developmentDriveWarning(googleDrive) {
+  if (googleDrive?.status === 'uploaded') return '';
+  return `Google Drive: ${googleDrive?.reason || 'файл не удалось отправить в архив.'}`;
+}
+
+async function developmentAttachmentPayloadFromFile(file) {
+  if (!file) throw new Error('Выберите файл.');
+  const lowerName = String(file.name || '').toLowerCase();
+  const isImage = (
+    ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+    || ['.jpg', '.jpeg', '.png', '.webp'].some((extension) => lowerName.endsWith(extension))
+  );
+  const documentMime = developmentAttachmentMime(file);
+  if (!isImage && !documentMime) {
+    throw new Error('Поддерживаются JPG, PNG, WebP, PDF, DOC, DOCX, XLS, XLSX или TXT.');
+  }
+
+  if (!isImage) {
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error('Файл слишком большой. Максимум 5 МБ.');
+    }
+    return {
+      fileName: file.name,
+      mimeType: documentMime,
+      size: file.size,
+      dataUrl: await readFileAsDataUrlWithMime(file, documentMime),
+    };
+  }
+
+  const compressed = await compressReceiptImage(file);
+  if (compressed.size > 5 * 1024 * 1024) {
+    throw new Error('Файл изображения слишком большой. Максимум 5 МБ.');
+  }
+  return {
+    fileName: file.name,
+    mimeType: 'image/jpeg',
+    size: compressed.size,
+    dataUrl: compressed.dataUrl.replace(/^data:[^;]+;/, 'data:image/jpeg;'),
+  };
+}
+
+function developmentAttachmentMime(file) {
+  const name = String(file?.name || '').toLowerCase();
+  if (file?.type === 'application/pdf' || name.endsWith('.pdf')) return 'application/pdf';
+  if (file?.type === 'application/msword' || name.endsWith('.doc')) return 'application/msword';
+  if (
+    file?.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    || name.endsWith('.docx')
+  ) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  if (file?.type === 'application/vnd.ms-excel' || name.endsWith('.xls')) return 'application/vnd.ms-excel';
+  if (
+    file?.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    || name.endsWith('.xlsx')
+  ) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (file?.type === 'text/plain' || name.endsWith('.txt')) return 'text/plain';
+  return '';
+}
+
+function shortText(value, maxLength) {
+  const text = String(value || '').trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trim()}…`;
 }
 
 async function loadReports() {
@@ -4375,6 +4799,11 @@ async function runWithButton(button, task, noticeElement) {
 
 function formValues(form) {
   return Object.fromEntries(new FormData(form).entries());
+}
+
+function setFormValue(form, name, value) {
+  const field = form?.elements?.[name];
+  if (field) field.value = value || '';
 }
 
 function appendCell(row, text, className = '') {

@@ -439,7 +439,9 @@ h3 {
 
 .employee-form,
 .retail-point-form,
-.company-form {
+.company-form,
+.development-form,
+.development-card-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(180px, 1fr));
   gap: 12px;
@@ -449,7 +451,8 @@ h3 {
 
 .employee-card-wide,
 .retail-point-wide,
-.company-wide {
+.company-wide,
+.development-description-field {
   grid-column: 1 / -1;
 }
 
@@ -490,7 +493,8 @@ h3 {
 
 .employee-document-upload,
 .retail-point-document-upload,
-.company-document-upload {
+.company-document-upload,
+.development-attachment-upload {
   display: grid;
   grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1.2fr) auto;
   gap: 10px;
@@ -504,14 +508,16 @@ h3 {
 
 .employee-documents-list,
 .retail-point-documents-list,
-.company-documents-list {
+.company-documents-list,
+.development-attachments-list {
   display: grid;
   gap: 8px;
 }
 
 .employee-documents-table,
 .retail-point-documents-table,
-.company-documents-table {
+.company-documents-table,
+.development-attachments-table {
   display: grid;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -520,7 +526,8 @@ h3 {
 
 .employee-document-row,
 .retail-point-document-row,
-.company-document-row {
+.company-document-row,
+.development-attachment-row {
   display: grid;
   grid-template-columns: minmax(145px, 0.9fr) minmax(180px, 1fr) minmax(130px, 0.8fr) minmax(80px, 0.4fr) auto;
   gap: 10px;
@@ -533,7 +540,8 @@ h3 {
 
 .employee-document-row:last-child,
 .retail-point-document-row:last-child,
-.company-document-row:last-child {
+.company-document-row:last-child,
+.development-attachment-row:last-child {
   border-bottom: 0;
 }
 
@@ -542,14 +550,17 @@ h3 {
 .retail-point-document-row span,
 .retail-point-document-row strong,
 .company-document-row span,
-.company-document-row strong {
+.company-document-row strong,
+.development-attachment-row span,
+.development-attachment-row strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
 .employee-document-remove,
 .retail-point-document-remove,
-.company-document-remove {
+.company-document-remove,
+.development-attachment-remove {
   min-height: 32px;
   padding: 5px 9px;
 }
@@ -744,6 +755,10 @@ tbody tr:last-child td {
   min-width: 1120px;
 }
 
+.development-table {
+  min-width: 1180px;
+}
+
 .expenses-table {
   min-width: 1160px;
 }
@@ -840,6 +855,31 @@ tbody tr:last-child td {
   background: #ffe1e1;
   color: #8b1d1d;
   font-weight: 850;
+}
+
+.status-cell {
+  font-weight: 850;
+}
+
+.status-new {
+  color: var(--accent-strong);
+}
+
+.status-in_work {
+  color: #805c16;
+}
+
+.status-rejected {
+  color: var(--danger);
+}
+
+.status-implemented {
+  color: #1f6b3d;
+}
+
+.development-description-cell {
+  min-width: 260px;
+  white-space: normal;
 }
 
 .report-updated {
@@ -1254,6 +1294,8 @@ tbody tr:last-child td {
   .retail-point-grid,
   .company-form,
   .company-grid,
+  .development-form,
+  .development-card-form,
   .expense-form,
   .claim-form,
   .repair-form {
@@ -1269,7 +1311,9 @@ tbody tr:last-child td {
   .retail-point-document-upload,
   .retail-point-document-row,
   .company-document-upload,
-  .company-document-row {
+  .company-document-row,
+  .development-attachment-upload,
+  .development-attachment-row {
     grid-template-columns: 1fr;
   }
 

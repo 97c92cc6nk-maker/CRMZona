@@ -406,6 +406,143 @@ test('report access can be scoped per employee', () => {
   assert.deepEqual(reportDirectoryForUser(updated).map((report) => report.id), []);
 });
 
+test('development proposals are scoped to admins and reviewed by owner', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Development',
+    phone: '+79990000211',
+    email: 'owner-development@example.com',
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Development',
+    phone: '+79990000212',
+    email: 'admin-development@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+  });
+  const otherAdmin = store.createUser({
+    fullName: 'Other Admin Development',
+    phone: '+79990000213',
+    email: 'other-admin-development@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+  });
+  const employee = store.createUser({
+    fullName: 'Employee Development',
+    phone: '+79990000214',
+    email: 'employee-development@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+  });
+
+  assert.equal(permissionsFor(admin).canViewDevelopment, true);
+  assert.equal(permissionsFor(admin).canCreateDevelopmentProposals, true);
+  assert.equal(permissionsFor(admin).canManageDevelopment, false);
+  assert.equal(permissionsFor(employee).canViewDevelopment, false);
+
+  const proposal = store.createDevelopmentProposal(admin, {
+    title: 'Добавить быстрый фильтр',
+    description: 'Нужен быстрый фильтр по статусу для списка предложений.',
+  });
+
+  assert.equal(proposal.status, 'new');
+  assert.equal(store.listDevelopmentProposals(admin).length, 1);
+  assert.equal(store.listDevelopmentProposals(otherAdmin).length, 0);
+  assert.equal(store.listDevelopmentProposals(owner).length, 1);
+  assert.throws(
+    () => store.createDevelopmentProposal(employee, {
+      title: 'Нельзя',
+      description: 'Сотрудник не должен создавать предложения в разделе разработки.',
+    }),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
+  assert.throws(
+    () => store.updateDevelopmentProposal(admin, proposal.id, {
+      status: 'implemented',
+      ownerComment: '',
+      codexTask: '',
+    }),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
+
+  const reviewed = store.updateDevelopmentProposal(owner, proposal.id, {
+    status: 'in_work',
+    ownerComment: 'Берем в работу.',
+    codexTask: 'Сделать фильтр по статусу в разделе Разработка.',
+  });
+
+  assert.equal(reviewed.status, 'in_work');
+  assert.equal(reviewed.statusLabel, 'В работе');
+  assert.equal(reviewed.ownerComment, 'Берем в работу.');
+  assert.equal(reviewed.codexTask, 'Сделать фильтр по статусу в разделе Разработка.');
+});
+
+test('development proposal attachments keep local fallback when Google Drive is unavailable', async () => {
+  const store = createTempStore();
+  store.createUser({
+    fullName: 'Owner Development Files',
+    phone: '+79990000215',
+    email: 'owner-development-files@example.com',
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Development Files',
+    phone: '+79990000216',
+    email: 'admin-development-files@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+  });
+  const proposal = store.createDevelopmentProposal(admin, {
+    title: 'Приложить пример',
+    description: 'Нужно приложить текстовый файл к предложению.',
+  });
+  const driveEnvKeys = [
+    'GOOGLE_DRIVE_ACCESS_TOKEN',
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON',
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_BASE64',
+    'GOOGLE_SERVICE_ACCOUNT_JSON',
+    'GOOGLE_SERVICE_ACCOUNT_BASE64',
+    'GOOGLE_DRIVE_CLIENT_ID',
+    'GOOGLE_DRIVE_CLIENT_SECRET',
+    'GOOGLE_DRIVE_REFRESH_TOKEN',
+    'GOOGLE_DRIVE_DEVELOPMENT_FOLDER_ID',
+  ];
+  const previousDriveEnv = Object.fromEntries(driveEnvKeys.map((key) => [key, process.env[key]]));
+  for (const key of driveEnvKeys) {
+    delete process.env[key];
+  }
+
+  try {
+    const added = await store.addDevelopmentAttachment(admin, proposal.id, {
+      file: {
+        fileName: 'idea.txt',
+        dataUrl: `data:text/plain;base64,${Buffer.from('development idea').toString('base64')}`,
+      },
+    });
+
+    assert.equal(added.attachment.googleDrive.status, 'unavailable');
+    assert.equal(added.attachment.localUrl.includes(`/api/development/${proposal.id}/attachments/`), true);
+    assert.equal(added.proposal.attachments.length, 1);
+
+    const file = store.getDevelopmentAttachmentFile(admin, proposal.id, added.attachment.id);
+    assert.equal(file.mimeType, 'text/plain');
+    assert.equal(file.buffer.toString('utf8'), 'development idea');
+
+    const deleted = await store.deleteDevelopmentAttachment(admin, proposal.id, added.attachment.id);
+    assert.equal(deleted.googleDriveCleanup.status, 'skipped');
+    assert.equal(deleted.proposal.attachments.length, 0);
+  } finally {
+    for (const key of driveEnvKeys) {
+      if (previousDriveEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previousDriveEnv[key];
+      }
+    }
+  }
+});
+
 test('email is unique and password is stored as a hash', () => {
   const store = createTempStore();
   store.createUser({
