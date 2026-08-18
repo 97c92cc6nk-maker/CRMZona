@@ -105,6 +105,7 @@
           <button class="tab" type="button" data-view="companiesView">Компании</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="reportsView">Отчеты</button>
+          <button class="tab" type="button" data-view="tasksView">Задачи</button>
           <button class="tab" type="button" data-view="developmentView">Разработка</button>
           <button class="tab" type="button" data-view="claimsView">Претензии</button>
           <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
@@ -782,6 +783,78 @@
         </section>
 
         <div class="notice" id="developmentNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="tasksView" aria-labelledby="tasksTitle">
+        <div class="section-head">
+          <h2 id="tasksTitle">Задачи</h2>
+          <button class="secondary" type="button" id="refreshTasks">Обновить</button>
+        </div>
+
+        <section class="panel" aria-labelledby="taskCreateTitle">
+          <h3 id="taskCreateTitle">Новая задача</h3>
+          <form class="task-form" id="taskForm">
+            <label>
+              Тема
+              <input name="title" type="text" maxlength="160" required>
+            </label>
+            <label>
+              Автор
+              <input name="author" id="taskAuthorInput" type="text" readonly>
+            </label>
+            <label>
+              Кому поставлена задача
+              <select name="assigneeId" id="taskAssigneeSelect" required></select>
+            </label>
+            <label>
+              Дата создания
+              <input name="createdAt" id="taskCreatedAtInput" type="date" readonly>
+            </label>
+            <label>
+              Приоритет
+              <select name="priority" id="taskPrioritySelect" required>
+                <option value="normal">Обычная</option>
+                <option value="urgent">Срочная</option>
+              </select>
+            </label>
+            <label>
+              Дедлайн
+              <input name="deadline" id="taskDeadlineInput" type="date" required>
+            </label>
+            <label class="task-description-field">
+              Описание задачи
+              <textarea name="description" maxlength="4000" required></textarea>
+            </label>
+            <label>
+              Файлы/картинки
+              <input name="attachments" id="taskAttachmentFiles" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+            </label>
+            <button class="primary" type="submit">Создать задачу</button>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="tasksListTitle">
+          <h3 id="tasksListTitle">Список задач</h3>
+          <div class="table-wrap">
+            <table class="tasks-table">
+              <thead>
+                <tr>
+                  <th>Дата создания</th>
+                  <th>Тема</th>
+                  <th>Автор</th>
+                  <th>Кому</th>
+                  <th>Приоритет</th>
+                  <th>Дедлайн</th>
+                  <th>Описание</th>
+                  <th>Файлы</th>
+                </tr>
+              </thead>
+              <tbody id="tasksBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="notice" id="tasksNotice" role="status" aria-live="polite"></div>
       </section>
 
       <section class="view" id="claimsView" aria-labelledby="claimsTitle">

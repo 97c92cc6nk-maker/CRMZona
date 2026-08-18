@@ -16,6 +16,9 @@ const state = {
   companies: [],
   companyPoints: [],
   repairs: [],
+  tasks: [],
+  taskPriorities: [],
+  taskAssigneeOptions: [],
   developmentProposals: [],
   developmentStatuses: [],
   expenses: [],
@@ -48,6 +51,7 @@ const state = {
   selectedEmployeeId: null,
   selectedRetailPointId: null,
   selectedCompanyId: null,
+  selectedTaskId: null,
   selectedDevelopmentProposalId: null,
   selectedReportId: null,
   retailPointsLoading: false,
@@ -154,6 +158,16 @@ function bindElements() {
     employeePayrollPointFilter: document.getElementById('employeePayrollPointFilter'),
     employeePayrollEmployeeFilter: document.getElementById('employeePayrollEmployeeFilter'),
     reportContent: document.getElementById('reportContent'),
+    taskForm: document.getElementById('taskForm'),
+    taskAuthorInput: document.getElementById('taskAuthorInput'),
+    taskCreatedAtInput: document.getElementById('taskCreatedAtInput'),
+    taskDeadlineInput: document.getElementById('taskDeadlineInput'),
+    taskAssigneeSelect: document.getElementById('taskAssigneeSelect'),
+    taskPrioritySelect: document.getElementById('taskPrioritySelect'),
+    taskAttachmentFiles: document.getElementById('taskAttachmentFiles'),
+    refreshTasks: document.getElementById('refreshTasks'),
+    tasksBody: document.getElementById('tasksBody'),
+    tasksNotice: document.getElementById('tasksNotice'),
     developmentForm: document.getElementById('developmentForm'),
     developmentAddPanel: document.getElementById('developmentAddPanel'),
     refreshDevelopment: document.getElementById('refreshDevelopment'),
@@ -266,6 +280,8 @@ function bindEvents() {
     renderEmployeePayrollReport();
   });
   els.reportContent.addEventListener('input', handleReportContentInput);
+  els.taskForm?.addEventListener('submit', handleTaskCreate);
+  els.refreshTasks?.addEventListener('click', loadTasks);
   els.developmentForm?.addEventListener('submit', handleDevelopmentCreate);
   els.refreshDevelopment?.addEventListener('click', loadDevelopmentProposals);
   els.developmentBody?.addEventListener('click', handleDevelopmentTableClick);
@@ -306,6 +322,8 @@ async function bootstrap() {
   els.reportMonthInput.value = currentMonth();
   els.expenseDateInput.value = currentDate();
   els.claimDateInput.value = currentDate();
+  if (els.taskCreatedAtInput) els.taskCreatedAtInput.value = currentDate();
+  if (els.taskDeadlineInput) els.taskDeadlineInput.value = currentDate();
   try {
     await loadSession();
     await loadAppData();
@@ -352,6 +370,11 @@ async function loadAppData() {
     loaders.push(loadReports());
   } else {
     renderReportsUnavailable();
+  }
+  if (state.permissions.canViewTasks) {
+    loaders.push(loadTasks());
+  } else {
+    renderTasks();
   }
   if (state.permissions.canViewDevelopment) {
     loaders.push(loadDevelopmentProposals());
@@ -535,6 +558,9 @@ async function handleLogout() {
     state.schedule = null;
     state.expenses = [];
     state.claims = [];
+    state.tasks = [];
+    state.taskPriorities = [];
+    state.taskAssigneeOptions = [];
     state.developmentProposals = [];
     state.developmentStatuses = [];
     state.reports = [];
@@ -580,6 +606,9 @@ function refreshViewData(viewId) {
   if (viewId === 'developmentView') {
     loadDevelopmentProposals();
   }
+  if (viewId === 'tasksView') {
+    loadTasks();
+  }
 }
 
 function renderProfile() {
@@ -595,6 +624,7 @@ function renderProfile() {
   setTabVisibility('companiesView', Boolean(state.permissions.canViewCompanies));
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('reportsView', Boolean(state.permissions.canViewReports));
+  setTabVisibility('tasksView', Boolean(state.permissions.canViewTasks));
   setTabVisibility('developmentView', Boolean(state.permissions.canViewDevelopment));
   setTabVisibility('repairsView', Boolean(state.permissions.canViewRepairs));
   setTabVisibility('expensesView', Boolean(state.permissions.canViewExpenses));
@@ -1515,6 +1545,182 @@ function companyOptionsFromCompanies(companies) {
     }
   }
   return [...byValue.values()].sort((left, right) => left.label.localeCompare(right.label, 'ru'));
+}
+
+async function loadTasks() {
+  if (!state.permissions.canViewTasks) return;
+  await runWithButton(els.refreshTasks, async () => {
+    const data = await api('/api/tasks');
+    state.tasks = data.tasks || [];
+    state.taskPriorities = data.priorities || [];
+    state.taskAssigneeOptions = data.assigneeOptions || [];
+    state.permissions.canCreateTasks = Boolean(data.canCreate);
+    state.permissions.canManageTasks = Boolean(data.canManage);
+    renderTasks();
+  }, els.tasksNotice);
+}
+
+function renderTasks() {
+  if (!els.tasksBody) return;
+  els.tasksBody.replaceChildren();
+  const canView = Boolean(state.permissions.canViewTasks);
+  const canCreate = Boolean(state.permissions.canCreateTasks && state.taskAssigneeOptions.length);
+  if (els.taskAuthorInput) els.taskAuthorInput.value = state.user?.fullName || '';
+  if (els.taskCreatedAtInput) els.taskCreatedAtInput.value = currentDate();
+  if (els.taskDeadlineInput && !els.taskDeadlineInput.value) els.taskDeadlineInput.value = currentDate();
+  fillTaskAssigneeSelect();
+  fillTaskPrioritySelect();
+
+  if (els.taskForm) {
+    Array.from(els.taskForm.elements).forEach((field) => {
+      field.disabled = !canCreate;
+      if (field.readOnly) field.disabled = false;
+    });
+  }
+
+  if (!canView) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 8;
+    cell.className = 'empty-state';
+    cell.textContent = 'Нет доступа к разделу Задачи.';
+    row.append(cell);
+    els.tasksBody.append(row);
+    return;
+  }
+
+  if (!state.tasks.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 8;
+    cell.className = 'empty-state';
+    cell.textContent = 'Задач пока нет.';
+    row.append(cell);
+    els.tasksBody.append(row);
+    return;
+  }
+
+  for (const task of [...state.tasks].sort(compareTasksByDateDesc)) {
+    els.tasksBody.append(buildTaskRow(task));
+  }
+}
+
+function fillTaskAssigneeSelect() {
+  if (!els.taskAssigneeSelect) return;
+  const previous = els.taskAssigneeSelect.value;
+  const options = (state.taskAssigneeOptions || []).map((employee) => {
+    const option = document.createElement('option');
+    option.value = employee.id;
+    option.textContent = employee.roleLabel
+      ? `${employee.fullName} (${employee.roleLabel})`
+      : employee.fullName;
+    return option;
+  });
+  els.taskAssigneeSelect.replaceChildren(...options);
+  if (options.some((option) => option.value === previous)) {
+    els.taskAssigneeSelect.value = previous;
+  }
+}
+
+function fillTaskPrioritySelect() {
+  if (!els.taskPrioritySelect || !state.taskPriorities.length) return;
+  const previous = els.taskPrioritySelect.value || 'normal';
+  els.taskPrioritySelect.replaceChildren(...state.taskPriorities.map((priority) => {
+    const option = document.createElement('option');
+    option.value = priority.value;
+    option.textContent = priority.label;
+    return option;
+  }));
+  els.taskPrioritySelect.value = state.taskPriorities.some((priority) => priority.value === previous)
+    ? previous
+    : 'normal';
+}
+
+function compareTasksByDateDesc(left, right) {
+  return String(right.createdAt || '').localeCompare(String(left.createdAt || ''));
+}
+
+function buildTaskRow(task) {
+  const row = document.createElement('tr');
+  appendCell(row, formatDateTime(task.createdAt));
+  appendCell(row, task.title);
+  appendCell(row, task.createdByName || '');
+  appendCell(row, task.assigneeName || '');
+  appendCell(row, task.priorityLabel || task.priority);
+  appendCell(row, formatDate(task.deadline));
+  appendCell(row, shortText(task.description, 140), 'development-description-cell');
+  row.append(taskAttachmentsCell(task));
+  return row;
+}
+
+function taskAttachmentsCell(task) {
+  const cell = document.createElement('td');
+  cell.className = 'task-attachments-cell';
+  const attachments = Array.isArray(task.attachments) ? task.attachments : [];
+  if (!attachments.length) {
+    cell.textContent = '—';
+    return cell;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'task-attachments-list';
+  for (const attachment of attachments) {
+    const link = document.createElement('a');
+    link.className = 'repair-file-link';
+    link.href = attachment.googleDrive?.webViewLink || attachment.localUrl || '#';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = attachment.fileName || attachment.originalFileName || 'Файл';
+    if (!attachment.googleDrive?.webViewLink && !attachment.localUrl) {
+      link.removeAttribute('href');
+      link.textContent = attachment.googleDrive?.reason || 'Файл недоступен';
+    }
+    list.append(link);
+    if (attachment.size) {
+      const meta = document.createElement('span');
+      meta.className = 'repair-file-meta';
+      meta.textContent = formatFileSize(attachment.size);
+      list.append(meta);
+    }
+  }
+  cell.append(list);
+  return cell;
+}
+
+async function handleTaskCreate(event) {
+  event.preventDefault();
+  if (!state.permissions.canCreateTasks) {
+    showNotice(els.tasksNotice, 'Нет доступа к созданию задач.', 'warning');
+    return;
+  }
+  const button = event.submitter;
+  await runWithButton(button, async () => {
+    const values = formValues(els.taskForm);
+    const attachments = await repairAttachmentPayloadsFromInput(els.taskAttachmentFiles);
+    const data = await api('/api/tasks', {
+      method: 'POST',
+      body: {
+        title: values.title,
+        assigneeId: values.assigneeId,
+        priority: values.priority,
+        deadline: values.deadline,
+        description: values.description,
+        attachments,
+      },
+    });
+    state.tasks = [data.task, ...state.tasks];
+    els.taskForm.reset();
+    if (els.taskAttachmentFiles) els.taskAttachmentFiles.value = '';
+    renderTasks();
+    await loadAudit();
+    const storageWarning = storageWarningText(data.storage);
+    const driveWarning = repairAttachmentsDriveWarning(data.task.attachments || []);
+    showNotice(
+      els.tasksNotice,
+      ['Задача создана.', driveWarning, storageWarning].filter(Boolean).join(' '),
+      driveWarning || storageWarning ? 'warning' : 'success',
+    );
+  }, els.tasksNotice);
 }
 
 async function loadDevelopmentProposals() {

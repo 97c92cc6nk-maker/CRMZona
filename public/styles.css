@@ -440,6 +440,7 @@ h3 {
 .employee-form,
 .retail-point-form,
 .company-form,
+.task-form,
 .development-form,
 .development-card-form {
   display: grid;
@@ -452,6 +453,7 @@ h3 {
 .employee-card-wide,
 .retail-point-wide,
 .company-wide,
+.task-description-field,
 .development-description-field {
   grid-column: 1 / -1;
 }
@@ -679,15 +681,18 @@ h3 {
 }
 
 .repair-description-field,
+.task-description-field,
 .claim-comment-field {
   grid-column: 1 / -1;
 }
 
-.repair-attachments-cell {
+.repair-attachments-cell,
+.task-attachments-cell {
   min-width: 180px;
 }
 
-.repair-attachments-list {
+.repair-attachments-list,
+.task-attachments-list {
   display: grid;
   gap: 4px;
 }
@@ -776,6 +781,10 @@ tbody tr:last-child td {
 
 .repairs-table {
   min-width: 1120px;
+}
+
+.tasks-table {
+  min-width: 1160px;
 }
 
 .development-table {
@@ -1319,6 +1328,7 @@ tbody tr:last-child td {
   .company-grid,
   .development-form,
   .development-card-form,
+  .task-form,
   .expense-form,
   .claim-form,
   .repair-form {

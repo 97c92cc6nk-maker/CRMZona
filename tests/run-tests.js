@@ -561,6 +561,118 @@ test('development proposal attachments keep local fallback when Google Drive is 
   }
 });
 
+test('tasks can be assigned between employees with file attachments', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Tasks',
+    phone: '+79990000231',
+    email: 'owner-tasks@example.com',
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Tasks',
+    phone: '+79990000232',
+    email: 'admin-tasks@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['tasks'],
+  });
+  const author = store.createUser({
+    fullName: 'Author Tasks',
+    phone: '+79990000233',
+    email: 'author-tasks@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['tasks'],
+  });
+  const assignee = store.createUser({
+    fullName: 'Assignee Tasks',
+    phone: '+79990000234',
+    email: 'assignee-tasks@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['tasks'],
+  });
+  const noAccess = store.createUser({
+    fullName: 'No Access Tasks',
+    phone: '+79990000235',
+    email: 'no-access-tasks@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+  });
+
+  assert.equal(permissionsFor(author).canViewTasks, true);
+  assert.equal(permissionsFor(author).canCreateTasks, true);
+  assert.equal(permissionsFor(noAccess).canViewTasks, false);
+  assert.equal(permissionsFor(admin).canManageTasks, true);
+
+  const driveEnvKeys = [
+    'GOOGLE_DRIVE_ACCESS_TOKEN',
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON',
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_BASE64',
+    'GOOGLE_SERVICE_ACCOUNT_JSON',
+    'GOOGLE_SERVICE_ACCOUNT_BASE64',
+    'GOOGLE_DRIVE_CLIENT_ID',
+    'GOOGLE_DRIVE_CLIENT_SECRET',
+    'GOOGLE_DRIVE_REFRESH_TOKEN',
+    'GOOGLE_DRIVE_TASKS_FOLDER_ID',
+  ];
+  const previousDriveEnv = Object.fromEntries(driveEnvKeys.map((key) => [key, process.env[key]]));
+  for (const key of driveEnvKeys) {
+    delete process.env[key];
+  }
+
+  try {
+    const task = await store.createTask(author, {
+      title: 'Prepare shop report',
+      assigneeId: assignee.id,
+      priority: 'urgent',
+      deadline: '2026-08-30',
+      description: 'Collect photos and comments for the shop report.',
+      attachments: [{
+        fileName: 'task.txt',
+        dataUrl: `data:text/plain;base64,${Buffer.from('task attachment').toString('base64')}`,
+      }],
+    });
+
+    assert.equal(task.priority, 'urgent');
+    assert.equal(task.assigneeName, assignee.fullName);
+    assert.equal(task.attachments.length, 1);
+    assert.equal(task.attachments[0].googleDrive.status, 'unavailable');
+    assert.equal(task.attachments[0].localUrl.includes(`/api/tasks/${task.id}/attachments/`), true);
+    assert.equal(store.listTasks(author).length, 1);
+    assert.equal(store.listTasks(assignee).length, 1);
+    assert.equal(store.listTasks(admin).length, 1);
+    assert.equal(store.listTasks(owner).length, 1);
+    assert.throws(
+      () => store.listTasks(noAccess),
+      (error) => error instanceof ApiError && error.status === 403,
+    );
+    await assert.rejects(
+      () => store.createTask(noAccess, {
+        title: 'No access',
+        assigneeId: assignee.id,
+        priority: 'normal',
+        deadline: '2026-08-30',
+        description: 'No access user cannot create tasks.',
+      }),
+      (error) => error instanceof ApiError && error.status === 403,
+    );
+
+    const file = store.getTaskAttachmentFile(assignee, task.id, task.attachments[0].id);
+    assert.equal(file.mimeType, 'text/plain');
+    assert.equal(file.buffer.toString('utf8'), 'task attachment');
+  } finally {
+    for (const key of driveEnvKeys) {
+      if (previousDriveEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previousDriveEnv[key];
+      }
+    }
+  }
+});
+
 test('email is unique and password is stored as a hash', () => {
   const store = createTempStore();
   store.createUser({
