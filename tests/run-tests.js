@@ -375,6 +375,79 @@ test('employee payroll report calculates monthly schedule totals', () => {
   assert.equal(report.totals.payrollFund, '795');
 });
 
+test('employee payroll report access shows all points and supports admin ownership metadata', () => {
+  const users = [
+    {
+      id: 'viewer-1',
+      fullName: 'Report Viewer',
+      role: 'employee',
+      allowedSections: ['reports'],
+      allowedReports: ['employee-payroll'],
+      allowedPoints: ['moscow_6231'],
+    },
+    {
+      id: 'admin-moscow',
+      fullName: 'Admin Moscow',
+      role: 'admin',
+      allowedPoints: ['moscow_6231'],
+      allowedSections: ['reports'],
+    },
+    {
+      id: 'admin-krasnogorsk',
+      fullName: 'Admin Krasnogorsk',
+      role: 'admin',
+      allowedPoints: ['krasnogorsk_466'],
+      allowedSections: ['reports'],
+    },
+    {
+      id: 'employee-moscow',
+      fullName: 'Employee Moscow',
+      role: 'employee',
+      allowedPoints: ['moscow_6231'],
+    },
+    {
+      id: 'employee-krasnogorsk',
+      fullName: 'Employee Krasnogorsk',
+      role: 'employee',
+      allowedPoints: ['krasnogorsk_466'],
+    },
+  ];
+  const schedules = {
+    'moscow_6231:2026-07': {
+      pointId: 'moscow_6231',
+      month: '2026-07',
+      removedEmployeeIds: [],
+      rows: [{
+        id: 'row-moscow',
+        employeeId: 'employee-moscow',
+        employeeName: 'Employee Moscow',
+        days: { 1: { rateRub: '100', issuedCount: '1' } },
+      }],
+    },
+    'krasnogorsk_466:2026-07': {
+      pointId: 'krasnogorsk_466',
+      month: '2026-07',
+      removedEmployeeIds: [],
+      rows: [{
+        id: 'row-krasnogorsk',
+        employeeId: 'employee-krasnogorsk',
+        employeeName: 'Employee Krasnogorsk',
+        days: { 1: { rateRub: '200', issuedCount: '2' } },
+      }],
+    },
+  };
+
+  const report = buildEmployeePayrollReport(users, schedules, [], '2026-07', users[0]);
+  const pointIds = [...new Set(report.rows.map((row) => row.pointId))].sort();
+  const krasnogorskRow = report.rows.find((row) => row.pointId === 'krasnogorsk_466');
+  const moscowRow = report.rows.find((row) => row.pointId === 'moscow_6231');
+
+  assert.deepEqual(pointIds, ['krasnogorsk_466', 'moscow_6231']);
+  assert.equal(report.adminOptions.length, 2);
+  assert.deepEqual(krasnogorskRow.adminIds, ['admin-krasnogorsk']);
+  assert.deepEqual(moscowRow.adminIds, ['admin-moscow']);
+});
+
 test('report access can be scoped per employee', () => {
   const store = createTempStore();
   const owner = store.createUser({

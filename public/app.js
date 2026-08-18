@@ -29,6 +29,7 @@ const state = {
   employeePayrollReport: null,
   employeePayrollFilters: {
     pointId: '',
+    adminId: '',
     employeeId: '',
   },
   claimEmployees: [],
@@ -156,6 +157,7 @@ function bindElements() {
     closeReport: document.getElementById('closeReport'),
     employeePayrollFilters: document.getElementById('employeePayrollFilters'),
     employeePayrollPointFilter: document.getElementById('employeePayrollPointFilter'),
+    employeePayrollAdminFilter: document.getElementById('employeePayrollAdminFilter'),
     employeePayrollEmployeeFilter: document.getElementById('employeePayrollEmployeeFilter'),
     reportContent: document.getElementById('reportContent'),
     taskForm: document.getElementById('taskForm'),
@@ -273,6 +275,10 @@ function bindEvents() {
   els.saveAdminPayrollReport.addEventListener('click', saveAdminPayrollReport);
   els.employeePayrollPointFilter?.addEventListener('change', () => {
     state.employeePayrollFilters.pointId = els.employeePayrollPointFilter.value || '';
+    renderEmployeePayrollReport();
+  });
+  els.employeePayrollAdminFilter?.addEventListener('change', () => {
+    state.employeePayrollFilters.adminId = els.employeePayrollAdminFilter.value || '';
     renderEmployeePayrollReport();
   });
   els.employeePayrollEmployeeFilter?.addEventListener('change', () => {
@@ -2312,7 +2318,7 @@ function employeePayrollColumns() {
 }
 
 function resetEmployeePayrollFilters() {
-  state.employeePayrollFilters = { pointId: '', employeeId: '' };
+  state.employeePayrollFilters = { pointId: '', adminId: '', employeeId: '' };
 }
 
 function syncEmployeePayrollFilters(report) {
@@ -2320,7 +2326,25 @@ function syncEmployeePayrollFilters(report) {
   els.employeePayrollFilters.classList.remove('is-hidden');
 
   const rows = Array.isArray(report?.rows) ? report.rows : [];
-  const pointOptions = uniqueReportOptions(rows, 'pointId', 'pointName');
+  const adminOptions = Array.isArray(report?.adminOptions)
+    ? report.adminOptions.map((admin) => ({ value: admin.id, label: admin.fullName }))
+    : [];
+  if (state.employeePayrollFilters.adminId && !adminOptions.some((option) => option.value === state.employeePayrollFilters.adminId)) {
+    state.employeePayrollFilters.adminId = '';
+  }
+  if (els.employeePayrollAdminFilter) {
+    fillReportFilterSelect(
+      els.employeePayrollAdminFilter,
+      'Все администраторы',
+      adminOptions,
+      state.employeePayrollFilters.adminId,
+    );
+  }
+
+  const rowsForPointOptions = state.employeePayrollFilters.adminId
+    ? rows.filter((row) => reportRowBelongsToAdmin(row, state.employeePayrollFilters.adminId))
+    : rows;
+  const pointOptions = uniqueReportOptions(rowsForPointOptions, 'pointId', 'pointName');
   if (state.employeePayrollFilters.pointId && !pointOptions.some((option) => option.value === state.employeePayrollFilters.pointId)) {
     state.employeePayrollFilters.pointId = '';
   }
@@ -2331,9 +2355,11 @@ function syncEmployeePayrollFilters(report) {
     state.employeePayrollFilters.pointId,
   );
 
-  const rowsForEmployeeOptions = state.employeePayrollFilters.pointId
-    ? rows.filter((row) => row.pointId === state.employeePayrollFilters.pointId)
-    : rows;
+  const rowsForEmployeeOptions = rows.filter((row) => {
+    if (state.employeePayrollFilters.adminId && !reportRowBelongsToAdmin(row, state.employeePayrollFilters.adminId)) return false;
+    if (state.employeePayrollFilters.pointId && row.pointId !== state.employeePayrollFilters.pointId) return false;
+    return true;
+  });
   const employeeOptions = uniqueReportOptions(rowsForEmployeeOptions, 'employeeId', 'fullName');
   if (state.employeePayrollFilters.employeeId && !employeeOptions.some((option) => option.value === state.employeePayrollFilters.employeeId)) {
     state.employeePayrollFilters.employeeId = '';
@@ -2375,10 +2401,15 @@ function fillReportFilterSelect(select, allLabel, options, selectedValue) {
 function filteredEmployeePayrollRows(rows) {
   const filters = state.employeePayrollFilters || {};
   return rows.filter((row) => {
+    if (filters.adminId && !reportRowBelongsToAdmin(row, filters.adminId)) return false;
     if (filters.pointId && row.pointId !== filters.pointId) return false;
     if (filters.employeeId && row.employeeId !== filters.employeeId) return false;
     return true;
   });
+}
+
+function reportRowBelongsToAdmin(row, adminId) {
+  return Array.isArray(row?.adminIds) && row.adminIds.includes(adminId);
 }
 
 function calculateEmployeePayrollTotals(rows, columns) {
