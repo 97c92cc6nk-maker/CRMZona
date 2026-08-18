@@ -656,7 +656,7 @@ h3 {
 
 .repair-form {
   display: grid;
-  grid-template-columns: minmax(180px, 0.9fr) minmax(150px, 0.7fr) minmax(240px, 1.3fr) auto;
+  grid-template-columns: minmax(170px, 0.85fr) minmax(140px, 0.6fr) minmax(220px, 1fr) minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: end;
   margin-top: 16px;
@@ -681,6 +681,29 @@ h3 {
 .repair-description-field,
 .claim-comment-field {
   grid-column: 1 / -1;
+}
+
+.repair-attachments-cell {
+  min-width: 180px;
+}
+
+.repair-attachments-list {
+  display: grid;
+  gap: 4px;
+}
+
+.repair-file-link {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  color: var(--accent-strong);
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.repair-file-meta {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 textarea {

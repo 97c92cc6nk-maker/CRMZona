@@ -1248,6 +1248,81 @@ test('employee premium is assigned to the point with the most worked days', () =
   assert.equal(krasnogorsk.rows.find((row) => row.employeeId === employee.id).bonusExtra, '5000');
 });
 
+test('employee with repair access can create repair requests with attachments', async () => {
+  const store = createTempStore();
+  store.createUser({
+    fullName: 'Owner Repairs',
+    phone: '+79990000161',
+    email: 'owner-repairs@example.com',
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Employee Repairs',
+    phone: '+79990000162',
+    email: 'employee-repairs@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedSections: ['repairs'],
+    allowedPoints: ['moscow_6231'],
+  });
+  const driveEnvKeys = [
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON',
+    'GOOGLE_SERVICE_ACCOUNT_JSON',
+    'GOOGLE_DRIVE_SERVICE_ACCOUNT_BASE64',
+    'GOOGLE_SERVICE_ACCOUNT_BASE64',
+    'GOOGLE_DRIVE_ACCESS_TOKEN',
+    'GOOGLE_DRIVE_OAUTH_CLIENT_JSON',
+    'GOOGLE_DRIVE_OAUTH_CLIENT_BASE64',
+    'GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN',
+    'GOOGLE_DRIVE_CLIENT_ID',
+    'GOOGLE_DRIVE_CLIENT_SECRET',
+    'GOOGLE_DRIVE_REFRESH_TOKEN',
+  ];
+  const previousDriveEnv = Object.fromEntries(driveEnvKeys.map((key) => [key, process.env[key]]));
+  for (const key of driveEnvKeys) {
+    delete process.env[key];
+  }
+
+  try {
+    const permissions = permissionsFor(employee);
+    assert.equal(permissions.canViewRepairs, true);
+    assert.equal(permissions.canCreateRepairs, true);
+    assert.equal(permissions.canManageRepairs, false);
+
+    const repair = await store.createRepair(employee, {
+      pointId: 'moscow_6231',
+      priority: 'high',
+      title: 'Broken shelf',
+      description: 'Shelf needs repair',
+      attachments: [{
+        fileName: 'shelf.jpg',
+        dataUrl: `data:image/jpeg;base64,${Buffer.from('repair-file').toString('base64')}`,
+      }],
+    });
+
+    assert.equal(repair.createdBy, employee.id);
+    assert.equal(repair.attachments.length, 1);
+    assert.equal(repair.attachments[0].googleDrive.status, 'unavailable');
+    assert.equal(repair.attachments[0].localUrl.includes(`/api/repairs/${repair.id}/attachments/`), true);
+
+    const file = store.getRepairAttachmentFile(employee, repair.id, repair.attachments[0].id);
+    assert.equal(file.fileName.endsWith('.jpg'), true);
+    assert.equal(file.buffer.toString(), 'repair-file');
+
+    const visibleRepairs = store.listRepairs(employee);
+    assert.equal(visibleRepairs.length, 1);
+    assert.equal(visibleRepairs[0].attachments.length, 1);
+  } finally {
+    for (const key of driveEnvKeys) {
+      if (previousDriveEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = previousDriveEnv[key];
+      }
+    }
+  }
+});
+
 test('admin can create housekeeping expense with receipt and drive fallback', async () => {
   const store = createTempStore();
   store.createUser({

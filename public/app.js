@@ -168,6 +168,7 @@ function bindElements() {
     closeDevelopmentCard: document.getElementById('closeDevelopmentCard'),
     repairForm: document.getElementById('repairForm'),
     repairPointSelect: document.getElementById('repairPointSelect'),
+    repairAttachmentFiles: document.getElementById('repairAttachmentFiles'),
     refreshRepairs: document.getElementById('refreshRepairs'),
     repairsBody: document.getElementById('repairsBody'),
     repairsNotice: document.getElementById('repairsNotice'),
@@ -2387,13 +2388,14 @@ async function loadRepairs() {
     state.repairStatuses = data.statuses || [];
     state.repairPriorities = data.priorities || [];
     state.permissions.canManageRepairs = data.canManage;
+    state.permissions.canCreateRepairs = data.canCreate;
     renderRepairs();
   }, els.repairsNotice);
 }
 
 function renderRepairs() {
   els.repairsBody.replaceChildren();
-  const repairsAllowed = Boolean(state.permissions.canViewRepairs && state.points.length);
+  const repairsAllowed = Boolean(state.permissions.canCreateRepairs && state.points.length);
   Array.from(els.repairForm.elements).forEach((field) => {
     field.disabled = !repairsAllowed;
   });
@@ -2401,7 +2403,7 @@ function renderRepairs() {
   if (!state.repairs.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.className = 'empty-state';
     cell.textContent = 'Заявок на ремонт пока нет.';
     row.append(cell);
@@ -2424,7 +2426,42 @@ function buildRepairRow(repair) {
   row.append(repairStatusCell(repair));
   appendCell(row, repair.createdByName || '');
   appendCell(row, repair.description);
+  row.append(repairAttachmentsCell(repair));
   return row;
+}
+
+function repairAttachmentsCell(repair) {
+  const cell = document.createElement('td');
+  cell.className = 'repair-attachments-cell';
+  const attachments = Array.isArray(repair.attachments) ? repair.attachments : [];
+  if (!attachments.length) {
+    cell.textContent = '—';
+    return cell;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'repair-attachments-list';
+  for (const attachment of attachments) {
+    const link = document.createElement('a');
+    link.className = 'repair-file-link';
+    link.href = attachment.googleDrive?.webViewLink || attachment.localUrl || '#';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = attachment.fileName || attachment.originalFileName || 'Файл';
+    if (!attachment.googleDrive?.webViewLink && !attachment.localUrl) {
+      link.removeAttribute('href');
+      link.textContent = attachment.googleDrive?.reason || 'Файл недоступен';
+    }
+    list.append(link);
+    if (attachment.size) {
+      const meta = document.createElement('span');
+      meta.className = 'repair-file-meta';
+      meta.textContent = formatFileSize(attachment.size);
+      list.append(meta);
+    }
+  }
+  cell.append(list);
+  return cell;
 }
 
 function repairStatusCell(repair) {
@@ -2450,30 +2487,61 @@ function repairStatusCell(repair) {
 
 async function handleRepairCreate(event) {
   event.preventDefault();
-  if (!state.permissions.canViewRepairs || !state.points.length) {
+  if (!state.permissions.canCreateRepairs || !state.points.length) {
     showNotice(els.repairsNotice, 'Нет доступа к заявкам или торговым точкам.', 'warning');
     return;
   }
   const button = event.submitter;
   await runWithButton(button, async () => {
+    const values = formValues(els.repairForm);
+    const attachments = await repairAttachmentPayloadsFromInput(els.repairAttachmentFiles);
     const data = await api('/api/repairs', {
       method: 'POST',
-      body: formValues(els.repairForm),
+      body: {
+        pointId: values.pointId,
+        priority: values.priority,
+        title: values.title,
+        description: values.description,
+        attachments,
+      },
     });
     state.repairs = [data.repair, ...state.repairs];
     els.repairForm.reset();
+    if (els.repairAttachmentFiles) {
+      els.repairAttachmentFiles.value = '';
+    }
     if (state.points[0]) {
       els.repairPointSelect.value = state.points[0].id;
     }
     renderRepairs();
     await loadAudit();
     const storageWarning = storageWarningText(data.storage);
+    const driveWarning = repairAttachmentsDriveWarning(data.repair.attachments || []);
     showNotice(
       els.repairsNotice,
-      ['Заявка на ремонт создана.', storageWarning].filter(Boolean).join(' '),
-      storageWarning ? 'warning' : 'success',
+      ['Заявка на ремонт создана.', driveWarning, storageWarning].filter(Boolean).join(' '),
+      driveWarning || storageWarning ? 'warning' : 'success',
     );
   }, els.repairsNotice);
+}
+
+async function repairAttachmentPayloadsFromInput(input) {
+  const files = Array.from(input?.files || []);
+  if (files.length > 5) {
+    throw new Error('К одной заявке можно прикрепить не больше 5 файлов.');
+  }
+  const payloads = [];
+  for (const file of files) {
+    payloads.push(await developmentAttachmentPayloadFromFile(file));
+  }
+  return payloads;
+}
+
+function repairAttachmentsDriveWarning(attachments) {
+  const warnings = (attachments || [])
+    .map((attachment) => developmentDriveWarning(attachment.googleDrive))
+    .filter(Boolean);
+  return [...new Set(warnings)].join(' ');
 }
 
 async function handleRepairStatusChange(event) {

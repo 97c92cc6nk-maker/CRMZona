@@ -878,6 +878,10 @@
               Описание
               <textarea name="description" maxlength="1000" required></textarea>
             </label>
+            <label>
+              Файлы/картинки
+              <input name="attachments" id="repairAttachmentFiles" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+            </label>
             <button class="primary" type="submit">Создать заявку</button>
           </form>
         </section>
@@ -895,6 +899,7 @@
                   <th>Статус</th>
                   <th>Автор</th>
                   <th>Описание</th>
+                  <th>Файлы</th>
                 </tr>
               </thead>
               <tbody id="repairsBody"></tbody>
