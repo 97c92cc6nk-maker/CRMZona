@@ -7,6 +7,7 @@ const state = {
   sections: [],
   points: [],
   schedulePoints: [],
+  repairPoints: [],
   users: [],
   retailPoints: [],
   retailPointPaymentMethods: [],
@@ -322,6 +323,7 @@ async function loadSession() {
   state.sections = data.sections || [];
   state.points = data.points || [];
   state.schedulePoints = data.schedulePoints || data.points || [];
+  state.repairPoints = data.repairPoints || data.points || [];
 }
 
 async function loadAppData() {
@@ -529,6 +531,7 @@ async function handleLogout() {
     state.sections = [];
     state.points = [];
     state.schedulePoints = [];
+    state.repairPoints = [];
     state.schedule = null;
     state.expenses = [];
     state.claims = [];
@@ -623,8 +626,9 @@ async function loadPoints() {
   const data = await api('/api/points');
   state.points = data.points || [];
   state.schedulePoints = data.schedulePoints || state.points;
+  state.repairPoints = data.repairPoints || state.points;
   fillPointSelect(els.pointSelect, state.schedulePoints);
-  fillPointSelect(els.repairPointSelect);
+  fillPointSelect(els.repairPointSelect, state.repairPoints);
   fillPointSelect(els.expensePointSelect);
   fillPointSelect(els.claimPointSelect);
   renderEmployeeFormAccessControls();
@@ -2395,7 +2399,7 @@ async function loadRepairs() {
 
 function renderRepairs() {
   els.repairsBody.replaceChildren();
-  const repairsAllowed = Boolean(state.permissions.canCreateRepairs && state.points.length);
+  const repairsAllowed = Boolean(state.permissions.canCreateRepairs && state.repairPoints.length);
   Array.from(els.repairForm.elements).forEach((field) => {
     field.disabled = !repairsAllowed;
   });
@@ -2487,7 +2491,7 @@ function repairStatusCell(repair) {
 
 async function handleRepairCreate(event) {
   event.preventDefault();
-  if (!state.permissions.canCreateRepairs || !state.points.length) {
+  if (!state.permissions.canCreateRepairs || !state.repairPoints.length) {
     showNotice(els.repairsNotice, 'Нет доступа к заявкам или торговым точкам.', 'warning');
     return;
   }
@@ -2510,8 +2514,8 @@ async function handleRepairCreate(event) {
     if (els.repairAttachmentFiles) {
       els.repairAttachmentFiles.value = '';
     }
-    if (state.points[0]) {
-      els.repairPointSelect.value = state.points[0].id;
+    if (state.repairPoints[0]) {
+      els.repairPointSelect.value = state.repairPoints[0].id;
     }
     renderRepairs();
     await loadAudit();
@@ -4958,6 +4962,7 @@ function pointLabel(pointId) {
   const points = [
     ...(state.points || []),
     ...(state.schedulePoints || []),
+    ...(state.repairPoints || []),
     ...(state.retailPoints || []),
   ];
   return points.find((point) => point.id === pointId)?.name || pointId || '';

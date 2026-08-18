@@ -1263,7 +1263,14 @@ test('employee with repair access can create repair requests with attachments', 
     password: 'EmployeePass123',
     role: 'employee',
     allowedSections: ['repairs'],
-    allowedPoints: ['moscow_6231'],
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Repairs',
+    phone: '+79990000163',
+    email: 'admin-repairs@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['repairs'],
   });
   const driveEnvKeys = [
     'GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON',
@@ -1288,6 +1295,12 @@ test('employee with repair access can create repair requests with attachments', 
     assert.equal(permissions.canViewRepairs, true);
     assert.equal(permissions.canCreateRepairs, true);
     assert.equal(permissions.canManageRepairs, false);
+    assert.deepEqual(permissions.allowedPoints, []);
+    const adminPermissions = permissionsFor(admin);
+    assert.equal(adminPermissions.canViewRepairs, true);
+    assert.equal(adminPermissions.canCreateRepairs, true);
+    assert.equal(adminPermissions.canManageRepairs, true);
+    assert.deepEqual(adminPermissions.allowedPoints, []);
 
     const repair = await store.createRepair(employee, {
       pointId: 'moscow_6231',
@@ -1312,6 +1325,17 @@ test('employee with repair access can create repair requests with attachments', 
     const visibleRepairs = store.listRepairs(employee);
     assert.equal(visibleRepairs.length, 1);
     assert.equal(visibleRepairs[0].attachments.length, 1);
+
+    const adminRepair = await store.createRepair(admin, {
+      pointId: 'krasnogorsk_466',
+      priority: 'normal',
+      title: 'Admin repair',
+      description: 'Admin can create repair without assigned points',
+    });
+    assert.equal(adminRepair.pointId, 'krasnogorsk_466');
+    const updatedRepair = store.updateRepair(admin, repair.id, { status: 'in_progress' });
+    assert.equal(updatedRepair.status, 'in_progress');
+    assert.equal(store.listRepairs(admin).length, 2);
   } finally {
     for (const key of driveEnvKeys) {
       if (previousDriveEnv[key] === undefined) {
