@@ -6,6 +6,7 @@ const state = {
   roles: [],
   sections: [],
   points: [],
+  schedulePoints: [],
   users: [],
   retailPoints: [],
   retailPointPaymentMethods: [],
@@ -319,6 +320,7 @@ async function loadSession() {
   state.roles = data.roles;
   state.sections = data.sections || [];
   state.points = data.points || [];
+  state.schedulePoints = data.schedulePoints || data.points || [];
 }
 
 async function loadAppData() {
@@ -525,6 +527,7 @@ async function handleLogout() {
     state.permissions = {};
     state.sections = [];
     state.points = [];
+    state.schedulePoints = [];
     state.schedule = null;
     state.expenses = [];
     state.claims = [];
@@ -617,22 +620,24 @@ function ensureActiveTabVisible() {
 
 async function loadPoints() {
   const data = await api('/api/points');
-  state.points = data.points;
-  fillPointSelect(els.pointSelect);
+  state.points = data.points || [];
+  state.schedulePoints = data.schedulePoints || state.points;
+  fillPointSelect(els.pointSelect, state.schedulePoints);
   fillPointSelect(els.repairPointSelect);
   fillPointSelect(els.expensePointSelect);
   fillPointSelect(els.claimPointSelect);
   renderEmployeeFormAccessControls();
 }
 
-function fillPointSelect(select) {
-  select.replaceChildren(...state.points.map((point) => {
+function fillPointSelect(select, points = state.points) {
+  const availablePoints = Array.isArray(points) ? points : [];
+  select.replaceChildren(...availablePoints.map((point) => {
     const option = document.createElement('option');
     option.value = point.id;
     option.textContent = point.name;
     return option;
   }));
-  select.disabled = !state.points.length;
+  select.disabled = !availablePoints.length;
 }
 
 async function loadRetailPoints() {
@@ -4207,7 +4212,7 @@ async function loadSchedule() {
     renderUnavailableSchedule();
     return;
   }
-  if (!state.points.length) {
+  if (!state.schedulePoints.length) {
     renderUnavailableSchedule('Нет доступных торговых точек.');
     return;
   }
@@ -4882,7 +4887,12 @@ function formatFileSize(value) {
 }
 
 function pointLabel(pointId) {
-  return state.points.find((point) => point.id === pointId)?.name || pointId || '';
+  const points = [
+    ...(state.points || []),
+    ...(state.schedulePoints || []),
+    ...(state.retailPoints || []),
+  ];
+  return points.find((point) => point.id === pointId)?.name || pointId || '';
 }
 
 function toNumber(value) {

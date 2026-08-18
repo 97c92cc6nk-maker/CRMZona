@@ -888,6 +888,58 @@ test('assigned retail point grants employee schedule access without section flag
   assert.equal(savedRow.days['1'].issuedCount, '10');
 });
 
+test('admin can access every schedule without changing assigned payroll points', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Admin Schedule',
+    phone: '+79990000151',
+    email: 'owner-admin-schedule@example.com',
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Schedule',
+    phone: '+79990000152',
+    email: 'admin-schedule@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['schedule'],
+    allowedPoints: ['moscow_6231'],
+    unofficialSalary: '50000',
+  });
+  const krasnogorskEmployee = store.createUser({
+    fullName: 'Krasnogorsk Schedule Employee',
+    phone: '+79990000153',
+    email: 'krasnogorsk-schedule-admin@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedPoints: ['krasnogorsk_466'],
+  });
+
+  const permissions = permissionsFor(admin);
+  assert.equal(permissions.canViewSchedule, true);
+  assert.equal(permissions.canEditSchedule, true);
+  assert.deepEqual(permissions.allowedPoints, ['moscow_6231']);
+
+  const adminView = store.getSchedule('krasnogorsk_466', '2026-07', admin);
+  assert.deepEqual(adminView.employeeOptions.map((employee) => employee.id), [krasnogorskEmployee.id]);
+  assert.deepEqual(adminView.rows.map((row) => row.employeeId), [krasnogorskEmployee.id]);
+
+  store.saveSchedule(admin, 'krasnogorsk_466', '2026-07', [{
+    employeeId: krasnogorskEmployee.id,
+    days: { 1: { rateRub: '1000', issuedCount: '10' } },
+  }]);
+
+  const ownerView = store.getSchedule('krasnogorsk_466', '2026-07', owner);
+  const savedRow = ownerView.rows.find((row) => row.employeeId === krasnogorskEmployee.id);
+  assert.equal(savedRow.days['1'].rateRub, '1000');
+  assert.equal(savedRow.days['1'].issuedCount, '10');
+
+  const adminPayroll = buildAdminPayrollReport(store.listUsers(), { adminPayroll: {} }, '2026-07');
+  assert.equal(adminPayroll.rows.length, 1);
+  assert.equal(adminPayroll.rows[0].pointsCount, 1);
+  assert.equal(adminPayroll.rows[0].bonusPoints, '3000');
+});
+
 test('schedule defaults include only employees assigned to the selected point', () => {
   const store = createTempStore();
   const owner = store.createUser({
