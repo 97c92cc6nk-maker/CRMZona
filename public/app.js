@@ -1730,12 +1730,24 @@ async function handleTaskCreate(event) {
     await loadAudit();
     const storageWarning = storageWarningText(data.storage);
     const driveWarning = repairAttachmentsDriveWarning(data.task.attachments || []);
+    const deliveryWarning = taskEmailDeliveryWarning(data.emailDelivery || data.task.emailDelivery);
     showNotice(
       els.tasksNotice,
-      ['Задача создана.', driveWarning, storageWarning].filter(Boolean).join(' '),
-      driveWarning || storageWarning ? 'warning' : 'success',
+      ['Задача создана.', deliveryWarning || 'Уведомление отправлено на email исполнителя.', driveWarning, storageWarning].filter(Boolean).join(' '),
+      deliveryWarning || driveWarning || storageWarning ? 'warning' : 'success',
     );
   }, els.tasksNotice);
+}
+
+function taskEmailDeliveryWarning(delivery) {
+  if (!delivery || delivery.status === 'sent') return '';
+  if (delivery.status === 'skipped') {
+    return `Email-уведомление не отправлено: ${delivery.reason || 'у исполнителя не указан email.'}`;
+  }
+  if (delivery.status === 'outbox') {
+    return `Email-уведомление сохранено в outbox. Причина: ${delivery.reason || 'SMTP недоступен.'}${delivery.outboxPath ? ` Файл: ${delivery.outboxPath}.` : ''}`;
+  }
+  return `Email-уведомление не отправлено: ${delivery.reason || 'неизвестная ошибка.'}`;
 }
 
 async function loadDevelopmentProposals() {

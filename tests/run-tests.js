@@ -711,6 +711,11 @@ test('tasks can be assigned between employees with file attachments', async () =
     'GOOGLE_DRIVE_CLIENT_SECRET',
     'GOOGLE_DRIVE_REFRESH_TOKEN',
     'GOOGLE_DRIVE_TASKS_FOLDER_ID',
+    'SMTP_HOST',
+    'SMTP_PORT',
+    'SMTP_USER',
+    'SMTP_PASS',
+    'SMTP_FROM',
   ];
   const previousDriveEnv = Object.fromEntries(driveEnvKeys.map((key) => [key, process.env[key]]));
   for (const key of driveEnvKeys) {
@@ -735,6 +740,15 @@ test('tasks can be assigned between employees with file attachments', async () =
     assert.equal(task.attachments.length, 1);
     assert.equal(task.attachments[0].googleDrive.status, 'unavailable');
     assert.equal(task.attachments[0].localUrl.includes(`/api/tasks/${task.id}/attachments/`), true);
+    assert.equal(task.emailDelivery.status, 'outbox');
+    assert.equal(task.emailDelivery.sourceUnavailable, true);
+    const outboxFile = path.isAbsolute(task.emailDelivery.outboxPath)
+      ? task.emailDelivery.outboxPath
+      : path.join(path.dirname(__dirname), task.emailDelivery.outboxPath);
+    const outboxText = fs.readFileSync(outboxFile, 'utf8');
+    assert.match(outboxText, /assignee-tasks@example\.com/);
+    assert.match(outboxText, /Prepare shop report/);
+    assert.match(outboxText, /Collect photos and comments for the shop report\./);
     assert.equal(store.listTasks(author).length, 1);
     assert.equal(store.listTasks(assignee).length, 1);
     assert.equal(store.listTasks(admin).length, 1);
