@@ -245,6 +245,7 @@ async function main() {
         pointId: 'moscow_6231',
         claimNumber: 'SMOKE-CLAIM-1',
         company: 'Smoke Company',
+        status: 'withheld',
         guiltyEmployeeId: createdEmployee.user.id,
         comment: 'Smoke claim',
       },

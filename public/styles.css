@@ -674,7 +674,7 @@ h3 {
 
 .claim-form {
   display: grid;
-  grid-template-columns: minmax(130px, 0.6fr) minmax(120px, 0.55fr) minmax(170px, 0.8fr) minmax(150px, 0.75fr) minmax(150px, 0.75fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(130px, 0.6fr) minmax(120px, 0.55fr) minmax(160px, 0.8fr) minmax(145px, 0.7fr) minmax(145px, 0.7fr) minmax(150px, 0.75fr) minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: end;
   margin-top: 16px;
@@ -682,17 +682,20 @@ h3 {
 
 .repair-description-field,
 .task-description-field,
-.claim-comment-field {
+.claim-comment-field,
+.claim-attachments-field {
   grid-column: 1 / -1;
 }
 
 .repair-attachments-cell,
-.task-attachments-cell {
+.task-attachments-cell,
+.claim-attachments-cell {
   min-width: 180px;
 }
 
 .repair-attachments-list,
-.task-attachments-list {
+.task-attachments-list,
+.claim-attachments-list {
   display: grid;
   gap: 4px;
 }
@@ -796,7 +799,30 @@ tbody tr:last-child td {
 }
 
 .claims-table {
-  min-width: 1180px;
+  min-width: 1360px;
+}
+
+.claims-table td {
+  vertical-align: top;
+}
+
+.claim-table-input,
+.claim-table-select,
+.claim-table-textarea {
+  width: 100%;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.claim-table-textarea {
+  min-height: 42px;
+  resize: vertical;
+}
+
+.claim-save-button,
+.claim-delete-button {
+  width: 100%;
+  margin-bottom: 6px;
 }
 
 .reports-list {

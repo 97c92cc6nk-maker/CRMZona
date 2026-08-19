@@ -295,13 +295,35 @@ test('admin payroll report calculates monthly payout fields', () => {
         },
       },
     },
-  }, '2026-07');
+  }, '2026-07', [
+    {
+      id: 'claim-admin-1',
+      date: '2026-07-15',
+      amount: '250',
+      pointId: 'moscow_6231',
+      claimNumber: 'A-1',
+      company: 'Marketplace',
+      status: 'withheld',
+      guiltyEmployeeId: 'admin-1',
+    },
+    {
+      id: 'claim-admin-new',
+      date: '2026-07-16',
+      amount: '999',
+      pointId: 'moscow_6231',
+      claimNumber: 'A-2',
+      company: 'Marketplace',
+      status: 'new',
+      guiltyEmployeeId: 'admin-1',
+    },
+  ]);
 
   assert.equal(report.rows.length, 1);
   assert.equal(report.rows[0].fullName, 'Anna Admin');
   assert.equal(report.rows[0].bonusPoints, '6000');
   assert.equal(report.rows[0].premium, '7000');
-  assert.equal(report.rows[0].payable, '45000');
+  assert.equal(report.rows[0].fines, '1250');
+  assert.equal(report.rows[0].payable, '44750');
   assert.equal(report.rows[0].comment, 'Checked');
 });
 
@@ -1226,7 +1248,7 @@ test('schedule keeps removed employee rows after save', () => {
   assert.equal(afterRestore.removedEmployeeIds.includes(employee.id), false);
 });
 
-test('claims are created in directory and distributed to the busiest point', () => {
+test('claims are visible by point access and withheld amounts are applied to their own point', async () => {
   const store = createTempStore();
   const owner = store.createUser({
     ...validateRegistration({
@@ -1267,40 +1289,55 @@ test('claims are created in directory and distributed to the busiest point', () 
     .rows.find((row) => row.employeeId === employee.id);
   assert.equal(beforeClaim.claims, '');
 
-  const firstClaim = store.createClaim(owner, {
+  const firstClaim = await store.createClaim(owner, {
     date: '2026-06-10',
     amount: '1200',
     pointId: 'krasnogorsk_466',
     claimNumber: 'CL-001',
     company: 'Маркетплейс',
+    status: 'withheld',
     guiltyEmployeeId: employee.id,
     comment: 'Недостача',
   });
-  store.createClaim(owner, {
+  await store.createClaim(owner, {
     date: '2026-06-20',
     amount: '300',
     pointId: 'moscow_6231',
     claimNumber: 'CL-002',
     company: 'Маркетплейс',
+    status: 'withheld',
     guiltyEmployeeId: employee.id,
     comment: 'Повторная претензия',
   });
+  await store.createClaim(owner, {
+    date: '2026-06-21',
+    amount: '900',
+    pointId: 'moscow_6231',
+    claimNumber: 'CL-003',
+    company: 'Маркетплейс',
+    status: 'new',
+    guiltyEmployeeId: employee.id,
+    comment: 'Еще рассматривается',
+  });
 
-  assert.equal(store.listClaims(owner).length, 2);
+  assert.equal(store.listClaims(owner).length, 3);
+  const employeeClaims = store.listClaims(employee);
+  assert.equal(employeeClaims.length, 3);
+  assert.equal(employeeClaims.every((claim) => claim.company === ''), true);
 
   const moscow = store.getSchedule('moscow_6231', '2026-06', owner)
     .rows.find((row) => row.employeeId === employee.id);
   const krasnogorsk = store.getSchedule('krasnogorsk_466', '2026-06', owner)
     .rows.find((row) => row.employeeId === employee.id);
-  assert.equal(moscow.claims, '1500');
+  assert.equal(moscow.claims, '300');
   assert.equal(moscow.claimAssignedPointId, 'moscow_6231');
-  assert.equal(krasnogorsk.claims, '0');
-  assert.equal(krasnogorsk.claimAssignedPointId, 'moscow_6231');
+  assert.equal(krasnogorsk.claims, '1200');
+  assert.equal(krasnogorsk.claimAssignedPointId, 'krasnogorsk_466');
 
-  store.deleteClaim(owner, firstClaim.id);
-  const afterDelete = store.getSchedule('moscow_6231', '2026-06', owner)
+  await store.deleteClaim(owner, firstClaim.id);
+  const afterDelete = store.getSchedule('krasnogorsk_466', '2026-06', owner)
     .rows.find((row) => row.employeeId === employee.id);
-  assert.equal(afterDelete.claims, '300');
+  assert.equal(afterDelete.claims, '0');
 });
 
 test('employee premium applies by month and preserves historical values', () => {

@@ -23,6 +23,8 @@ const state = {
   developmentStatuses: [],
   expenses: [],
   claims: [],
+  claimPoints: [],
+  claimStatuses: [],
   reports: [],
   reportOptions: [],
   adminPayrollReport: null,
@@ -200,9 +202,14 @@ function bindElements() {
     expensesBody: document.getElementById('expensesBody'),
     expensesNotice: document.getElementById('expensesNotice'),
     claimForm: document.getElementById('claimForm'),
+    claimCreatePanel: document.getElementById('claimCreatePanel'),
     claimDateInput: document.getElementById('claimDateInput'),
     claimPointSelect: document.getElementById('claimPointSelect'),
+    claimStatusSelect: document.getElementById('claimStatusSelect'),
+    claimCompanyField: document.getElementById('claimCompanyField'),
+    claimCompanyHeader: document.getElementById('claimCompanyHeader'),
     claimEmployeeSelect: document.getElementById('claimEmployeeSelect'),
+    claimAttachmentFiles: document.getElementById('claimAttachmentFiles'),
     refreshClaims: document.getElementById('refreshClaims'),
     claimsBody: document.getElementById('claimsBody'),
     claimsNotice: document.getElementById('claimsNotice'),
@@ -564,6 +571,8 @@ async function handleLogout() {
     state.schedule = null;
     state.expenses = [];
     state.claims = [];
+    state.claimPoints = [];
+    state.claimStatuses = [];
     state.tasks = [];
     state.taskPriorities = [];
     state.taskAssigneeOptions = [];
@@ -3115,8 +3124,11 @@ async function loadClaims() {
   await runWithButton(els.refreshClaims, async () => {
     const data = await api('/api/claims');
     state.claims = data.claims || [];
+    state.claimPoints = data.points || [];
+    state.claimStatuses = data.statuses || [];
     state.claimEmployees = data.employeeOptions || [];
-    state.permissions.canManageClaims = data.canManage;
+    state.permissions.canManageClaims = Boolean(data.canManage);
+    state.permissions.canViewClaimCompany = Boolean(data.canViewCompany);
     renderClaims();
   }, els.claimsNotice);
 }
@@ -3124,19 +3136,30 @@ async function loadClaims() {
 function renderClaims() {
   if (!els.claimsBody) return;
   els.claimsBody.replaceChildren();
-  const canManage = Boolean(state.permissions.canManageClaims && state.points.length && state.claimEmployees.length);
+  const canManage = Boolean(state.permissions.canManageClaims && claimPointOptions().length && state.claimEmployees.length);
+  const canViewCompany = Boolean(state.permissions.canViewClaimCompany);
   if (!els.claimDateInput.value) {
     els.claimDateInput.value = currentDate();
   }
+  fillClaimPointOptions();
+  fillClaimStatusSelect(els.claimStatusSelect, els.claimStatusSelect?.value || 'new');
   fillClaimEmployeeOptions();
-  Array.from(els.claimForm.elements).forEach((field) => {
-    field.disabled = !canManage;
-  });
+  els.claimCreatePanel?.classList.toggle('is-hidden', !canManage);
+  els.claimCompanyField?.classList.toggle('is-hidden', !canViewCompany);
+  els.claimCompanyHeader?.classList.toggle('is-hidden', !canViewCompany);
+  if (els.claimForm) {
+    Array.from(els.claimForm.elements).forEach((field) => {
+      field.disabled = !canManage;
+    });
+    if (els.claimForm.elements.company) {
+      els.claimForm.elements.company.required = canViewCompany;
+    }
+  }
 
   if (!state.permissions.canViewClaims) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = claimTableColumnCount();
     cell.className = 'empty-state';
     cell.textContent = 'Нет доступа к разделу претензий.';
     row.append(cell);
@@ -3147,7 +3170,7 @@ function renderClaims() {
   if (!state.claims.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = claimTableColumnCount();
     cell.className = 'empty-state';
     cell.textContent = 'Претензий пока нет.';
     row.append(cell);
@@ -3176,31 +3199,175 @@ function fillClaimEmployeeOptions() {
   }));
 }
 
+function fillClaimPointOptions() {
+  if (!els.claimPointSelect) return;
+  const previous = els.claimPointSelect.value;
+  const options = claimPointOptions();
+  els.claimPointSelect.replaceChildren(...options.map((point) => selectOption(point.id, point.name)));
+  if (options.some((point) => point.id === previous)) {
+    els.claimPointSelect.value = previous;
+  }
+}
+
+function fillClaimStatusSelect(select, value = 'new') {
+  if (!select) return;
+  const statuses = claimStatusOptions();
+  select.replaceChildren(...statuses.map((status) => selectOption(status.value, status.label)));
+  select.value = statuses.some((status) => status.value === value) ? value : 'new';
+}
+
+function claimPointOptions() {
+  return state.claimPoints.length ? state.claimPoints : state.points;
+}
+
+function claimStatusOptions() {
+  return state.claimStatuses.length
+    ? state.claimStatuses
+    : [
+        { value: 'new', label: 'Новая' },
+        { value: 'review', label: 'На рассмотрении' },
+        { value: 'withheld', label: 'Удержана' },
+      ];
+}
+
+function claimTableColumnCount() {
+  return state.permissions.canViewClaimCompany ? 10 : 9;
+}
+
 function buildClaimRow(claim) {
   const row = document.createElement('tr');
   row.dataset.claimId = claim.id;
-  appendCell(row, claim.date ? formatDate(claim.date) : '');
-  appendCell(row, formatMoney(toNumber(claim.amount)), 'numeric-cell');
-  appendCell(row, claim.pointName || '');
-  appendCell(row, claim.claimNumber || '');
-  appendCell(row, claim.company || '');
-  appendCell(row, claim.guiltyEmployeeName || '');
-  appendCell(row, claim.comment || '');
+  const canManage = Boolean(state.permissions.canManageClaims);
+  const canViewCompany = Boolean(state.permissions.canViewClaimCompany);
+
+  if (canManage) {
+    row.append(claimInputCell('date', claim.date || '', 'date'));
+    row.append(claimInputCell('amount', claim.amount || '', 'text', {
+      inputmode: 'decimal',
+      pattern: '\\d*([,.]\\d+)?',
+      maxlength: '16',
+    }));
+    row.append(claimSelectCell('pointId', claimPointOptions(), claim.pointId, 'id', 'name'));
+    row.append(claimInputCell('claimNumber', claim.claimNumber || '', 'text', { maxlength: '120' }));
+    row.append(claimSelectCell('status', claimStatusOptions(), claim.status || 'new', 'value', 'label'));
+    if (canViewCompany) {
+      row.append(claimInputCell('company', claim.company || '', 'text', { maxlength: '160' }));
+    }
+    row.append(claimSelectCell('guiltyEmployeeId', state.claimEmployees, claim.guiltyEmployeeId, 'id', 'fullName'));
+    row.append(claimTextareaCell('comment', claim.comment || ''));
+  } else {
+    appendCell(row, claim.date ? formatDate(claim.date) : '');
+    appendCell(row, formatMoney(toNumber(claim.amount)), 'numeric-cell');
+    appendCell(row, claim.pointName || '');
+    appendCell(row, claim.claimNumber || '');
+    appendCell(row, claim.statusLabel || claim.status || '');
+    if (canViewCompany) appendCell(row, claim.company || '');
+    appendCell(row, claim.guiltyEmployeeName || '');
+    appendCell(row, claim.comment || '');
+  }
+  row.append(claimAttachmentsCell(claim));
 
   const actionsCell = document.createElement('td');
-  if (state.permissions.canManageClaims) {
+  if (canManage) {
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.className = 'secondary claim-save-button';
+    saveButton.dataset.action = 'save-claim';
+    saveButton.dataset.claimId = claim.id;
+    saveButton.textContent = 'Сохранить';
+
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
     deleteButton.className = 'danger claim-delete-button';
     deleteButton.dataset.action = 'delete-claim';
     deleteButton.dataset.claimId = claim.id;
     deleteButton.textContent = 'Удалить';
-    actionsCell.append(deleteButton);
+    actionsCell.append(saveButton, deleteButton);
   } else {
-    actionsCell.textContent = '—';
+    actionsCell.textContent = '-';
   }
   row.append(actionsCell);
   return row;
+}
+
+function claimInputCell(name, value, type = 'text', attrs = {}) {
+  const cell = document.createElement('td');
+  const input = document.createElement('input');
+  input.className = 'claim-table-input';
+  input.name = name;
+  input.dataset.claimField = name;
+  input.type = type;
+  input.value = value || '';
+  if (attrs.maxlength) input.maxLength = Number(attrs.maxlength);
+  if (attrs.inputmode) input.inputMode = attrs.inputmode;
+  if (attrs.pattern) input.pattern = attrs.pattern;
+  cell.append(input);
+  return cell;
+}
+
+function claimTextareaCell(name, value) {
+  const cell = document.createElement('td');
+  const textarea = document.createElement('textarea');
+  textarea.className = 'claim-table-textarea';
+  textarea.name = name;
+  textarea.dataset.claimField = name;
+  textarea.maxLength = 1000;
+  textarea.value = value || '';
+  cell.append(textarea);
+  return cell;
+}
+
+function claimSelectCell(name, options, value, valueKey, labelKey) {
+  const cell = document.createElement('td');
+  const select = document.createElement('select');
+  select.className = 'claim-table-select';
+  select.name = name;
+  select.dataset.claimField = name;
+  for (const item of options || []) {
+    const option = document.createElement('option');
+    option.value = item[valueKey];
+    option.textContent = name === 'guiltyEmployeeId' && item.email
+      ? `${item[labelKey]} · ${item.email}`
+      : item[labelKey];
+    select.append(option);
+  }
+  select.value = value || '';
+  cell.append(select);
+  return cell;
+}
+
+function claimAttachmentsCell(claim) {
+  const cell = document.createElement('td');
+  cell.className = 'claim-attachments-cell';
+  const attachments = Array.isArray(claim.attachments) ? claim.attachments : [];
+  if (!attachments.length) {
+    cell.textContent = '-';
+    return cell;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'claim-attachments-list';
+  for (const attachment of attachments) {
+    const link = document.createElement('a');
+    link.className = 'repair-file-link';
+    link.href = attachment.googleDrive?.webViewLink || attachment.localUrl || '#';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = attachment.fileName || attachment.originalFileName || 'Файл';
+    if (!attachment.googleDrive?.webViewLink && !attachment.localUrl) {
+      link.removeAttribute('href');
+      link.textContent = attachment.googleDrive?.reason || 'Файл недоступен';
+    }
+    list.append(link);
+    if (attachment.size) {
+      const meta = document.createElement('span');
+      meta.className = 'repair-file-meta';
+      meta.textContent = formatFileSize(attachment.size);
+      list.append(meta);
+    }
+  }
+  cell.append(list);
+  return cell;
 }
 
 function compareClaimsByDateDesc(left, right) {
@@ -3215,36 +3382,51 @@ function claimSortTime(claim) {
 
 async function handleClaimCreate(event) {
   event.preventDefault();
-  if (!state.permissions.canManageClaims || !state.points.length || !state.claimEmployees.length) {
+  if (!state.permissions.canManageClaims || !claimPointOptions().length || !state.claimEmployees.length) {
     showNotice(els.claimsNotice, 'Нет прав на внесение претензий, доступных торговых точек или сотрудников.', 'warning');
     return;
   }
   const button = event.submitter;
   await runWithButton(button, async () => {
     const values = formValues(els.claimForm);
+    const attachments = await repairAttachmentPayloadsFromInput(els.claimAttachmentFiles);
     const data = await api('/api/claims', {
       method: 'POST',
-      body: values,
+      body: {
+        ...values,
+        company: state.permissions.canViewClaimCompany ? values.company : '',
+        attachments,
+      },
     });
     state.claims = [data.claim, ...state.claims];
     els.claimForm.reset();
     els.claimDateInput.value = currentDate();
-    if (state.points[0]) {
-      els.claimPointSelect.value = state.points[0].id;
+    if (els.claimAttachmentFiles) els.claimAttachmentFiles.value = '';
+    fillClaimStatusSelect(els.claimStatusSelect, 'new');
+    const points = claimPointOptions();
+    if (points[0]) {
+      els.claimPointSelect.value = points[0].id;
     }
     renderClaims();
-    await refreshScheduleForClaimMonth(data.claim.date);
+    await refreshViewsAfterClaimChange(data.claim.date);
     await loadAudit();
     const storageWarning = storageWarningText(data.storage);
+    const driveWarning = repairAttachmentsDriveWarning(data.claim.attachments || []);
     showNotice(
       els.claimsNotice,
-      ['Претензия сохранена.', storageWarning].filter(Boolean).join(' '),
-      storageWarning ? 'warning' : 'success',
+      ['Претензия сохранена.', driveWarning, storageWarning].filter(Boolean).join(' '),
+      driveWarning || storageWarning ? 'warning' : 'success',
     );
   }, els.claimsNotice);
 }
 
 async function handleClaimTableClick(event) {
+  const saveButton = event.target.closest('[data-action="save-claim"]');
+  if (saveButton) {
+    await handleClaimSave(saveButton);
+    return;
+  }
+
   const button = event.target.closest('[data-action="delete-claim"]');
   if (!button) return;
 
@@ -3262,20 +3444,75 @@ async function handleClaimTableClick(event) {
     });
     state.claims = state.claims.filter((item) => item.id !== data.claim.id);
     renderClaims();
-    await refreshScheduleForClaimMonth(data.claim.date);
+    await refreshViewsAfterClaimChange(data.claim.date);
+    await loadAudit();
+    const storageWarning = storageWarningText(data.storage);
+    const driveWarning = claimDeleteDriveWarning(data.claim.googleDriveCleanup);
+    showNotice(
+      els.claimsNotice,
+      ['Претензия удалена.', driveWarning, storageWarning].filter(Boolean).join(' '),
+      driveWarning || storageWarning ? 'warning' : 'success',
+    );
+  }, els.claimsNotice);
+}
+
+async function handleClaimSave(button) {
+  const claimId = button.dataset.claimId;
+  const current = state.claims.find((item) => item.id === claimId);
+  const row = button.closest('tr');
+  if (!row || !current) return;
+  const payload = claimPayloadFromRow(row);
+  await runWithButton(button, async () => {
+    const data = await api(`/api/claims/${encodeURIComponent(claimId)}`, {
+      method: 'PATCH',
+      body: payload,
+    });
+    state.claims = state.claims.map((item) => (item.id === data.claim.id ? data.claim : item));
+    renderClaims();
+    await refreshViewsAfterClaimChange(current.date, data.claim.date);
     await loadAudit();
     const storageWarning = storageWarningText(data.storage);
     showNotice(
       els.claimsNotice,
-      ['Претензия удалена.', storageWarning].filter(Boolean).join(' '),
+      ['Претензия обновлена.', storageWarning].filter(Boolean).join(' '),
       storageWarning ? 'warning' : 'success',
     );
   }, els.claimsNotice);
 }
 
+function claimPayloadFromRow(row) {
+  const payload = {};
+  row.querySelectorAll('[data-claim-field]').forEach((field) => {
+    payload[field.dataset.claimField] = field.value;
+  });
+  if (!state.permissions.canViewClaimCompany) {
+    payload.company = '';
+  }
+  return payload;
+}
+
 async function refreshScheduleForClaimMonth(date) {
   if (!state.schedule || !date || state.schedule.month !== String(date).slice(0, 7)) return;
   await loadSchedule();
+}
+
+async function refreshViewsAfterClaimChange(...dates) {
+  const months = new Set(dates.filter(Boolean).map((date) => String(date).slice(0, 7)));
+  if (state.schedule && months.has(state.schedule.month)) {
+    await loadSchedule();
+  }
+  if (state.selectedReportId && state.reportMonthInput && months.has(state.reportMonthInput.value)) {
+    await loadSelectedReport();
+  }
+}
+
+function claimDeleteDriveWarning(cleanup) {
+  const failures = (cleanup || [])
+    .filter((item) => item.status === 'failed' || item.status === 'unavailable')
+    .map((item) => item.reason)
+    .filter(Boolean);
+  if (!failures.length) return '';
+  return `Google Drive: ${failures.join(' ')}`;
 }
 
 async function employeeDocumentPayloadFromFile(file) {

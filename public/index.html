@@ -867,7 +867,7 @@
           <button class="secondary" type="button" id="refreshClaims">Обновить</button>
         </div>
 
-        <section class="panel" aria-labelledby="claimCreateTitle">
+        <section class="panel" id="claimCreatePanel" aria-labelledby="claimCreateTitle">
           <h3 id="claimCreateTitle">Новая претензия</h3>
           <form class="claim-form" id="claimForm">
             <label>
@@ -887,6 +887,10 @@
               <input name="claimNumber" type="text" maxlength="120" required>
             </label>
             <label>
+              Статус
+              <select name="status" id="claimStatusSelect" required></select>
+            </label>
+            <label id="claimCompanyField">
               Компания
               <input name="company" type="text" maxlength="160" required>
             </label>
@@ -897,6 +901,10 @@
             <label class="claim-comment-field">
               Комментарий
               <textarea name="comment" maxlength="1000"></textarea>
+            </label>
+            <label class="claim-attachments-field">
+              Файлы
+              <input name="attachments" id="claimAttachmentFiles" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt">
             </label>
             <button class="primary" type="submit">Сохранить претензию</button>
           </form>
@@ -912,9 +920,11 @@
                   <th>Сумма</th>
                   <th>Торговая точка</th>
                   <th>Номер претензии</th>
-                  <th>Компания</th>
+                  <th>Статус</th>
+                  <th id="claimCompanyHeader">Компания</th>
                   <th>Виновный сотрудник</th>
                   <th>Комментарий</th>
+                  <th>Файлы</th>
                   <th>Действие</th>
                 </tr>
               </thead>
