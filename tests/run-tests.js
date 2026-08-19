@@ -552,6 +552,7 @@ test('development proposals are scoped by access and reviewed by owner', async (
   });
 
   assert.equal(proposal.status, 'new');
+  assert.equal(proposal.canDelete, true);
   assert.equal(store.listDevelopmentProposals(admin).length, 1);
   assert.equal(store.listDevelopmentProposals(otherAdmin).length, 0);
   assert.equal(store.listDevelopmentProposals(owner).length, 1);
@@ -567,6 +568,7 @@ test('development proposals are scoped by access and reviewed by owner', async (
     description: 'Employee can submit proposals after Development access is enabled.',
   });
   assert.equal(employeeProposal.status, 'new');
+  assert.equal(employeeProposal.canDelete, false);
   assert.equal(store.listDevelopmentProposals(employeeWithDevelopment).length, 1);
   assert.equal(store.listDevelopmentProposals(otherAdmin).length, 0);
   assert.equal(store.listDevelopmentProposals(owner).length, 2);
@@ -589,6 +591,23 @@ test('development proposals are scoped by access and reviewed by owner', async (
   assert.equal(reviewed.statusLabel, 'В работе');
   assert.equal(reviewed.ownerComment, 'Берем в работу.');
   assert.equal(reviewed.codexTask, 'Сделать фильтр по статусу в разделе Разработка.');
+  await assert.rejects(
+    () => store.deleteDevelopmentProposal(otherAdmin, proposal.id),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
+  await assert.rejects(
+    () => store.deleteDevelopmentProposal(employeeWithDevelopment, employeeProposal.id),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
+
+  const deletedByAdmin = await store.deleteDevelopmentProposal(admin, proposal.id);
+  assert.equal(deletedByAdmin.proposal.id, proposal.id);
+  assert.equal(store.listDevelopmentProposals(admin).length, 0);
+  assert.equal(store.listDevelopmentProposals(owner).length, 1);
+
+  const deletedByOwner = await store.deleteDevelopmentProposal(owner, employeeProposal.id);
+  assert.equal(deletedByOwner.proposal.id, employeeProposal.id);
+  assert.equal(store.listDevelopmentProposals(owner).length, 0);
 });
 
 test('development proposal attachments keep local fallback when Google Drive is unavailable', async () => {

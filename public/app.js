@@ -1778,7 +1778,7 @@ function renderDevelopmentProposals() {
   if (!canView) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.className = 'empty-state';
     cell.textContent = 'Нет доступа к разделу Разработка.';
     row.append(cell);
@@ -1790,7 +1790,7 @@ function renderDevelopmentProposals() {
   if (!state.developmentProposals.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.className = 'empty-state';
     cell.textContent = 'Предложения пока не добавлены.';
     row.append(cell);
@@ -1824,10 +1824,27 @@ function buildDevelopmentProposalRow(proposal) {
   appendCell(row, shortText(proposal.description, 140), 'development-description-cell');
   appendCell(row, String((proposal.attachments || []).length), 'center-cell');
   appendCell(row, formatDateTime(proposal.updatedAt));
+  const actionCell = document.createElement('td');
+  if (proposal.canDelete) {
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'danger development-delete-button';
+    deleteButton.dataset.deleteDevelopmentProposal = proposal.id;
+    deleteButton.textContent = 'Удалить';
+    actionCell.append(deleteButton);
+  } else {
+    actionCell.textContent = '-';
+  }
+  row.append(actionCell);
   return row;
 }
 
 function handleDevelopmentTableClick(event) {
+  const deleteButton = event.target.closest('[data-delete-development-proposal]');
+  if (deleteButton) {
+    deleteDevelopmentProposal(deleteButton.dataset.deleteDevelopmentProposal, deleteButton);
+    return;
+  }
   const button = event.target.closest('[data-development-proposal-id]');
   if (!button) return;
   state.selectedDevelopmentProposalId = button.dataset.developmentProposalId;
@@ -2055,6 +2072,33 @@ async function handleDevelopmentAttachmentClick(event) {
   }, els.developmentNotice);
 }
 
+async function deleteDevelopmentProposal(proposalId, button) {
+  if (!proposalId) return;
+  const proposal = state.developmentProposals.find((item) => item.id === proposalId);
+  const label = proposal?.title || 'предложение';
+  if (!window.confirm(`Удалить предложение "${label}" и все его файлы из Google Drive?`)) return;
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/development/${encodeURIComponent(proposalId)}`, {
+      method: 'DELETE',
+    });
+    removeDevelopmentProposalFromState(proposalId);
+    if (state.selectedDevelopmentProposalId === proposalId) {
+      state.selectedDevelopmentProposalId = null;
+    }
+    renderDevelopmentProposals();
+    renderDevelopmentCard();
+    const driveWarnings = (data.googleDriveCleanup || [])
+      .map((cleanup) => retailPointDriveDeleteWarning(cleanup))
+      .filter(Boolean);
+    showNotice(
+      els.developmentNotice,
+      ['Предложение удалено.', ...driveWarnings, storageWarningText(data.storage)].filter(Boolean).join(' '),
+      driveWarnings.length || data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.developmentNotice);
+}
+
 function closeDevelopmentCard() {
   state.selectedDevelopmentProposalId = null;
   renderDevelopmentCard();
@@ -2068,6 +2112,10 @@ function replaceDevelopmentProposalInState(proposal) {
   } else {
     state.developmentProposals.splice(index, 1, proposal);
   }
+}
+
+function removeDevelopmentProposalFromState(proposalId) {
+  state.developmentProposals = state.developmentProposals.filter((proposal) => proposal.id !== proposalId);
 }
 
 function developmentStatusLabel(status) {
