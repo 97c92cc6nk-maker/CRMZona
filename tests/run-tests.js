@@ -1100,6 +1100,19 @@ test('employee can save only own schedule row without overwriting others', () =>
     days: { 1: { rateRub: '10', issuedCount: '2' } },
   }]);
 
+  const employeePointView = store.getSchedule('moscow_6231', '2026-06', employee);
+  assert.deepEqual(
+    employeePointView.rows.map((row) => row.employeeId).sort(),
+    [coworker.id, employee.id].sort(),
+  );
+  assert.deepEqual(employeePointView.summaryRows.map((row) => row.employeeId), [employee.id]);
+  assert.deepEqual(employeePointView.employeeOptions.map((option) => option.id), [employee.id]);
+  const visibleCoworkerRow = employeePointView.rows.find((row) => row.employeeId === coworker.id);
+  assert.equal(visibleCoworkerRow.days['1'].rateRub, '15');
+  assert.equal(visibleCoworkerRow.advanceCard, '');
+  assert.equal(visibleCoworkerRow.salaryCard, '');
+  assert.equal(visibleCoworkerRow.bonusExtra, '');
+
   assert.throws(
     () => store.saveSchedule(employee, 'moscow_6231', '2026-06', [{
       employeeId: coworker.id,

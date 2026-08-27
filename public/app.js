@@ -5170,6 +5170,31 @@ function canViewScheduleFinancials() {
   return Boolean(state.canViewScheduleFinancials);
 }
 
+function canEditScheduleRow(scheduleRow) {
+  return Boolean(
+    state.canEditSchedule
+      && (state.canManageAllSchedule || scheduleRow?.employeeId === state.user?.id),
+  );
+}
+
+function scheduleRowsForSummary() {
+  if (!state.schedule) return [];
+  const rows = Array.isArray(state.schedule.summaryRows)
+    ? state.schedule.summaryRows
+    : state.schedule.rows || [];
+  if (state.user?.role === 'employee') {
+    return rows.filter((row) => row.employeeId === state.user.id);
+  }
+  return rows;
+}
+
+function scheduleRowsForSave() {
+  if (!state.schedule) return [];
+  const rows = state.schedule.rows || [];
+  if (state.canManageAllSchedule) return rows;
+  return rows.filter((row) => row.employeeId === state.user?.id);
+}
+
 function visibleSummaryColumns() {
   const columns = [
     { key: 'employee', label: 'Сотрудник' },
@@ -5258,6 +5283,7 @@ function buildMetricRow(schedule, scheduleRow, metric, label, isFirstMetricRow) 
   const row = document.createElement('tr');
   row.dataset.rowId = scheduleRow.id;
   row.dataset.metric = metric;
+  const rowEditable = canEditScheduleRow(scheduleRow);
   if (isFirstMetricRow) {
     row.classList.add('employee-start-row');
     row.append(scheduleEmployeeCell(scheduleRow));
@@ -5275,7 +5301,7 @@ function buildMetricRow(schedule, scheduleRow, metric, label, isFirstMetricRow) 
     const value = dayValue[metric] ?? '';
     const isFilledRate = metric === 'rateRub' && String(value).trim() !== '';
     cell.classList.toggle('rate-filled', isFilledRate);
-    if (state.canEditSchedule) {
+    if (rowEditable) {
       const input = document.createElement('input');
       input.className = 'day-input';
       input.name = `${metric}-${day}`;
@@ -5294,11 +5320,11 @@ function buildMetricRow(schedule, scheduleRow, metric, label, isFirstMetricRow) 
     row.append(cell);
   }
 
-  if (state.canEditSchedule) {
+  if (state.canEditSchedule && isFirstMetricRow) {
     const removeCell = document.createElement('td');
     removeCell.className = 'remove-col';
-    if (isFirstMetricRow) {
-      removeCell.rowSpan = 2;
+    removeCell.rowSpan = 2;
+    if (state.canManageAllSchedule) {
       const button = document.createElement('button');
       button.className = 'remove-row';
       button.type = 'button';
@@ -5306,8 +5332,8 @@ function buildMetricRow(schedule, scheduleRow, metric, label, isFirstMetricRow) 
       button.title = 'Удалить сотрудника из графика';
       button.textContent = '×';
       removeCell.append(button);
-      row.append(removeCell);
     }
+    row.append(removeCell);
   }
 
   return row;
@@ -5318,7 +5344,7 @@ function scheduleEmployeeCell(scheduleRow) {
   cell.className = 'employee-col';
   cell.rowSpan = 2;
 
-  if (!state.canEditSchedule) {
+  if (!canEditScheduleRow(scheduleRow)) {
     cell.textContent = scheduleRow.employeeName;
     return cell;
   }
@@ -5419,8 +5445,9 @@ function renderScheduleSummary() {
   if (!els.summaryBody || !state.schedule) return;
   els.summaryBody.replaceChildren();
   els.summaryFooter.replaceChildren();
+  const summaryRows = scheduleRowsForSummary();
 
-  if (!state.schedule.rows.length) {
+  if (!summaryRows.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
     cell.colSpan = visibleSummaryColumns().length;
@@ -5431,7 +5458,7 @@ function renderScheduleSummary() {
     return;
   }
 
-  for (const scheduleRow of state.schedule.rows) {
+  for (const scheduleRow of summaryRows) {
     const totals = calculateEmployeeSummary(scheduleRow, state.schedule.daysInMonth);
     const row = document.createElement('tr');
     row.dataset.rowId = scheduleRow.id;
@@ -5455,10 +5482,12 @@ function renderScheduleSummary() {
 }
 
 function renderSummaryFooter() {
-  if (!els.summaryFooter || !state.schedule || !state.schedule.rows.length) return;
+  if (!els.summaryFooter || !state.schedule) return;
+  const summaryRows = scheduleRowsForSummary();
+  if (!summaryRows.length) return;
   els.summaryFooter.replaceChildren();
 
-  const totals = state.schedule.rows.reduce((acc, scheduleRow) => {
+  const totals = summaryRows.reduce((acc, scheduleRow) => {
     const rowTotals = calculateEmployeeSummary(scheduleRow, state.schedule.daysInMonth);
     acc.issuedTotal += rowTotals.issuedTotal;
     acc.rateFirstHalf += rowTotals.rateFirstHalf;
@@ -5642,7 +5671,7 @@ async function saveSchedule() {
       body: {
         pointId: state.schedule.pointId,
         month: state.schedule.month,
-        rows: state.schedule.rows,
+        rows: scheduleRowsForSave(),
         removedEmployeeIds: state.schedule.removedEmployeeIds || [],
       },
     });
