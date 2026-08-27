@@ -106,6 +106,7 @@
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="reportsView">Отчеты</button>
           <button class="tab" type="button" data-view="tasksView">Задачи</button>
+          <button class="tab" type="button" data-view="requestsView">Заявки</button>
           <button class="tab" type="button" data-view="developmentView">Разработка</button>
           <button class="tab" type="button" data-view="claimsView">Претензии</button>
           <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
@@ -860,6 +861,86 @@
         </section>
 
         <div class="notice" id="tasksNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="requestsView" aria-labelledby="requestsTitle">
+        <div class="section-head">
+          <h2 id="requestsTitle">Заявки</h2>
+          <button class="secondary" type="button" id="refreshRequests">Обновить</button>
+        </div>
+
+        <section class="panel" aria-labelledby="requestCreateTitle">
+          <h3 id="requestCreateTitle">Новая заявка</h3>
+          <form class="request-form" id="requestForm">
+            <label>
+              №
+              <input name="number" id="requestNumberInput" type="text" readonly placeholder="Автоматически">
+            </label>
+            <label>
+              Дата
+              <input name="date" id="requestDateInput" type="date" readonly>
+            </label>
+            <label>
+              Торговая точка
+              <select name="pointId" id="requestPointSelect" required></select>
+            </label>
+            <label>
+              Срочность
+              <select name="urgency" id="requestUrgencySelect" required>
+                <option value="normal">Обычная</option>
+                <option value="high">Срочная</option>
+                <option value="critical">Критичная</option>
+              </select>
+            </label>
+            <label>
+              Тип заявки
+              <select name="type" id="requestTypeSelect" required>
+                <option value="purchase">Закупка</option>
+                <option value="complaint">Жалоба</option>
+                <option value="suggestion">Предложение</option>
+              </select>
+            </label>
+            <label>
+              Тема
+              <input name="title" type="text" maxlength="160" required>
+            </label>
+            <label class="request-description-field">
+              Описание
+              <textarea name="description" maxlength="4000" required></textarea>
+            </label>
+            <label>
+              Файлы/картинки
+              <input name="attachments" id="requestAttachmentFiles" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt">
+            </label>
+            <button class="primary" type="submit">Создать заявку</button>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="requestsListTitle">
+          <h3 id="requestsListTitle">Список заявок</h3>
+          <div class="table-wrap">
+            <table class="requests-table">
+              <thead>
+                <tr>
+                  <th>№</th>
+                  <th>Дата</th>
+                  <th>Точка</th>
+                  <th>Срочность</th>
+                  <th>Тип</th>
+                  <th>Тема</th>
+                  <th>Описание</th>
+                  <th>Автор</th>
+                  <th>Статус</th>
+                  <th>Файлы</th>
+                  <th>Действие</th>
+                </tr>
+              </thead>
+              <tbody id="requestsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="notice" id="requestsNotice" role="status" aria-live="polite"></div>
       </section>
 
       <section class="view" id="claimsView" aria-labelledby="claimsTitle">

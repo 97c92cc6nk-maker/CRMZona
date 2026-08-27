@@ -441,6 +441,7 @@ h3 {
 .retail-point-form,
 .company-form,
 .task-form,
+.request-form,
 .development-form,
 .development-card-form {
   display: grid;
@@ -454,6 +455,7 @@ h3 {
 .retail-point-wide,
 .company-wide,
 .task-description-field,
+.request-description-field,
 .development-description-field {
   grid-column: 1 / -1;
 }
@@ -790,6 +792,10 @@ tbody tr:last-child td {
   min-width: 1160px;
 }
 
+.requests-table {
+  min-width: 1360px;
+}
+
 .development-table {
   min-width: 1180px;
 }
@@ -968,6 +974,7 @@ tbody tr:last-child td {
 }
 
 .expense-delete-button,
+.request-delete-button,
 .claim-delete-button {
   min-height: 34px;
   padding: 6px 10px;
@@ -1355,6 +1362,7 @@ tbody tr:last-child td {
   .development-form,
   .development-card-form,
   .task-form,
+  .request-form,
   .expense-form,
   .claim-form,
   .repair-form {

@@ -17,6 +17,11 @@ const state = {
   companyPoints: [],
   repairs: [],
   tasks: [],
+  requests: [],
+  requestPoints: [],
+  requestPriorities: [],
+  requestTypes: [],
+  requestStatuses: [],
   taskPriorities: [],
   taskAssigneeOptions: [],
   developmentProposals: [],
@@ -172,6 +177,16 @@ function bindElements() {
     refreshTasks: document.getElementById('refreshTasks'),
     tasksBody: document.getElementById('tasksBody'),
     tasksNotice: document.getElementById('tasksNotice'),
+    requestForm: document.getElementById('requestForm'),
+    requestNumberInput: document.getElementById('requestNumberInput'),
+    requestDateInput: document.getElementById('requestDateInput'),
+    requestPointSelect: document.getElementById('requestPointSelect'),
+    requestUrgencySelect: document.getElementById('requestUrgencySelect'),
+    requestTypeSelect: document.getElementById('requestTypeSelect'),
+    requestAttachmentFiles: document.getElementById('requestAttachmentFiles'),
+    refreshRequests: document.getElementById('refreshRequests'),
+    requestsBody: document.getElementById('requestsBody'),
+    requestsNotice: document.getElementById('requestsNotice'),
     developmentForm: document.getElementById('developmentForm'),
     developmentAddPanel: document.getElementById('developmentAddPanel'),
     refreshDevelopment: document.getElementById('refreshDevelopment'),
@@ -295,6 +310,10 @@ function bindEvents() {
   els.reportContent.addEventListener('input', handleReportContentInput);
   els.taskForm?.addEventListener('submit', handleTaskCreate);
   els.refreshTasks?.addEventListener('click', loadTasks);
+  els.requestForm?.addEventListener('submit', handleRequestCreate);
+  els.refreshRequests?.addEventListener('click', loadRequests);
+  els.requestsBody?.addEventListener('change', handleRequestStatusChange);
+  els.requestsBody?.addEventListener('click', handleRequestTableClick);
   els.developmentForm?.addEventListener('submit', handleDevelopmentCreate);
   els.refreshDevelopment?.addEventListener('click', loadDevelopmentProposals);
   els.developmentBody?.addEventListener('click', handleDevelopmentTableClick);
@@ -337,6 +356,7 @@ async function bootstrap() {
   els.claimDateInput.value = currentDate();
   if (els.taskCreatedAtInput) els.taskCreatedAtInput.value = currentDate();
   if (els.taskDeadlineInput) els.taskDeadlineInput.value = currentDate();
+  if (els.requestDateInput) els.requestDateInput.value = currentDate();
   try {
     await loadSession();
     await loadAppData();
@@ -354,6 +374,7 @@ async function loadSession() {
   state.sections = data.sections || [];
   state.points = data.points || [];
   state.schedulePoints = data.schedulePoints || data.points || [];
+  state.requestPoints = data.requestPoints || data.points || [];
   state.repairPoints = data.repairPoints || data.points || [];
 }
 
@@ -388,6 +409,11 @@ async function loadAppData() {
     loaders.push(loadTasks());
   } else {
     renderTasks();
+  }
+  if (state.permissions.canViewRequests) {
+    loaders.push(loadRequests());
+  } else {
+    renderRequests();
   }
   if (state.permissions.canViewDevelopment) {
     loaders.push(loadDevelopmentProposals());
@@ -640,6 +666,7 @@ function renderProfile() {
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('reportsView', Boolean(state.permissions.canViewReports));
   setTabVisibility('tasksView', Boolean(state.permissions.canViewTasks));
+  setTabVisibility('requestsView', Boolean(state.permissions.canViewRequests));
   setTabVisibility('developmentView', Boolean(state.permissions.canViewDevelopment));
   setTabVisibility('repairsView', Boolean(state.permissions.canViewRepairs));
   setTabVisibility('expensesView', Boolean(state.permissions.canViewExpenses));
@@ -671,8 +698,10 @@ async function loadPoints() {
   const data = await api('/api/points');
   state.points = data.points || [];
   state.schedulePoints = data.schedulePoints || state.points;
+  state.requestPoints = data.requestPoints || state.points;
   state.repairPoints = data.repairPoints || state.points;
   fillPointSelect(els.pointSelect, state.schedulePoints);
+  fillPointSelect(els.requestPointSelect, state.requestPoints);
   fillPointSelect(els.repairPointSelect, state.repairPoints);
   fillPointSelect(els.expensePointSelect);
   fillPointSelect(els.claimPointSelect);
@@ -680,6 +709,7 @@ async function loadPoints() {
 }
 
 function fillPointSelect(select, points = state.points) {
+  if (!select) return;
   const availablePoints = Array.isArray(points) ? points : [];
   select.replaceChildren(...availablePoints.map((point) => {
     const option = document.createElement('option');
@@ -1748,6 +1778,271 @@ function taskEmailDeliveryWarning(delivery) {
     return `Email-уведомление сохранено в outbox. Причина: ${delivery.reason || 'SMTP недоступен.'}${delivery.outboxPath ? ` Файл: ${delivery.outboxPath}.` : ''}`;
   }
   return `Email-уведомление не отправлено: ${delivery.reason || 'неизвестная ошибка.'}`;
+}
+
+async function loadRequests() {
+  if (!state.permissions.canViewRequests) return;
+  await runWithButton(els.refreshRequests, async () => {
+    const data = await api('/api/requests');
+    state.requests = data.requests || [];
+    state.requestPoints = data.points || state.requestPoints || [];
+    state.requestPriorities = data.priorities || [];
+    state.requestTypes = data.types || [];
+    state.requestStatuses = data.statuses || [];
+    state.permissions.canCreateRequests = Boolean(data.canCreate);
+    state.permissions.canManageRequests = Boolean(data.canManage);
+    renderRequests();
+  }, els.requestsNotice);
+}
+
+function renderRequests() {
+  if (!els.requestsBody) return;
+  els.requestsBody.replaceChildren();
+  const canView = Boolean(state.permissions.canViewRequests);
+  const canCreate = Boolean(state.permissions.canCreateRequests && state.requestPoints.length);
+  if (els.requestDateInput) els.requestDateInput.value = currentDate();
+  if (els.requestNumberInput) {
+    els.requestNumberInput.value = '';
+    els.requestNumberInput.placeholder = 'Автоматически';
+  }
+  fillPointSelect(els.requestPointSelect, state.requestPoints);
+  fillRequestOptionSelect(els.requestUrgencySelect, state.requestPriorities, 'normal');
+  fillRequestOptionSelect(els.requestTypeSelect, state.requestTypes, 'purchase');
+
+  if (els.requestForm) {
+    Array.from(els.requestForm.elements).forEach((field) => {
+      field.disabled = !canCreate;
+      if (field.readOnly) field.disabled = false;
+    });
+  }
+
+  if (!canView) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 11;
+    cell.className = 'empty-state';
+    cell.textContent = 'Нет доступа к разделу Заявки.';
+    row.append(cell);
+    els.requestsBody.append(row);
+    return;
+  }
+
+  if (!state.requests.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 11;
+    cell.className = 'empty-state';
+    cell.textContent = 'Заявок пока нет.';
+    row.append(cell);
+    els.requestsBody.append(row);
+    return;
+  }
+
+  for (const requestItem of [...state.requests].sort(compareRequestsByNumberDesc)) {
+    els.requestsBody.append(buildRequestRow(requestItem));
+  }
+}
+
+function fillRequestOptionSelect(select, options, fallback = '') {
+  if (!select || !Array.isArray(options) || !options.length) return;
+  const previous = select.value || fallback;
+  select.replaceChildren(...options.map((item) => {
+    const option = document.createElement('option');
+    option.value = item.value;
+    option.textContent = item.label;
+    return option;
+  }));
+  select.value = options.some((item) => item.value === previous) ? previous : fallback;
+}
+
+function compareRequestsByNumberDesc(left, right) {
+  return Number(right.number || 0) - Number(left.number || 0)
+    || String(right.createdAt || '').localeCompare(String(left.createdAt || ''));
+}
+
+function buildRequestRow(requestItem) {
+  const row = document.createElement('tr');
+  row.dataset.requestId = requestItem.id;
+  appendCell(row, String(requestItem.number || ''), 'numeric-cell');
+  appendCell(row, formatDate(requestItem.date));
+  appendCell(row, requestItem.pointName || '');
+  appendCell(row, requestItem.urgencyLabel || requestItem.urgency);
+  appendCell(row, requestItem.typeLabel || requestItem.type);
+  appendCell(row, requestItem.title);
+  appendCell(row, shortText(requestItem.description, 140), 'development-description-cell');
+  appendCell(row, requestItem.createdByName || '');
+  row.append(requestStatusCell(requestItem));
+  row.append(requestAttachmentsCell(requestItem));
+  row.append(requestActionsCell(requestItem));
+  return row;
+}
+
+function requestStatusCell(requestItem) {
+  const cell = document.createElement('td');
+  if (!state.permissions.canManageRequests) {
+    cell.textContent = requestItem.statusLabel || requestItem.status;
+    return cell;
+  }
+
+  const select = document.createElement('select');
+  select.name = 'requestStatus';
+  select.dataset.field = 'requestStatus';
+  for (const status of state.requestStatuses) {
+    const option = document.createElement('option');
+    option.value = status.value;
+    option.textContent = status.label;
+    option.selected = status.value === requestItem.status;
+    select.append(option);
+  }
+  cell.append(select);
+  return cell;
+}
+
+function requestAttachmentsCell(requestItem) {
+  const cell = document.createElement('td');
+  cell.className = 'request-attachments-cell';
+  const attachments = Array.isArray(requestItem.attachments) ? requestItem.attachments : [];
+  if (!attachments.length) {
+    cell.textContent = '-';
+    return cell;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'request-attachments-list';
+  for (const attachment of attachments) {
+    const link = document.createElement('a');
+    link.className = 'repair-file-link';
+    link.href = attachment.googleDrive?.webViewLink || attachment.localUrl || '#';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = attachment.fileName || attachment.originalFileName || 'Файл';
+    if (!attachment.googleDrive?.webViewLink && !attachment.localUrl) {
+      link.removeAttribute('href');
+      link.textContent = attachment.googleDrive?.reason || 'Файл недоступен';
+    }
+    list.append(link);
+    if (attachment.size) {
+      const meta = document.createElement('span');
+      meta.className = 'repair-file-meta';
+      meta.textContent = formatFileSize(attachment.size);
+      list.append(meta);
+    }
+  }
+  cell.append(list);
+  return cell;
+}
+
+function requestActionsCell(requestItem) {
+  const cell = document.createElement('td');
+  if (!state.permissions.canManageRequests) {
+    cell.textContent = '-';
+    return cell;
+  }
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'danger request-delete-button';
+  button.dataset.action = 'delete-request';
+  button.dataset.requestId = requestItem.id;
+  button.textContent = 'Удалить';
+  cell.append(button);
+  return cell;
+}
+
+async function handleRequestCreate(event) {
+  event.preventDefault();
+  if (!state.permissions.canCreateRequests || !state.requestPoints.length) {
+    showNotice(els.requestsNotice, 'Нет доступных торговых точек для создания заявки.', 'warning');
+    return;
+  }
+  const button = event.submitter;
+  await runWithButton(button, async () => {
+    const values = formValues(els.requestForm);
+    const attachments = await requestAttachmentPayloadsFromInput(els.requestAttachmentFiles);
+    const data = await api('/api/requests', {
+      method: 'POST',
+      body: {
+        pointId: values.pointId,
+        urgency: values.urgency,
+        type: values.type,
+        title: values.title,
+        description: values.description,
+        attachments,
+      },
+    });
+    state.requests = [data.request, ...state.requests];
+    els.requestForm.reset();
+    if (els.requestAttachmentFiles) els.requestAttachmentFiles.value = '';
+    if (els.requestDateInput) els.requestDateInput.value = currentDate();
+    if (state.requestPoints[0]) els.requestPointSelect.value = state.requestPoints[0].id;
+    renderRequests();
+    await loadAudit();
+    const storageWarning = storageWarningText(data.storage);
+    const driveWarning = requestAttachmentsDriveWarning(data.request.attachments || []);
+    showNotice(
+      els.requestsNotice,
+      ['Заявка создана.', driveWarning, storageWarning].filter(Boolean).join(' '),
+      driveWarning || storageWarning ? 'warning' : 'success',
+    );
+  }, els.requestsNotice);
+}
+
+async function requestAttachmentPayloadsFromInput(input) {
+  return repairAttachmentPayloadsFromInput(input);
+}
+
+function requestAttachmentsDriveWarning(attachments) {
+  return repairAttachmentsDriveWarning(attachments);
+}
+
+async function handleRequestStatusChange(event) {
+  const select = event.target.closest('select[data-field="requestStatus"]');
+  if (!select) return;
+  const row = select.closest('tr[data-request-id]');
+  if (!row) return;
+  select.disabled = true;
+  try {
+    const data = await api(`/api/requests/${encodeURIComponent(row.dataset.requestId)}`, {
+      method: 'PATCH',
+      body: { status: select.value },
+    });
+    state.requests = state.requests.map((requestItem) => (requestItem.id === data.request.id ? data.request : requestItem));
+    renderRequests();
+    await loadAudit();
+    const storageWarning = storageWarningText(data.storage);
+    showNotice(
+      els.requestsNotice,
+      ['Статус заявки обновлен.', storageWarning].filter(Boolean).join(' '),
+      storageWarning ? 'warning' : 'success',
+    );
+  } catch (error) {
+    showNotice(els.requestsNotice, error.message, 'error');
+    renderRequests();
+  }
+}
+
+async function handleRequestTableClick(event) {
+  const button = event.target.closest('[data-action="delete-request"]');
+  if (!button) return;
+  const requestItem = state.requests.find((item) => item.id === button.dataset.requestId);
+  const label = requestItem?.number ? `№ ${requestItem.number}` : 'заявку';
+  if (!window.confirm(`Удалить заявку ${label} и все ее файлы из Google Drive?`)) return;
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/requests/${encodeURIComponent(button.dataset.requestId)}`, {
+      method: 'DELETE',
+    });
+    state.requests = state.requests.filter((item) => item.id !== data.request.id);
+    renderRequests();
+    await loadAudit();
+    const driveWarnings = (data.googleDriveCleanup || [])
+      .map((cleanup) => retailPointDriveDeleteWarning(cleanup))
+      .filter(Boolean);
+    showNotice(
+      els.requestsNotice,
+      ['Заявка удалена.', ...driveWarnings, storageWarningText(data.storage)].filter(Boolean).join(' '),
+      driveWarnings.length || data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.requestsNotice);
 }
 
 async function loadDevelopmentProposals() {

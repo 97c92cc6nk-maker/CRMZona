@@ -801,6 +801,109 @@ test('tasks can be assigned between employees with file attachments', async () =
   }
 });
 
+test('requests can be created by employees and managed by admins', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Requests',
+    phone: '+79990000301',
+    email: 'owner-requests@example.com',
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Requests',
+    phone: '+79990000302',
+    email: 'admin-requests@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedPoints: ['moscow_6231'],
+  });
+  const employee = store.createUser({
+    fullName: 'Employee Requests',
+    phone: '+79990000303',
+    email: 'employee-requests@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedPoints: ['moscow_6231'],
+  });
+  const otherEmployee = store.createUser({
+    fullName: 'Other Employee Requests',
+    phone: '+79990000304',
+    email: 'other-employee-requests@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+  });
+
+  assert.equal(permissionsFor(employee).canViewRequests, true);
+  assert.equal(permissionsFor(employee).canCreateRequests, true);
+  assert.equal(permissionsFor(otherEmployee).canViewRequests, true);
+  assert.equal(permissionsFor(otherEmployee).canCreateRequests, false);
+  assert.equal(permissionsFor(admin).canManageRequests, true);
+  assert.equal(permissionsFor(owner).canManageRequests, true);
+
+  const request = await store.createRequest(employee, {
+    pointId: 'moscow_6231',
+    urgency: 'critical',
+    type: 'purchase',
+    title: 'Need supplies',
+    description: 'Please buy supplies for the point.',
+    attachments: [{
+      fileName: 'request.txt',
+      mimeType: 'text/plain',
+      size: Buffer.byteLength('request attachment'),
+      dataUrl: `data:text/plain;base64,${Buffer.from('request attachment').toString('base64')}`,
+    }],
+  });
+
+  assert.equal(request.number, 1);
+  assert.match(request.date, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(request.status, 'new');
+  assert.equal(request.urgency, 'critical');
+  assert.equal(request.type, 'purchase');
+  assert.equal(request.attachments.length, 1);
+  assert.equal(request.attachments[0].localUrl.includes(`/api/requests/${request.id}/attachments/`), true);
+
+  const file = store.getRequestAttachmentFile(employee, request.id, request.attachments[0].id);
+  assert.equal(file.buffer.toString('utf8'), 'request attachment');
+  assert.equal(store.listRequests(employee).length, 1);
+  assert.equal(store.listRequests(otherEmployee).length, 0);
+  assert.equal(store.listRequests(admin).length, 1);
+  assert.equal(store.listRequests(owner).length, 1);
+
+  await assert.rejects(
+    () => store.createRequest(otherEmployee, {
+      pointId: 'moscow_6231',
+      urgency: 'normal',
+      type: 'suggestion',
+      title: 'No point access',
+      description: 'This employee cannot create requests for an unavailable point.',
+    }),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
+  assert.throws(
+    () => store.updateRequest(employee, request.id, { status: 'done' }),
+    (error) => error instanceof ApiError && error.status === 403,
+  );
+
+  const second = await store.createRequest(employee, {
+    pointId: 'moscow_6231',
+    urgency: 'normal',
+    type: 'suggestion',
+    title: 'Improve shelves',
+    description: 'Suggestion for shelves.',
+  });
+  assert.equal(second.number, 2);
+
+  const updated = store.updateRequest(admin, request.id, { status: 'done' });
+  assert.equal(updated.status, 'done');
+  assert.equal(updated.statusLabel, 'Выполнена');
+
+  const deleted = await store.deleteRequest(admin, request.id);
+  assert.equal(deleted.request.id, request.id);
+  assert.equal(store.listRequests(admin).length, 1);
+  assert.equal(store.listRequests(employee).length, 1);
+  assert.equal(store.listRequests(employee)[0].id, second.id);
+});
+
 test('email is unique and password is stored as a hash', () => {
   const store = createTempStore();
   store.createUser({
