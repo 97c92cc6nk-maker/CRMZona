@@ -1127,6 +1127,10 @@ tbody tr:last-child td {
   font-size: 13px;
 }
 
+#runnerSelect {
+  min-width: 180px;
+}
+
 .schedule-wrap {
   margin-top: 0;
 }

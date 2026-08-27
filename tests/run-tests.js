@@ -166,9 +166,19 @@ test('new account types are available', () => {
     password: 'PartnerPass123',
     role: 'partner',
   });
+  const runner = store.createUser({
+    fullName: 'Сергей Бегунок',
+    phone: '+79990000034',
+    email: 'runner@example.com',
+    password: 'RunnerPass123',
+    role: 'runner',
+    unofficialSalary: '10000',
+  });
 
   assert.equal(installer.roleLabel, 'Монтажник');
   assert.equal(partner.roleLabel, 'Партнер');
+  assert.equal(runner.roleLabel, 'Бегунок');
+  assert.equal(runner.unofficialSalary, '');
 });
 
 test('admin can manage employees but cannot change employee section access', () => {
@@ -1052,6 +1062,82 @@ test('schedule rows use employees from the directory and respect month boundarie
     }], employeeOptions),
     (error) => error instanceof ApiError && error.status === 400,
   );
+});
+
+test('schedule substitutions use runner rows with hours only', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Runner Schedule',
+    phone: '+79990000201',
+    email: 'owner-runner-schedule@example.com',
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Employee Main Schedule',
+    phone: '+79990000202',
+    email: 'employee-main-schedule@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedPoints: ['moscow_6231'],
+  });
+  const runner = store.createUser({
+    fullName: 'Runner Substitute',
+    phone: '+79990000203',
+    email: 'runner-substitute@example.com',
+    password: 'RunnerPass123',
+    role: 'runner',
+    allowedPoints: ['moscow_6231'],
+  });
+  store.createUser({
+    fullName: 'Runner Other Point',
+    phone: '+79990000204',
+    email: 'runner-other-point@example.com',
+    password: 'RunnerPass123',
+    role: 'runner',
+    allowedPoints: ['krasnogorsk_466'],
+  });
+
+  const initial = store.getSchedule('moscow_6231', '2026-11', owner);
+  assert.deepEqual(initial.employeeOptions.map((option) => option.id), [employee.id]);
+  assert.deepEqual(initial.runnerOptions.map((option) => option.id), [runner.id]);
+  assert.deepEqual(initial.rows.map((row) => row.employeeId), [employee.id]);
+
+  store.saveSchedule(owner, 'moscow_6231', '2026-11', [{
+    employeeId: employee.id,
+    days: { 1: { rateRub: '1000', issuedCount: '8' } },
+  }, {
+    employeeId: runner.id,
+    rowType: 'runner',
+    advanceCard: '999',
+    days: {
+      1: { runnerHours: '5.5', rateRub: '1000', issuedCount: '2' },
+      2: { runnerHours: '' },
+    },
+  }]);
+
+  const ownerView = store.getSchedule('moscow_6231', '2026-11', owner);
+  const runnerRow = ownerView.rows.find((row) => row.employeeId === runner.id);
+  assert.equal(runnerRow.rowType, 'runner');
+  assert.deepEqual(runnerRow.days, { 1: { runnerHours: '5.5' } });
+  assert.equal(runnerRow.advanceCard, '');
+  assert.equal(runnerRow.bonusExtra, '');
+  assert.equal(ownerView.summaryRows.some((row) => row.employeeId === runner.id), false);
+
+  const employeeView = store.getSchedule('moscow_6231', '2026-11', employee);
+  assert.equal(employeeView.rows.some((row) => row.employeeId === runner.id), true);
+  assert.deepEqual(employeeView.summaryRows.map((row) => row.employeeId), [employee.id]);
+
+  store.saveSchedule(runner, 'moscow_6231', '2026-11', [{
+    employeeId: runner.id,
+    rowType: 'runner',
+    days: { 3: { runnerHours: '7' } },
+  }]);
+
+  const saved = store.getSchedule('moscow_6231', '2026-11', owner);
+  const savedRunnerRow = saved.rows.find((row) => row.employeeId === runner.id);
+  const savedEmployeeRow = saved.rows.find((row) => row.employeeId === employee.id);
+  assert.deepEqual(savedRunnerRow.days, { 3: { runnerHours: '7' } });
+  assert.equal(savedEmployeeRow.days['1'].rateRub, '1000');
 });
 
 test('employee can save only own schedule row without overwriting others', () => {

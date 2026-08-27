@@ -55,6 +55,7 @@ const state = {
   canManageAllSchedule: false,
   canViewScheduleFinancials: false,
   employeeOptions: [],
+  runnerOptions: [],
   revealedEmployeePasswords: {},
   selectedEmployeeId: null,
   selectedRetailPointId: null,
@@ -238,6 +239,8 @@ function bindElements() {
     summaryBody: document.getElementById('summaryBody'),
     summaryFooter: document.getElementById('summaryFooter'),
     addRowButton: document.getElementById('addRowButton'),
+    runnerSelect: document.getElementById('runnerSelect'),
+    addSubstitutionButton: document.getElementById('addSubstitutionButton'),
     saveScheduleButton: document.getElementById('saveScheduleButton'),
     scheduleNotice: document.getElementById('scheduleNotice'),
   });
@@ -337,6 +340,7 @@ function bindEvents() {
   els.pointSelect.addEventListener('change', loadSchedule);
   els.monthInput.addEventListener('change', loadSchedule);
   els.addRowButton.addEventListener('click', addScheduleRow);
+  els.addSubstitutionButton.addEventListener('click', addScheduleSubstitution);
   els.saveScheduleButton.addEventListener('click', saveSchedule);
   els.scheduleTable.addEventListener('input', updateScheduleFromInput);
   els.scheduleTable.addEventListener('change', updateScheduleFromInput);
@@ -4203,8 +4207,12 @@ function roleRequiresUnofficialSalary(role) {
   return ['owner', 'admin', 'installer'].includes(role);
 }
 
+function isEmployeeLikeRole(role) {
+  return role === 'employee' || role === 'runner';
+}
+
 function shouldShowUnofficialSalary(role) {
-  return role !== 'employee';
+  return !isEmployeeLikeRole(role);
 }
 
 function syncUnofficialSalaryField(form, options = {}) {
@@ -4958,7 +4966,7 @@ function employeePayloadFromForm(form) {
   const role = canManageEmployeeRoles() ? values.role || 'employee' : 'employee';
   values.officialEmployment = form.elements.officialEmployment.checked;
   values.premiumEnabled = form.elements.premiumEnabled.checked;
-  if (role === 'employee') {
+  if (isEmployeeLikeRole(role)) {
     delete values.unofficialSalary;
   }
   if (!canManageEmployeeRoles()) {
@@ -4986,7 +4994,7 @@ function employeePayloadFromCard(form) {
   const currentRole = selectedEmployee()?.role || form.elements.role.value || values.role || 'employee';
   const effectiveRole = canManageEmployeeRoles() ? values.role || currentRole : currentRole;
   values.officialEmployment = form.elements.officialEmployment.checked;
-  if (effectiveRole === 'employee') {
+  if (isEmployeeLikeRole(effectiveRole)) {
     delete values.unofficialSalary;
   }
   if (!canManageEmployeeRoles()) {
@@ -5129,6 +5137,7 @@ async function loadSchedule() {
     state.canManageAllSchedule = data.canManageAll;
     state.canViewScheduleFinancials = Boolean(data.canViewFinancials);
     state.employeeOptions = data.employeeOptions || data.schedule.employeeOptions || [];
+    state.runnerOptions = data.runnerOptions || data.schedule.runnerOptions || [];
     renderSchedule();
     showNotice(els.scheduleNotice, '');
   }, els.scheduleNotice);
@@ -5140,9 +5149,12 @@ function renderUnavailableSchedule(message = 'Нет доступа к граф�
   state.canManageAllSchedule = false;
   state.canViewScheduleFinancials = false;
   state.employeeOptions = [];
+  state.runnerOptions = [];
   els.scheduleCaption.textContent = '';
   els.scheduleUpdated.textContent = '';
   els.addRowButton.classList.add('is-hidden');
+  els.runnerSelect.classList.add('is-hidden');
+  els.addSubstitutionButton.classList.add('is-hidden');
   els.saveScheduleButton.classList.add('is-hidden');
   els.scheduleTable.style.minWidth = '';
   els.summaryTable.style.minWidth = '';
@@ -5160,6 +5172,7 @@ function renderSchedule() {
     : '';
   els.addRowButton.classList.toggle('is-hidden', !state.canEditSchedule);
   els.saveScheduleButton.classList.toggle('is-hidden', !state.canEditSchedule);
+  renderSubstitutionControls();
   syncSummaryWidth(schedule);
   renderSummaryHead();
   els.scheduleTable.replaceChildren(buildScheduleHead(schedule), buildScheduleBody(schedule));
@@ -5182,10 +5195,11 @@ function scheduleRowsForSummary() {
   const rows = Array.isArray(state.schedule.summaryRows)
     ? state.schedule.summaryRows
     : state.schedule.rows || [];
-  if (state.user?.role === 'employee') {
-    return rows.filter((row) => row.employeeId === state.user.id);
+  const summaryRows = rows.filter((row) => !isRunnerScheduleRow(row));
+  if (state.user?.role === 'employee' || state.user?.role === 'runner') {
+    return summaryRows.filter((row) => row.employeeId === state.user.id);
   }
-  return rows;
+  return summaryRows;
 }
 
 function scheduleRowsForSave() {
@@ -5193,6 +5207,44 @@ function scheduleRowsForSave() {
   const rows = state.schedule.rows || [];
   if (state.canManageAllSchedule) return rows;
   return rows.filter((row) => row.employeeId === state.user?.id);
+}
+
+function isRunnerScheduleRow(scheduleRow) {
+  return scheduleRow?.rowType === 'runner'
+    || state.runnerOptions.some((runner) => runner.id === scheduleRow?.employeeId);
+}
+
+function renderSubstitutionControls() {
+  if (!els.runnerSelect || !els.addSubstitutionButton) return;
+  const visible = Boolean(state.canManageAllSchedule && state.schedule);
+  els.runnerSelect.classList.toggle('is-hidden', !visible);
+  els.addSubstitutionButton.classList.toggle('is-hidden', !visible);
+  if (!visible) return;
+
+  const usedRunnerIds = new Set(
+    (state.schedule.rows || [])
+      .filter((row) => isRunnerScheduleRow(row))
+      .map((row) => row.employeeId)
+      .filter(Boolean),
+  );
+  const availableRunners = (state.runnerOptions || [])
+    .filter((runner) => !usedRunnerIds.has(runner.id));
+
+  els.runnerSelect.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = availableRunners.length ? 'Выберите бегунка' : 'Нет доступных бегунков';
+  els.runnerSelect.append(placeholder);
+
+  for (const runner of availableRunners) {
+    const option = document.createElement('option');
+    option.value = runner.id;
+    option.textContent = runner.fullName;
+    els.runnerSelect.append(option);
+  }
+
+  els.runnerSelect.disabled = !availableRunners.length;
+  els.addSubstitutionButton.disabled = !availableRunners.length;
 }
 
 function visibleSummaryColumns() {
@@ -5271,22 +5323,33 @@ function buildScheduleBody(schedule) {
   }
 
   for (const scheduleRow of schedule.rows) {
-    const rateRow = buildMetricRow(schedule, scheduleRow, 'rateRub', 'Ставка, руб', true);
-    const issuedRow = buildMetricRow(schedule, scheduleRow, 'issuedCount', 'Выдано, шт', false);
-    tbody.append(rateRow, issuedRow);
+    const metrics = scheduleMetricsForRow(scheduleRow);
+    for (const [index, metric] of metrics.entries()) {
+      tbody.append(buildMetricRow(schedule, scheduleRow, metric.key, metric.label, index === 0, metrics.length));
+    }
   }
 
   return tbody;
 }
 
-function buildMetricRow(schedule, scheduleRow, metric, label, isFirstMetricRow) {
+function scheduleMetricsForRow(scheduleRow) {
+  if (isRunnerScheduleRow(scheduleRow)) {
+    return [{ key: 'runnerHours', label: 'Кол-во часов' }];
+  }
+  return [
+    { key: 'rateRub', label: 'Ставка, руб' },
+    { key: 'issuedCount', label: 'Выдано, шт' },
+  ];
+}
+
+function buildMetricRow(schedule, scheduleRow, metric, label, isFirstMetricRow, rowSpan = 2) {
   const row = document.createElement('tr');
   row.dataset.rowId = scheduleRow.id;
   row.dataset.metric = metric;
   const rowEditable = canEditScheduleRow(scheduleRow);
   if (isFirstMetricRow) {
     row.classList.add('employee-start-row');
-    row.append(scheduleEmployeeCell(scheduleRow));
+    row.append(scheduleEmployeeCell(scheduleRow, rowSpan));
   }
 
   const metricCell = document.createElement('td');
@@ -5323,7 +5386,7 @@ function buildMetricRow(schedule, scheduleRow, metric, label, isFirstMetricRow) 
   if (state.canEditSchedule && isFirstMetricRow) {
     const removeCell = document.createElement('td');
     removeCell.className = 'remove-col';
-    removeCell.rowSpan = 2;
+    removeCell.rowSpan = rowSpan;
     if (state.canManageAllSchedule) {
       const button = document.createElement('button');
       button.className = 'remove-row';
@@ -5339,10 +5402,10 @@ function buildMetricRow(schedule, scheduleRow, metric, label, isFirstMetricRow) 
   return row;
 }
 
-function scheduleEmployeeCell(scheduleRow) {
+function scheduleEmployeeCell(scheduleRow, rowSpan = 2) {
   const cell = document.createElement('td');
   cell.className = 'employee-col';
-  cell.rowSpan = 2;
+  cell.rowSpan = rowSpan;
 
   if (!canEditScheduleRow(scheduleRow)) {
     cell.textContent = scheduleRow.employeeName;
@@ -5354,19 +5417,21 @@ function scheduleEmployeeCell(scheduleRow) {
   select.name = 'employeeId';
   select.required = true;
 
-  for (const employee of state.employeeOptions) {
+  const options = isRunnerScheduleRow(scheduleRow) ? state.runnerOptions : state.employeeOptions;
+  for (const employee of options) {
     const option = document.createElement('option');
     option.value = employee.id;
     option.textContent = employee.fullName;
     option.selected = employee.id === scheduleRow.employeeId;
     select.append(option);
   }
-  if (!scheduleRow.employeeId && state.employeeOptions.length === 1) {
-    scheduleRow.employeeId = state.employeeOptions[0].id;
-    scheduleRow.employeeName = state.employeeOptions[0].fullName;
+  if (!scheduleRow.employeeId && options.length === 1) {
+    scheduleRow.employeeId = options[0].id;
+    scheduleRow.employeeName = options[0].fullName;
+    scheduleRow.rowType = options[0].rowType || scheduleRow.rowType || 'employee';
     select.value = scheduleRow.employeeId;
   }
-  select.disabled = !state.canManageAllSchedule && state.employeeOptions.length <= 1;
+  select.disabled = !state.canManageAllSchedule && options.length <= 1;
   cell.append(select);
   return cell;
 }
@@ -5396,7 +5461,7 @@ function updateScheduleFromInput(event) {
     } else {
       delete row.days[day][metric];
     }
-    if (!row.days[day].rateRub && !row.days[day].issuedCount) {
+    if (!row.days[day].rateRub && !row.days[day].issuedCount && !row.days[day].runnerHours) {
       delete row.days[day];
     }
     renderScheduleSummary();
@@ -5405,9 +5470,11 @@ function updateScheduleFromInput(event) {
 
   if (input.dataset.field === 'employeeId') {
     const previousEmployeeId = row.employeeId;
-    const employee = state.employeeOptions.find((item) => item.id === input.value);
+    const options = isRunnerScheduleRow(row) ? state.runnerOptions : state.employeeOptions;
+    const employee = options.find((item) => item.id === input.value);
     row.employeeId = employee ? employee.id : '';
     row.employeeName = employee ? employee.fullName : '';
+    row.rowType = employee?.rowType || row.rowType || 'employee';
     applyEmployeePremium(row, employee);
     if (previousEmployeeId && previousEmployeeId !== row.employeeId) {
       rememberRemovedScheduleEmployee(previousEmployeeId);
@@ -5640,6 +5707,7 @@ function addScheduleRow() {
     id: window.crypto?.randomUUID?.() || String(Date.now()),
     employeeId: defaultEmployee?.id || '',
     employeeName: defaultEmployee?.fullName || '',
+    rowType: 'employee',
     advanceCard: '',
     salaryCard: '',
     bonusExtra: defaultEmployee?.premium?.active || defaultEmployee?.premium?.assignedPointId
@@ -5655,7 +5723,45 @@ function addScheduleRow() {
   renderSchedule();
 }
 
+function addScheduleSubstitution() {
+  if (!state.canManageAllSchedule || !state.schedule) return;
+  const runner = (state.runnerOptions || []).find((item) => item.id === els.runnerSelect.value);
+  if (!runner) {
+    showNotice(els.scheduleNotice, 'Выберите бегунка для подмены.', 'warning');
+    return;
+  }
+  if (state.schedule.rows.some((row) => row.employeeId === runner.id)) {
+    showNotice(els.scheduleNotice, 'Этот бегунок уже добавлен в график.', 'warning');
+    renderSubstitutionControls();
+    return;
+  }
+  forgetRemovedScheduleEmployee(runner.id);
+  state.schedule.rows.push({
+    id: window.crypto?.randomUUID?.() || String(Date.now()),
+    employeeId: runner.id,
+    employeeName: runner.fullName,
+    rowType: 'runner',
+    advanceCard: '',
+    salaryCard: '',
+    bonusExtra: '',
+    premiumActive: false,
+    premiumStartDate: '',
+    premiumAssignedPointId: '',
+    claims: '',
+    claimAssignedPointId: '',
+    days: {},
+  });
+  renderSchedule();
+}
+
 function applyEmployeePremium(scheduleRow, employee) {
+  if (scheduleRow?.rowType === 'runner' || employee?.role === 'runner') {
+    scheduleRow.bonusExtra = '';
+    scheduleRow.premiumActive = false;
+    scheduleRow.premiumStartDate = '';
+    scheduleRow.premiumAssignedPointId = '';
+    return;
+  }
   const premium = employee?.premium || {};
   scheduleRow.bonusExtra = premium.active || premium.assignedPointId ? premium.amount : '';
   scheduleRow.premiumActive = Boolean(premium.active);
@@ -5676,6 +5782,7 @@ async function saveSchedule() {
       },
     });
     state.employeeOptions = data.schedule.employeeOptions || state.employeeOptions;
+    state.runnerOptions = data.schedule.runnerOptions || state.runnerOptions;
     state.schedule = {
       ...data.schedule,
       pointName: state.schedule.pointName,
