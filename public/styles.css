@@ -879,6 +879,14 @@ tbody tr:last-child td {
   min-width: 1180px;
 }
 
+.expense-report-table {
+  min-width: 720px;
+}
+
+.expense-report-details-table {
+  min-width: 920px;
+}
+
 .reports-table th,
 .reports-table td {
   padding: 8px;
@@ -950,6 +958,10 @@ tbody tr:last-child td {
   margin: 10px 0 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+.expense-report-filters {
+  margin-top: 16px;
 }
 
 .expense-header-filter {

@@ -34,10 +34,15 @@ const state = {
   reportOptions: [],
   adminPayrollReport: null,
   employeePayrollReport: null,
+  expenseReport: null,
   employeePayrollFilters: {
     pointId: '',
     adminId: '',
     employeeId: '',
+  },
+  expenseReportFilters: {
+    authorId: '',
+    pointId: '',
   },
   claimEmployees: [],
   employeeDocumentTypes: [],
@@ -311,6 +316,8 @@ function bindEvents() {
     renderEmployeePayrollReport();
   });
   els.reportContent.addEventListener('input', handleReportContentInput);
+  els.reportContent.addEventListener('change', handleReportContentChange);
+  els.reportContent.addEventListener('click', handleReportContentClick);
   els.taskForm?.addEventListener('submit', handleTaskCreate);
   els.refreshTasks?.addEventListener('click', loadTasks);
   els.requestForm?.addEventListener('submit', handleRequestCreate);
@@ -2495,7 +2502,9 @@ async function loadReports() {
       state.selectedReportId = null;
       state.adminPayrollReport = null;
       state.employeePayrollReport = null;
+      state.expenseReport = null;
       resetEmployeePayrollFilters();
+      resetExpenseReportFilters();
       els.employeePayrollFilters?.classList.add('is-hidden');
     }
     renderReportsList();
@@ -2507,7 +2516,9 @@ function renderReportsUnavailable() {
   state.selectedReportId = null;
   state.adminPayrollReport = null;
   state.employeePayrollReport = null;
+  state.expenseReport = null;
   resetEmployeePayrollFilters();
+  resetExpenseReportFilters();
   els.employeePayrollFilters?.classList.add('is-hidden');
   renderReportsList();
 }
@@ -2555,7 +2566,9 @@ async function openReport(reportId) {
   state.selectedReportId = reportId;
   state.adminPayrollReport = null;
   state.employeePayrollReport = null;
+  state.expenseReport = null;
   resetEmployeePayrollFilters();
+  resetExpenseReportFilters();
   if (!els.reportMonthInput.value) {
     els.reportMonthInput.value = currentMonth();
   }
@@ -2567,7 +2580,9 @@ function closeReport() {
   state.selectedReportId = null;
   state.adminPayrollReport = null;
   state.employeePayrollReport = null;
+  state.expenseReport = null;
   resetEmployeePayrollFilters();
+  resetExpenseReportFilters();
   els.employeePayrollFilters?.classList.add('is-hidden');
   showNotice(els.reportsNotice, '');
   renderReportsList();
@@ -2584,6 +2599,10 @@ async function loadSelectedReport() {
   }
   if (state.selectedReportId === 'employee-payroll') {
     await loadEmployeePayrollReport();
+    return;
+  }
+  if (state.selectedReportId === 'expense-report') {
+    await loadExpenseReport();
   }
 }
 
@@ -2607,6 +2626,227 @@ async function loadEmployeePayrollReport() {
     renderEmployeePayrollReport();
     showNotice(els.reportsNotice, '');
   }, els.reportsNotice);
+}
+
+async function loadExpenseReport() {
+  await runWithButton(els.loadReport, async () => {
+    const month = els.reportMonthInput.value || currentMonth();
+    const data = await api(`/api/reports/expense-report?month=${encodeURIComponent(month)}`);
+    state.expenseReport = data.report;
+    state.permissions.canManageReports = Boolean(data.canManage);
+    renderExpenseReport();
+    showNotice(els.reportsNotice, '');
+  }, els.reportsNotice);
+}
+
+function renderExpenseReport() {
+  const report = state.expenseReport;
+  if (!report) return;
+  els.reportDetailsTitle.textContent = `${report.title} · ${formatMonth(report.month)}`;
+  els.saveAdminPayrollReport.classList.add('is-hidden');
+  els.employeePayrollFilters?.classList.add('is-hidden');
+  els.reportContent.replaceChildren();
+
+  els.reportContent.append(buildExpenseReportFilters(report));
+
+  const expenses = filteredExpenseReportExpenses(report.expenses || []);
+  const rows = expenseReportPointRows(expenses);
+  if (state.expenseReportFilters.pointId && !rows.some((row) => row.pointId === state.expenseReportFilters.pointId)) {
+    state.expenseReportFilters.pointId = '';
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'table-wrap report-table-wrap';
+  const table = document.createElement('table');
+  table.className = 'reports-table expense-report-table';
+  const thead = document.createElement('thead');
+  const header = document.createElement('tr');
+  ['Торговая точка', 'Наличными', 'Корп. картой/Картой', 'Итого'].forEach((title, index) => {
+    const th = document.createElement('th');
+    th.textContent = title;
+    if (index > 0) th.className = 'numeric-cell';
+    header.append(th);
+  });
+  thead.append(header);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  if (!rows.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 4;
+    cell.className = 'empty-state';
+    cell.textContent = report.expenses?.length
+      ? 'Нет расходов по выбранному автору.'
+      : 'За выбранный месяц расходов нет.';
+    row.append(cell);
+    tbody.append(row);
+  } else {
+    for (const rowData of rows) {
+      tbody.append(buildExpenseReportPointRow(rowData));
+    }
+  }
+  table.append(tbody);
+  table.append(buildExpenseReportFooter(expenseReportTotals(rows)));
+  wrap.append(table);
+  els.reportContent.append(wrap);
+
+  renderExpenseReportDetails(expenses);
+
+  if (report.generatedAt) {
+    const generated = document.createElement('p');
+    generated.className = 'report-updated';
+    generated.textContent = `Сформировано: ${formatDateTime(report.generatedAt)}`;
+    els.reportContent.append(generated);
+  }
+}
+
+function buildExpenseReportFilters(report) {
+  const filters = document.createElement('div');
+  filters.className = 'report-filters expense-report-filters';
+  const label = document.createElement('label');
+  label.textContent = 'Автор расхода';
+  const select = document.createElement('select');
+  select.dataset.expenseReportFilter = 'authorId';
+  fillReportFilterSelect(
+    select,
+    'Все сотрудники',
+    (report.authorOptions || []).map((author) => ({
+      value: author.id,
+      label: author.fullName || author.id,
+    })),
+    state.expenseReportFilters.authorId,
+  );
+  label.append(select);
+  filters.append(label);
+  return filters;
+}
+
+function filteredExpenseReportExpenses(expenses) {
+  const filters = state.expenseReportFilters || {};
+  return expenses.filter((expense) => {
+    if (filters.authorId && expense.createdBy !== filters.authorId) return false;
+    return true;
+  });
+}
+
+function expenseReportPointRows(expenses) {
+  const byPoint = new Map();
+  for (const expense of expenses) {
+    if (!expense.pointId) continue;
+    if (!byPoint.has(expense.pointId)) {
+      byPoint.set(expense.pointId, {
+        pointId: expense.pointId,
+        pointName: expense.pointName || pointLabel(expense.pointId),
+        cashTotal: 0,
+        cardTotal: 0,
+        total: 0,
+      });
+    }
+    const row = byPoint.get(expense.pointId);
+    const amount = toNumber(expense.amount);
+    if (expense.paymentMethod === 'cash') {
+      row.cashTotal += amount;
+    } else if (expense.paymentMethod === 'corp_card' || expense.paymentMethod === 'card') {
+      row.cardTotal += amount;
+    }
+    row.total += amount;
+  }
+  return [...byPoint.values()].sort((left, right) => left.pointName.localeCompare(right.pointName, 'ru'));
+}
+
+function expenseReportTotals(rows) {
+  return rows.reduce((totals, row) => ({
+    cashTotal: totals.cashTotal + toNumber(row.cashTotal),
+    cardTotal: totals.cardTotal + toNumber(row.cardTotal),
+    total: totals.total + toNumber(row.total),
+  }), { cashTotal: 0, cardTotal: 0, total: 0 });
+}
+
+function buildExpenseReportPointRow(rowData) {
+  const row = document.createElement('tr');
+  const nameCell = document.createElement('td');
+  nameCell.className = 'report-name-cell';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'text-link report-point-link';
+  button.dataset.expenseReportPointId = rowData.pointId;
+  button.textContent = rowData.pointName;
+  nameCell.append(button);
+  row.append(nameCell);
+  appendCell(row, formatMoney(toNumber(rowData.cashTotal)), 'numeric-cell');
+  appendCell(row, formatMoney(toNumber(rowData.cardTotal)), 'numeric-cell');
+  appendCell(row, formatMoney(toNumber(rowData.total)), 'numeric-cell report-payable-cell');
+  return row;
+}
+
+function buildExpenseReportFooter(totals) {
+  const tfoot = document.createElement('tfoot');
+  const row = document.createElement('tr');
+  appendCell(row, 'Итого', 'summary-total-label');
+  appendCell(row, formatMoney(toNumber(totals.cashTotal)), 'numeric-cell');
+  appendCell(row, formatMoney(toNumber(totals.cardTotal)), 'numeric-cell');
+  appendCell(row, formatMoney(toNumber(totals.total)), 'numeric-cell report-payable-cell');
+  tfoot.append(row);
+  return tfoot;
+}
+
+function renderExpenseReportDetails(expenses) {
+  const pointId = state.expenseReportFilters.pointId;
+  if (!pointId) return;
+  const pointExpenses = expenses.filter((expense) => expense.pointId === pointId);
+  const title = document.createElement('h3');
+  title.textContent = `Расходы: ${pointLabel(pointId)}`;
+  els.reportContent.append(title);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'table-wrap report-table-wrap';
+  const table = document.createElement('table');
+  table.className = 'reports-table expense-report-details-table';
+  const thead = document.createElement('thead');
+  const header = document.createElement('tr');
+  ['Дата расхода', 'Сумма', 'Оплата', 'Автор', 'Чек', 'Google Drive'].forEach((titleText, index) => {
+    const th = document.createElement('th');
+    th.textContent = titleText;
+    if (index === 1) th.className = 'numeric-cell';
+    header.append(th);
+  });
+  thead.append(header);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  for (const expense of pointExpenses) {
+    const row = document.createElement('tr');
+    appendCell(row, formatDate(expense.expenseDate));
+    appendCell(row, formatMoney(toNumber(expense.amount)), 'numeric-cell');
+    appendCell(row, expense.paymentMethodLabel || '');
+    appendCell(row, expense.createdByName || '');
+    row.append(buildReportLinkCell(expense.receiptUrl, 'Открыть чек', 'Нет чека'));
+    row.append(buildReportLinkCell(expense.googleDrive?.webViewLink, 'В архиве', expense.googleDrive?.reason || 'Нет ссылки'));
+    tbody.append(row);
+  }
+  table.append(tbody);
+  wrap.append(table);
+  els.reportContent.append(wrap);
+}
+
+function buildReportLinkCell(href, label, fallback) {
+  const cell = document.createElement('td');
+  if (href) {
+    const link = document.createElement('a');
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = label;
+    cell.append(link);
+  } else {
+    cell.textContent = fallback;
+  }
+  return cell;
+}
+
+function resetExpenseReportFilters() {
+  state.expenseReportFilters = { authorId: '', pointId: '' };
 }
 
 function renderEmployeePayrollReport() {
@@ -2948,6 +3188,21 @@ function handleReportContentInput(event) {
   if (payableCell) {
     payableCell.textContent = formatMoney(calculateAdminPayrollPayable(row));
   }
+}
+
+function handleReportContentChange(event) {
+  const filter = event.target.closest('[data-expense-report-filter]');
+  if (!filter || state.selectedReportId !== 'expense-report' || !state.expenseReport) return;
+  state.expenseReportFilters[filter.dataset.expenseReportFilter] = filter.value || '';
+  state.expenseReportFilters.pointId = '';
+  renderExpenseReport();
+}
+
+function handleReportContentClick(event) {
+  const pointButton = event.target.closest('[data-expense-report-point-id]');
+  if (!pointButton || state.selectedReportId !== 'expense-report' || !state.expenseReport) return;
+  state.expenseReportFilters.pointId = pointButton.dataset.expenseReportPointId || '';
+  renderExpenseReport();
 }
 
 function calculateAdminPayrollPayable(row) {
@@ -4733,6 +4988,10 @@ function reportAccessOptions() {
   }));
 }
 
+function defaultReportIdsForRole(role) {
+  return role === 'admin' || role === 'partner' ? ['expense-report'] : [];
+}
+
 function employeeCardReportsSectionChecked() {
   return Boolean(els.employeeCardForm?.querySelector('input[name="allowedSections"][value="reports"]:checked'));
 }
@@ -4760,6 +5019,11 @@ function syncEmployeeFormReportAccess() {
   setInputsDisabled(reportTarget, !visible || !canManageEmployeeSections());
   if (!visible) {
     clearCheckedValues(reportTarget, 'allowedReports');
+  } else if (!reportTarget.querySelector('input[name="allowedReports"]:checked')) {
+    for (const reportId of defaultReportIdsForRole(els.employeeForm?.elements.role?.value || 'employee')) {
+      const input = reportTarget.querySelector(`input[name="allowedReports"][value="${reportId}"]`);
+      if (input) input.checked = true;
+    }
   }
 }
 

@@ -13,6 +13,7 @@ const {
   SupabaseStore,
   buildAdminPayrollReport,
   buildEmployeePayrollReport,
+  buildExpenseReport,
   createCaptchaChallenge,
   permissionsFor,
   reportDirectoryForUser,
@@ -509,6 +510,105 @@ test('report access can be scoped per employee', () => {
 
   assert.deepEqual(updated.allowedReports, []);
   assert.deepEqual(reportDirectoryForUser(updated).map((report) => report.id), []);
+});
+
+test('expense report is available by default for report-enabled managers', () => {
+  const store = createTempStore();
+  store.createUser({
+    fullName: 'Owner Expense Report',
+    phone: '+79990000203',
+    email: 'owner-expense-report@example.com',
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Expense Report',
+    phone: '+79990000204',
+    email: 'admin-expense-report@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['reports'],
+    unofficialSalary: '1',
+  });
+  const partner = store.createUser({
+    fullName: 'Partner Expense Report',
+    phone: '+79990000205',
+    email: 'partner-expense-report@example.com',
+    password: 'PartnerPass123',
+    role: 'partner',
+    allowedSections: ['reports'],
+  });
+
+  assert.deepEqual(admin.allowedReports, ['expense-report']);
+  assert.deepEqual(partner.allowedReports, ['expense-report']);
+  assert.deepEqual(reportDirectoryForUser(admin).map((report) => report.id), ['expense-report']);
+  assert.deepEqual(reportDirectoryForUser(partner).map((report) => report.id), ['expense-report']);
+});
+
+test('expense report summarizes monthly expenses by point and payment method', () => {
+  const users = [
+    { id: 'admin-expense-author', fullName: 'Админ Автор' },
+    { id: 'partner-expense-author', fullName: 'Партнер Автор' },
+  ];
+  const expenses = [
+    {
+      id: 'expense-1',
+      pointId: 'moscow_6231',
+      expenseDate: '2026-08-03',
+      amount: '100',
+      paymentMethod: 'cash',
+      createdBy: 'admin-expense-author',
+      createdAt: '2026-08-03T10:00:00.000Z',
+    },
+    {
+      id: 'expense-2',
+      pointId: 'moscow_6231',
+      expenseDate: '2026-08-04',
+      amount: '250.5',
+      paymentMethod: 'corp_card',
+      createdBy: 'partner-expense-author',
+      createdAt: '2026-08-04T10:00:00.000Z',
+    },
+    {
+      id: 'expense-3',
+      pointId: 'krasnogorsk_466',
+      expenseDate: '2026-08-05',
+      amount: '300',
+      paymentMethod: 'card',
+      createdBy: 'admin-expense-author',
+      createdAt: '2026-08-05T10:00:00.000Z',
+    },
+    {
+      id: 'expense-4',
+      pointId: 'moscow_6231',
+      expenseDate: '2026-09-01',
+      amount: '999',
+      paymentMethod: 'cash',
+      createdBy: 'admin-expense-author',
+      createdAt: '2026-09-01T10:00:00.000Z',
+    },
+  ];
+
+  const report = buildExpenseReport(users, expenses, '2026-08');
+  const moscow = report.points.find((point) => point.pointId === 'moscow_6231');
+  const krasnogorsk = report.points.find((point) => point.pointId === 'krasnogorsk_466');
+
+  assert.equal(report.expenses.length, 3);
+  assert.equal(moscow.cashTotal, '100');
+  assert.equal(moscow.cardTotal, '250.5');
+  assert.equal(moscow.total, '350.5');
+  assert.equal(krasnogorsk.cashTotal, '0');
+  assert.equal(krasnogorsk.cardTotal, '300');
+  assert.equal(krasnogorsk.total, '300');
+  assert.deepEqual(report.totals, {
+    cashTotal: '100',
+    cardTotal: '550.5',
+    total: '650.5',
+    count: 3,
+  });
+  assert.deepEqual(report.authorOptions.map((author) => author.id), [
+    'admin-expense-author',
+    'partner-expense-author',
+  ]);
 });
 
 test('development proposals are scoped by access and reviewed by owner', async () => {
