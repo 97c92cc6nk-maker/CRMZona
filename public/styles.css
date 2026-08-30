@@ -734,6 +734,14 @@ textarea {
   min-height: 18px;
 }
 
+.check-row.is-disabled {
+  color: var(--muted);
+}
+
+.check-row.is-disabled span {
+  opacity: .78;
+}
+
 .table-wrap {
   width: 100%;
   overflow: auto;

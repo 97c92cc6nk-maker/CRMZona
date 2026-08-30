@@ -1353,8 +1353,8 @@ function renderCompanyCard() {
   ].forEach((field) => setCompanyFormValue(field, company[field]));
 
   const editable = Boolean(state.permissions.canManageCompanies);
-  renderCompanyPointOptions(company, editable);
   setCompanyCardEditable(editable);
+  renderCompanyPointOptions(company, editable);
   renderCompanyDocuments(company.documents || [], editable);
 }
 
@@ -1376,19 +1376,31 @@ function renderCompanyPointOptions(company, editable) {
   const options = state.companyPoints.length ? state.companyPoints : state.points;
   const selected = new Set(company?.pointIds || []);
   els.companyPointOptions.replaceChildren(...options.map((point) => {
+    const assignedCompany = companyAssignedToPoint(point.id, company?.id);
+    const locked = Boolean(assignedCompany);
     const label = document.createElement('label');
-    label.className = 'check-row';
+    label.className = `check-row${locked ? ' is-disabled' : ''}`;
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.name = 'pointIds';
     input.value = point.id;
     input.checked = selected.has(point.id);
-    input.disabled = !editable;
+    input.disabled = !editable || locked;
     const text = document.createElement('span');
-    text.textContent = point.name;
+    text.textContent = locked
+      ? `${point.name} · ${assignedCompany.shortName || assignedCompany.name}`
+      : point.name;
     label.append(input, text);
     return label;
   }));
+}
+
+function companyAssignedToPoint(pointId, exceptCompanyId = '') {
+  return state.companies.find((company) => (
+    company.id !== exceptCompanyId
+    && Array.isArray(company.pointIds)
+    && company.pointIds.includes(pointId)
+  )) || null;
 }
 
 function renderCompanyDocuments(documents, editable) {

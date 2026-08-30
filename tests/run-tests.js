@@ -2827,6 +2827,23 @@ test('companies can store requisites, point links and Google Drive documents', a
   assert.equal(company.shortName, 'ИП ТСТ');
   assert.deepEqual(company.pointNames, ['МОСКВА_6231']);
   assert.throws(
+    () => store.createCompany(owner, {
+      shortName: 'ИП ДБЛ',
+      name: 'Индивидуальный предприниматель Дубль Точка',
+      pointIds: ['moscow_6231'],
+    }),
+    (error) => error instanceof ApiError && error.status === 409 && /уже привязана/.test(error.message),
+  );
+  const otherCompany = store.createCompany(owner, {
+    shortName: 'ИП КРГ',
+    name: 'Индивидуальный предприниматель Красногорск',
+    pointIds: ['krasnogorsk_466'],
+  });
+  assert.throws(
+    () => store.updateCompany(owner, otherCompany.id, { ...otherCompany, pointIds: ['moscow_6231'] }),
+    (error) => error instanceof ApiError && error.status === 409 && /уже привязана/.test(error.message),
+  );
+  assert.throws(
     () => store.updateCompany(admin, company.id, { ...company, pointIds: ['krasnogorsk_466'] }),
     (error) => error instanceof ApiError && error.status === 403,
   );
