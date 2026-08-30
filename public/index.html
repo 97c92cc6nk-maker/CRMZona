@@ -100,6 +100,7 @@
         </div>
         <nav class="tabs" aria-label="Разделы">
           <button class="tab is-active" type="button" data-view="profileView">Личный кабинет</button>
+          <button class="tab" type="button" data-view="assistantView">AI-помощник</button>
           <button class="tab is-hidden" type="button" data-view="employeesView" id="employeesTab">Сотрудники</button>
           <button class="tab" type="button" data-view="retailPointsView">Торговые точки</button>
           <button class="tab" type="button" data-view="companiesView">Компании</button>
@@ -177,6 +178,51 @@
         </section>
 
         <div class="notice" id="profileNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="assistantView" aria-labelledby="assistantTitle">
+        <div class="section-head">
+          <h2 id="assistantTitle">AI-помощник</h2>
+          <button class="secondary" type="button" id="refreshAssistant">Обновить статус</button>
+        </div>
+
+        <section class="panel assistant-panel" aria-labelledby="assistantChatTitle">
+          <div class="assistant-status-grid">
+            <div>
+              <span>OpenAI</span>
+              <strong id="assistantOpenAiStatus">Проверяется</strong>
+            </div>
+            <div>
+              <span>TencentDB Memory</span>
+              <strong id="assistantMemoryStatus">Проверяется</strong>
+            </div>
+            <div>
+              <span>Модель</span>
+              <strong id="assistantModel">-</strong>
+            </div>
+            <div>
+              <span>Сессия</span>
+              <strong id="assistantSession">-</strong>
+            </div>
+          </div>
+
+          <div class="panel-head">
+            <h3 id="assistantChatTitle">Диалог</h3>
+            <span class="muted" id="assistantStatusLine"></span>
+          </div>
+
+          <div class="assistant-messages" id="assistantMessages" aria-live="polite"></div>
+
+          <form class="assistant-form" id="assistantForm">
+            <label>
+              Сообщение
+              <textarea id="assistantInput" name="message" rows="4" maxlength="4000" required></textarea>
+            </label>
+            <button class="primary" type="submit">Отправить</button>
+          </form>
+        </section>
+
+        <div class="notice" id="assistantNotice" role="status" aria-live="polite"></div>
       </section>
 
       <section class="view" id="employeesView" aria-labelledby="employeesTitle">

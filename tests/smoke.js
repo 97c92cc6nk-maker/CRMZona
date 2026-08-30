@@ -13,6 +13,13 @@ process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = '';
 process.env.GOOGLE_DRIVE_CLIENT_ID = '';
 process.env.GOOGLE_DRIVE_CLIENT_SECRET = '';
 process.env.GOOGLE_DRIVE_REFRESH_TOKEN = '';
+process.env.OPENAI_API_KEY = ' ';
+process.env.TENCENT_MEMORY_ENDPOINT = ' ';
+process.env.TENCENT_MEMORY_API_KEY = ' ';
+process.env.TENCENT_MEMORY_SERVICE_ID = ' ';
+process.env.TENCENTDB_MEMORY_ENDPOINT = ' ';
+process.env.TENCENTDB_MEMORY_API_KEY = ' ';
+process.env.TENCENTDB_MEMORY_SERVICE_ID = ' ';
 
 const { Store, createRequestHandler } = require('../lib/app');
 
@@ -23,6 +30,13 @@ delete process.env.GOOGLE_DRIVE_EXPENSES_FOLDER_ID;
 delete process.env.GOOGLE_DRIVE_CLIENT_ID;
 delete process.env.GOOGLE_DRIVE_CLIENT_SECRET;
 delete process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
+delete process.env.OPENAI_API_KEY;
+delete process.env.TENCENT_MEMORY_ENDPOINT;
+delete process.env.TENCENT_MEMORY_API_KEY;
+delete process.env.TENCENT_MEMORY_SERVICE_ID;
+delete process.env.TENCENTDB_MEMORY_ENDPOINT;
+delete process.env.TENCENTDB_MEMORY_API_KEY;
+delete process.env.TENCENTDB_MEMORY_SERVICE_ID;
 
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-smoke-'));
@@ -115,6 +129,25 @@ async function main() {
       headers: { Cookie: cookie },
     });
     assert.equal(me.permissions.canEditSchedule, true);
+    assert.equal(me.permissions.canUseAssistant, true);
+
+    const assistant = await jsonFetch(`${baseUrl}/api/assistant/status`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(assistant.assistant.openAiConfigured, false);
+    assert.equal(assistant.assistant.tencentMemoryConfigured, false);
+
+    await assert.rejects(
+      () => jsonFetch(`${baseUrl}/api/assistant/message`, {
+        method: 'POST',
+        headers: { Cookie: cookie },
+        body: {
+          message: 'Что проверить сегодня?',
+          sessionId: 'smoke-session-1',
+        },
+      }),
+      /503: AI-помощник не настроен/,
+    );
 
     const createdEmployee = await jsonFetch(`${baseUrl}/api/users`, {
       method: 'POST',
@@ -130,6 +163,7 @@ async function main() {
         premiumAmount: '300',
         premiumStartDate: '2026-06-01',
         role: 'employee',
+        allowedPoints: ['moscow_6231'],
       },
     });
     assert.equal(createdEmployee.user.position, 'Продавец');

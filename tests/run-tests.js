@@ -12,6 +12,7 @@ const {
   Store,
   SupabaseStore,
   buildAdminPayrollReport,
+  buildAssistantContextForUser,
   buildEmployeePayrollReport,
   buildExpenseReport,
   buildRunnerReport,
@@ -26,6 +27,12 @@ const {
   verifyCaptcha,
   verifyPassword,
 } = require('../lib/app');
+const {
+  assistantStatus,
+  createTencentMemoryClient,
+  handleAssistantMessage,
+  resolveAssistantConfig,
+} = require('../lib/ai-assistant');
 
 function createTempStore() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-'));
@@ -47,6 +54,167 @@ function assertGoogleDrivePublicPermission(request) {
     allowFileDiscovery: false,
   });
 }
+
+function jsonResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(payload),
+  };
+}
+
+test('assistant status exposes readiness without leaking secrets', () => {
+  const env = {
+    OPENAI_API_KEY: 'sk-openai-secret',
+    OPENAI_MODEL: 'gpt-test',
+    TENCENT_MEMORY_ENDPOINT: 'https://memory.example/v3',
+    TENCENT_MEMORY_API_KEY: 'sk-memory-secret',
+    TENCENT_MEMORY_SERVICE_ID: 'tdai-mem-123',
+    TENCENT_MEMORY_TEAM_ID: 'team-a',
+    TENCENT_MEMORY_AGENT_ID: 'agent-a',
+  };
+
+  const config = resolveAssistantConfig(env);
+  const status = assistantStatus(env);
+
+  assert.equal(config.memory.endpoint, 'https://memory.example');
+  assert.equal(status.enabled, true);
+  assert.equal(status.openAiConfigured, true);
+  assert.equal(status.tencentMemoryConfigured, true);
+  assert.equal(status.model, 'gpt-test');
+  assert.equal(status.memory.endpointHost, 'memory.example');
+  assert.equal(JSON.stringify(status).includes('sk-openai-secret'), false);
+  assert.equal(JSON.stringify(status).includes('sk-memory-secret'), false);
+});
+
+test('TencentDB memory client uses v3 routes and isolation fields', async () => {
+  const config = resolveAssistantConfig({
+    TENCENT_MEMORY_ENDPOINT: 'https://memory.example',
+    TENCENT_MEMORY_API_KEY: 'sk-memory-secret',
+    TENCENT_MEMORY_SERVICE_ID: 'tdai-mem-123',
+    TENCENT_MEMORY_TEAM_ID: 'team-a',
+    TENCENT_MEMORY_AGENT_ID: 'agent-a',
+  });
+  const requests = [];
+  const client = createTencentMemoryClient(config.memory, async (url, options) => {
+    requests.push({ url, options });
+    return jsonResponse({ code: 0, data: { items: [{ type: 'fact', content: 'test memory' }] } });
+  });
+
+  const result = await client.searchAtomic('график на сегодня', {
+    sessionId: 'sess-12345',
+    userId: 'user 1',
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, 'https://memory.example/v3/atomic/search');
+  assert.equal(requests[0].options.headers.Authorization, 'Bearer sk-memory-secret');
+  assert.equal(requests[0].options.headers['x-tdai-service-id'], 'tdai-mem-123');
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    team_id: 'team-a',
+    agent_id: 'agent-a',
+    user_id: 'user_1',
+    session_id: 'sess-12345',
+    query: 'график на сегодня',
+    limit: 5,
+  });
+});
+
+test('assistant message recalls memory, calls OpenAI, and captures clean conversation', async () => {
+  const requests = [];
+  const fetchImpl = async (url, options) => {
+    requests.push({ url, options });
+    if (url.endsWith('/v3/atomic/search')) {
+      return jsonResponse({ code: 0, data: { items: [{ type: 'fact', content: 'Пользователь любит короткие ответы.' }] } });
+    }
+    if (url.endsWith('/v3/core/read')) {
+      return jsonResponse({ code: 0, data: { content: 'Пользователь управляет торговыми точками.' } });
+    }
+    if (url.endsWith('/v3/scenario/ls')) {
+      return jsonResponse({ code: 0, data: { entries: [{ path: 'crm/графики.md' }] } });
+    }
+    if (url.endsWith('/v3/conversation/add')) {
+      return jsonResponse({ code: 0, data: { total_count: 2 } });
+    }
+    if (url.endsWith('/responses')) {
+      const body = JSON.parse(options.body);
+      assert.equal(body.model, 'gpt-test');
+      assert.equal(body.input.includes('<relevant-memories>'), true);
+      assert.equal(body.instructions.includes('<user-profile>'), true);
+      assert.equal(body.input.includes('Контекст CRM'), true);
+      return jsonResponse({ output: [{ content: [{ text: 'Сегодня проверьте график и открытые заявки.' }] }] });
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  };
+
+  const result = await handleAssistantMessage({
+    user: { id: 'user 1', fullName: 'Тестовый Владелец', role: 'owner' },
+    appContext: { text: 'Контекст CRM: есть открытая заявка.' },
+    message: 'Что важно сегодня?',
+    sessionId: 'sess-12345',
+    fetchImpl,
+    env: {
+      OPENAI_API_KEY: 'sk-openai-secret',
+      OPENAI_MODEL: 'gpt-test',
+      TENCENT_MEMORY_ENDPOINT: 'https://memory.example',
+      TENCENT_MEMORY_API_KEY: 'sk-memory-secret',
+      TENCENT_MEMORY_SERVICE_ID: 'tdai-mem-123',
+      TENCENT_MEMORY_TEAM_ID: 'team-a',
+      TENCENT_MEMORY_AGENT_ID: 'agent-a',
+    },
+  });
+
+  assert.equal(result.answer, 'Сегодня проверьте график и открытые заявки.');
+  assert.equal(result.memory.recall.used, true);
+  assert.equal(result.memory.capture.status, 'captured');
+
+  const capture = requests.find((request) => request.url.endsWith('/v3/conversation/add'));
+  const captureBody = JSON.parse(capture.options.body);
+  assert.deepEqual(captureBody.messages.map((item) => item.role), ['user', 'assistant']);
+  assert.equal(captureBody.messages[0].content, 'Что важно сегодня?');
+  assert.equal(captureBody.messages[0].content.includes('<relevant-memories>'), false);
+  assert.equal(captureBody.session_id, 'sess-12345');
+});
+
+test('assistant CRM context omits retail point credentials', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Assistant Context',
+    phone: '+79990000201',
+    email: 'owner-assistant-context@example.com',
+    password: 'OwnerPass123',
+  });
+  store.updateRetailPoint(owner, 'moscow_6231', {
+    name: 'МОСКВА_6231',
+    internet: {
+      provider: 'Test ISP',
+      payment: 'invoice',
+      contractNumber: 'CONTRACT-1',
+      contractHolder: 'CRMZona',
+      tariff: 'Business',
+      login: 'secret-router-login',
+      password: 'secret-router-password',
+    },
+    video: {
+      operator: 'Video Co',
+      camerasCount: '4',
+      contractNumber: 'VIDEO-1',
+      contractHolder: 'CRMZona',
+      tariff: 'Archive',
+      login: 'secret-video-login',
+      password: 'secret-video-password',
+    },
+  });
+
+  const context = await buildAssistantContextForUser(store, owner);
+
+  assert.equal(context.text.includes('Test ISP'), true);
+  assert.equal(context.text.includes('secret-router-login'), false);
+  assert.equal(context.text.includes('secret-router-password'), false);
+  assert.equal(context.text.includes('secret-video-login'), false);
+  assert.equal(context.text.includes('secret-video-password'), false);
+});
 
 test('registration validates all required fields', () => {
   assert.throws(

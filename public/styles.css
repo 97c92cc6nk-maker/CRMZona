@@ -406,6 +406,96 @@ h3 {
   padding: 18px;
 }
 
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.assistant-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.assistant-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.assistant-status-grid div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7faf9;
+}
+
+.assistant-status-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.assistant-status-grid strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.assistant-messages {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 320px;
+  max-height: min(58vh, 560px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7faf9;
+}
+
+.assistant-message {
+  display: grid;
+  gap: 6px;
+  max-width: min(780px, 100%);
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+
+.assistant-message.is-user {
+  justify-self: end;
+  border-color: #c8dcd6;
+  background: #e8f3f0;
+}
+
+.assistant-message strong {
+  color: var(--accent-strong);
+  font-size: 13px;
+}
+
+.assistant-message p {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.assistant-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.assistant-form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
 .details {
   display: grid;
   gap: 12px;
@@ -1409,6 +1499,7 @@ tbody tr:last-child td {
   .company-grid,
   .development-form,
   .development-card-form,
+  .assistant-form,
   .task-form,
   .request-form,
   .expense-form,
@@ -1449,6 +1540,10 @@ tbody tr:last-child td {
     grid-template-columns: 1fr;
     gap: 4px;
   }
+
+  .assistant-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 560px) {
@@ -1470,5 +1565,9 @@ tbody tr:last-child td {
 
   .brand.compact p {
     white-space: normal;
+  }
+
+  .assistant-status-grid {
+    grid-template-columns: 1fr;
   }
 }

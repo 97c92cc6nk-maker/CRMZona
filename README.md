@@ -95,6 +95,33 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 npm run migrate:supabase
 ```
 
+## AI-помощник и TencentDB Memory
+
+В приложении есть вкладка `AI-помощник`. Браузер обращается только к серверным маршрутам:
+
+- `GET /api/assistant/status` показывает, настроены ли OpenAI и TencentDB Memory;
+- `POST /api/assistant/message` собирает разрешенный пользователю контекст CRM, делает recall из TencentDB Memory, вызывает OpenAI Responses API и записывает чистую пару `user/assistant` обратно в память.
+
+Минимально нужен ключ OpenAI:
+
+```text
+OPENAI_API_KEY=sk-your-openai-api-key
+OPENAI_MODEL=gpt-5-mini
+```
+
+Для долгосрочной памяти добавьте TencentDB Agent Memory:
+
+```text
+TENCENT_MEMORY_ENDPOINT=https://memory.tdai.tencentyun.com
+TENCENT_MEMORY_API_KEY=sk-your-tencent-memory-api-key
+TENCENT_MEMORY_SERVICE_ID=tdai-mem-your-instance-id
+TENCENT_MEMORY_TEAM_ID=crmzona
+TENCENT_MEMORY_AGENT_ID=crmzona-assistant
+TENCENT_MEMORY_API_VERSION=v3
+```
+
+Ключи храните только в `.env` или Environment Variables хостинга. Клиент не получает секреты: он видит только статусы готовности, имя модели, host endpoint и активность памяти.
+
 ## Google Drive для чеков
 
 Хозрасходы сохраняют фото чека на сайте. Для дополнительного архива на Google Drive задайте переменные окружения:

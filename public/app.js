@@ -71,7 +71,12 @@ const state = {
   selectedDevelopmentProposalId: null,
   selectedReportId: null,
   retailPointsLoading: false,
+  assistantStatus: null,
+  assistantMessages: [],
+  assistantSessionId: '',
 };
+
+const ASSISTANT_SESSION_STORAGE_PREFIX = 'crmzonaAssistantSessionId:';
 
 const els = {};
 
@@ -104,6 +109,16 @@ function bindElements() {
     profileRole: document.getElementById('profileRole'),
     profileNotice: document.getElementById('profileNotice'),
     passwordForm: document.getElementById('passwordForm'),
+    assistantOpenAiStatus: document.getElementById('assistantOpenAiStatus'),
+    assistantMemoryStatus: document.getElementById('assistantMemoryStatus'),
+    assistantModel: document.getElementById('assistantModel'),
+    assistantSession: document.getElementById('assistantSession'),
+    assistantStatusLine: document.getElementById('assistantStatusLine'),
+    assistantMessages: document.getElementById('assistantMessages'),
+    assistantForm: document.getElementById('assistantForm'),
+    assistantInput: document.getElementById('assistantInput'),
+    assistantNotice: document.getElementById('assistantNotice'),
+    refreshAssistant: document.getElementById('refreshAssistant'),
     employeesTab: document.getElementById('employeesTab'),
     employeeSortSelect: document.getElementById('employeeSortSelect'),
     employeePasswordHeader: document.getElementById('employeePasswordHeader'),
@@ -265,6 +280,8 @@ function bindEvents() {
   els.refreshCaptcha.addEventListener('click', refreshCaptcha);
   els.logoutButton.addEventListener('click', handleLogout);
   els.passwordForm.addEventListener('submit', handlePasswordChange);
+  els.assistantForm?.addEventListener('submit', handleAssistantSubmit);
+  els.refreshAssistant?.addEventListener('click', loadAssistantStatus);
   els.employeeForm.addEventListener('submit', handleEmployeeCreate);
   els.employeeSortSelect?.addEventListener('change', () => {
     state.employeeSortMode = els.employeeSortSelect.value || 'name';
@@ -390,6 +407,7 @@ async function loadSession() {
   state.requestPoints = data.requestPoints || data.points || [];
   state.repairPoints = data.repairPoints || data.points || [];
   state.expensePoints = data.expensePoints || data.points || [];
+  state.assistantSessionId = restoreAssistantSessionId();
 }
 
 async function loadAppData() {
@@ -404,6 +422,7 @@ async function loadAppData() {
   if (state.permissions.canViewAudit) {
     loaders.push(loadAudit());
   }
+  loaders.push(loadAssistantStatus());
   if (state.permissions.canViewRetailPoints) {
     loaders.push(loadRetailPoints());
   } else {
@@ -632,6 +651,9 @@ async function handleLogout() {
     state.selectedEmployeeId = null;
     state.selectedDevelopmentProposalId = null;
     state.selectedReportId = null;
+    state.assistantStatus = null;
+    state.assistantMessages = [];
+    state.assistantSessionId = '';
     showAuth();
   }, els.profileNotice);
 }
@@ -647,6 +669,43 @@ async function handlePasswordChange(event) {
     els.passwordForm.reset();
     showNotice(els.profileNotice, 'Пароль обновлен.', 'success');
   }, els.profileNotice);
+}
+
+async function loadAssistantStatus() {
+  const data = await api('/api/assistant/status');
+  state.assistantStatus = data.assistant || null;
+  renderAssistant();
+}
+
+async function handleAssistantSubmit(event) {
+  event.preventDefault();
+  const message = els.assistantInput.value.trim();
+  if (!message) return;
+
+  addAssistantMessage('user', message);
+  els.assistantInput.value = '';
+  showNotice(els.assistantNotice, '');
+
+  const button = event.submitter;
+  await runWithButton(button, async () => {
+    const data = await api('/api/assistant/message', {
+      method: 'POST',
+      body: {
+        message,
+        sessionId: currentAssistantSessionId(),
+      },
+    });
+    state.assistantSessionId = data.sessionId || state.assistantSessionId;
+    persistAssistantSessionId(state.assistantSessionId);
+    state.assistantStatus = data.assistant || state.assistantStatus;
+    addAssistantMessage('assistant', data.answer || '');
+    renderAssistant();
+
+    const captureStatus = data.memory?.capture?.status;
+    if (captureStatus === 'failed') {
+      showNotice(els.assistantNotice, data.memory.capture.reason || 'Ответ получен, но память не записалась.', 'warning');
+    }
+  }, els.assistantNotice);
 }
 
 function activateView(viewId) {
@@ -669,6 +728,10 @@ function refreshViewData(viewId) {
   if (viewId === 'tasksView') {
     loadTasks();
   }
+  if (viewId === 'assistantView') {
+    loadAssistantStatus();
+    renderAssistant();
+  }
 }
 
 function renderProfile() {
@@ -680,6 +743,7 @@ function renderProfile() {
   els.profileEmail.textContent = user.email;
   els.profileRole.textContent = user.roleLabel;
   els.employeesTab.classList.toggle('is-hidden', !state.permissions.canViewUsers);
+  setTabVisibility('assistantView', Boolean(state.permissions.canUseAssistant));
   setTabVisibility('retailPointsView', Boolean(state.permissions.canViewRetailPoints));
   setTabVisibility('companiesView', Boolean(state.permissions.canViewCompanies));
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
@@ -699,6 +763,101 @@ function renderProfile() {
   }
   els.auditPanel.classList.toggle('is-hidden', !state.permissions.canViewAudit);
   ensureActiveTabVisible();
+}
+
+function renderAssistant() {
+  if (!els.assistantMessages) return;
+  const status = state.assistantStatus || {};
+  els.assistantOpenAiStatus.textContent = status.openAiConfigured ? 'Готов' : 'Не настроен';
+  els.assistantMemoryStatus.textContent = status.tencentMemoryConfigured ? 'Подключена' : 'Не подключена';
+  els.assistantModel.textContent = status.model || '-';
+  els.assistantSession.textContent = state.assistantSessionId ? 'Активна' : 'Новая';
+  els.assistantStatusLine.textContent = status.openAiConfigured
+    ? memoryStatusText(status)
+    : 'Нужен OPENAI_API_KEY на сервере';
+  els.assistantForm?.querySelector('button[type="submit"]')?.toggleAttribute('disabled', !status.openAiConfigured);
+
+  els.assistantMessages.innerHTML = '';
+  if (!state.assistantMessages.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = status.openAiConfigured
+      ? 'Готов к работе.'
+      : 'AI-помощник появится после настройки OpenAI.';
+    els.assistantMessages.append(empty);
+    return;
+  }
+
+  for (const item of state.assistantMessages) {
+    const message = document.createElement('article');
+    message.className = `assistant-message ${item.role === 'user' ? 'is-user' : 'is-assistant'}`;
+    const role = document.createElement('strong');
+    role.textContent = item.role === 'user' ? 'Вы' : 'AI-помощник';
+    const text = document.createElement('p');
+    text.textContent = item.text;
+    message.append(role, text);
+    els.assistantMessages.append(message);
+  }
+  els.assistantMessages.scrollTop = els.assistantMessages.scrollHeight;
+}
+
+function addAssistantMessage(role, text) {
+  state.assistantMessages.push({
+    role,
+    text,
+    createdAt: new Date().toISOString(),
+  });
+  if (state.assistantMessages.length > 30) {
+    state.assistantMessages = state.assistantMessages.slice(-30);
+  }
+  renderAssistant();
+}
+
+function memoryStatusText(status) {
+  if (!status.tencentMemoryConfigured) return 'Память работает в локальном режиме этой вкладки';
+  const parts = ['TencentDB Memory подключена'];
+  if (status.memory?.endpointHost) parts.push(status.memory.endpointHost);
+  if (status.memory?.apiVersion) parts.push(status.memory.apiVersion);
+  return parts.join(' · ');
+}
+
+function currentAssistantSessionId() {
+  if (!state.assistantSessionId) {
+    state.assistantSessionId = `crmzona:${state.user?.id || 'user'}:${cryptoRandomId()}`;
+    persistAssistantSessionId(state.assistantSessionId);
+  }
+  return state.assistantSessionId;
+}
+
+function restoreAssistantSessionId() {
+  if (!state.user?.id) return '';
+  try {
+    return localStorage.getItem(assistantSessionStorageKey()) || '';
+  } catch {
+    return '';
+  }
+}
+
+function persistAssistantSessionId(sessionId) {
+  if (!state.user?.id || !sessionId) return;
+  try {
+    localStorage.setItem(assistantSessionStorageKey(), sessionId);
+  } catch {
+    // localStorage is optional; the server can create a fresh session id.
+  }
+}
+
+function assistantSessionStorageKey() {
+  return `${ASSISTANT_SESSION_STORAGE_PREFIX}${state.user?.id || 'anonymous'}`;
+}
+
+function cryptoRandomId() {
+  const bytes = new Uint32Array(2);
+  window.crypto?.getRandomValues?.(bytes);
+  if (bytes[0] || bytes[1]) {
+    return `${bytes[0].toString(16)}${bytes[1].toString(16)}`;
+  }
+  return String(Date.now());
 }
 
 function setTabVisibility(viewId, visible) {
