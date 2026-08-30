@@ -8,6 +8,7 @@ const state = {
   points: [],
   schedulePoints: [],
   repairPoints: [],
+  expensePoints: [],
   users: [],
   retailPoints: [],
   retailPointPaymentMethods: [],
@@ -388,6 +389,7 @@ async function loadSession() {
   state.schedulePoints = data.schedulePoints || data.points || [];
   state.requestPoints = data.requestPoints || data.points || [];
   state.repairPoints = data.repairPoints || data.points || [];
+  state.expensePoints = data.expensePoints || data.points || [];
 }
 
 async function loadAppData() {
@@ -606,6 +608,7 @@ async function handleLogout() {
     state.points = [];
     state.schedulePoints = [];
     state.repairPoints = [];
+    state.expensePoints = [];
     state.schedule = null;
     state.expenses = [];
     state.claims = [];
@@ -716,10 +719,11 @@ async function loadPoints() {
   state.schedulePoints = data.schedulePoints || state.points;
   state.requestPoints = data.requestPoints || state.points;
   state.repairPoints = data.repairPoints || state.points;
+  state.expensePoints = data.expensePoints || state.points;
   fillPointSelect(els.pointSelect, state.schedulePoints);
   fillPointSelect(els.requestPointSelect, state.requestPoints);
   fillPointSelect(els.repairPointSelect, state.repairPoints);
-  fillPointSelect(els.expensePointSelect);
+  fillPointSelect(els.expensePointSelect, state.expensePoints);
   fillPointSelect(els.claimPointSelect);
   renderEmployeeFormAccessControls();
 }
@@ -3550,6 +3554,7 @@ async function loadExpenses() {
     const data = await api('/api/expenses');
     state.expenses = data.expenses;
     state.expensePaymentMethods = data.paymentMethods || [];
+    state.expensePoints = data.points || state.expensePoints || [];
     state.permissions.canManageExpenses = data.canManage;
     renderExpenses();
   }, els.expensesNotice);
@@ -3558,10 +3563,15 @@ async function loadExpenses() {
 function renderExpenses() {
   els.expensesBody.replaceChildren();
   fillExpensePaymentMethods();
+  const selectedExpensePoint = els.expensePointSelect.value;
+  fillPointSelect(els.expensePointSelect, state.expensePoints);
+  if (selectedExpensePoint && state.expensePoints.some((point) => point.id === selectedExpensePoint)) {
+    els.expensePointSelect.value = selectedExpensePoint;
+  }
   if (!els.expenseDateInput.value) {
     els.expenseDateInput.value = currentDate();
   }
-  const expensesAllowed = Boolean(state.permissions.canManageExpenses && state.points.length);
+  const expensesAllowed = Boolean(state.permissions.canManageExpenses && state.expensePoints.length);
   Array.from(els.expenseForm.elements).forEach((field) => {
     field.disabled = !expensesAllowed;
   });
@@ -3770,7 +3780,7 @@ function expenseSortTime(expense) {
 
 async function handleExpenseCreate(event) {
   event.preventDefault();
-  if (!state.permissions.canManageExpenses || !state.points.length) {
+  if (!state.permissions.canManageExpenses || !state.expensePoints.length) {
     showNotice(els.expensesNotice, 'Нет прав на внесение хозрасходов или доступных торговых точек.', 'warning');
     return;
   }
@@ -3786,8 +3796,8 @@ async function handleExpenseCreate(event) {
     state.expenses = [data.expense, ...state.expenses];
     els.expenseForm.reset();
     els.expenseDateInput.value = currentDate();
-    if (state.points[0]) {
-      els.expensePointSelect.value = state.points[0].id;
+    if (state.expensePoints[0]) {
+      els.expensePointSelect.value = state.expensePoints[0].id;
     }
     fillExpensePaymentMethods();
     renderExpenses();

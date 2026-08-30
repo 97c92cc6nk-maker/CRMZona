@@ -2027,6 +2027,17 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
       paymentMethod: 'cash',
       receipt,
     });
+    const otherPointReceipt = {
+      fileName: 'other-check.pdf',
+      dataUrl: `data:application/pdf;base64,${Buffer.from('%PDF-other-test').toString('base64')}`,
+    };
+    const otherPointExpense = await store.createExpense(admin, {
+      pointId: 'krasnogorsk_466',
+      expenseDate: '2026-07-10',
+      amount: '321',
+      paymentMethod: 'card',
+      receipt: otherPointReceipt,
+    });
 
     assert.equal(expense.expenseDate, '2026-07-09');
     assert.equal(expense.amount, '123.45');
@@ -2035,14 +2046,29 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
     assert.equal(expense.googleDrive.sourceUnavailable, true);
     assert.match(expense.receiptUrl, /^\/api\/receipts\//);
     assert.match(expense.receipt.fileName, /^2026-07-09-Иван_Администратор-МОСКВА_6231-[a-f0-9]+\.pdf$/);
+    assert.equal(otherPointExpense.pointId, 'krasnogorsk_466');
+    assert.equal(otherPointExpense.amount, '321');
 
     const file = await store.readReceiptFile(expense.receipt);
     assert.equal(file.mimeType, 'application/pdf');
     assert.equal(file.buffer.toString('utf8'), '%PDF-test');
+    const otherPointFile = await store.readReceiptFile(otherPointExpense.receipt);
+    assert.equal(otherPointFile.buffer.toString('utf8'), '%PDF-other-test');
 
     const list = store.listExpenses(admin);
-    assert.equal(list.length, 1);
+    assert.equal(list.length, 2);
     assert.equal(store.getExpenseByReceiptId(admin, expense.receipt.id).id, expense.id);
+    assert.equal(store.getExpenseByReceiptId(admin, otherPointExpense.receipt.id).id, otherPointExpense.id);
+
+    await assert.rejects(
+      () => store.createExpense(admin, {
+        pointId: 'moscow_6231',
+        expenseDate: '2026-07-09',
+        amount: '100',
+        paymentMethod: 'cash',
+      }),
+      (error) => error instanceof ApiError && error.status === 400 && /чек/i.test(error.message),
+    );
 
     await assert.rejects(
       () => store.createExpense(employee, {
@@ -2055,13 +2081,22 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
       (error) => error instanceof ApiError && error.status === 403,
     );
 
+    const deletedOtherPoint = await store.deleteExpense(admin, otherPointExpense.id);
+    assert.equal(deletedOtherPoint.id, otherPointExpense.id);
+    assert.equal(deletedOtherPoint.googleDriveCleanup.status, 'skipped');
+
     const deleted = await store.deleteExpense(admin, expense.id);
     assert.equal(deleted.id, expense.id);
     assert.equal(deleted.googleDriveCleanup.status, 'skipped');
     assert.equal(store.listExpenses(admin).length, 0);
     assert.equal(store.getExpenseByReceiptId(admin, expense.receipt.id), null);
+    assert.equal(store.getExpenseByReceiptId(admin, otherPointExpense.receipt.id), null);
     await assert.rejects(
       () => store.readReceiptFile(expense.receipt),
+      (error) => error instanceof ApiError && error.status === 404,
+    );
+    await assert.rejects(
+      () => store.readReceiptFile(otherPointExpense.receipt),
       (error) => error instanceof ApiError && error.status === 404,
     );
   } finally {
