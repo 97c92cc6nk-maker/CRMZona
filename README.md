@@ -106,7 +106,7 @@ npm run migrate:supabase
 
 ```text
 OPENAI_API_KEY=sk-your-openai-api-key
-OPENAI_MODEL=gpt-5-mini
+OPENAI_MODEL=gpt-5
 ```
 
 Для долгосрочной памяти добавьте TencentDB Agent Memory:

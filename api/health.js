@@ -1,5 +1,7 @@
 'use strict';
 
+const { assistantStatus } = require('../lib/ai-assistant');
+
 module.exports = (req, res) => {
   const smtp = {
     configured: Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT),
@@ -23,6 +25,7 @@ module.exports = (req, res) => {
     runtime: 'vercel-function',
     smtp,
     supabase,
+    assistant: assistantStatus(),
     at: new Date().toISOString(),
   }));
 };
