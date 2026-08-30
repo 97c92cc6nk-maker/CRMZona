@@ -14,6 +14,7 @@ const {
   buildAdminPayrollReport,
   buildEmployeePayrollReport,
   buildExpenseReport,
+  buildRunnerReport,
   createCaptchaChallenge,
   permissionsFor,
   reportDirectoryForUser,
@@ -609,6 +610,73 @@ test('expense report summarizes monthly expenses by point and payment method', (
     'admin-expense-author',
     'partner-expense-author',
   ]);
+});
+
+test('runner report summarizes monthly substitution hours by employee and point', () => {
+  const users = [
+    { id: 'runner-alpha', fullName: 'Бегунок Альфа', role: 'runner' },
+    { id: 'runner-beta', fullName: 'Бегунок Бета', role: 'runner' },
+    { id: 'employee-main', fullName: 'Обычный Сотрудник', role: 'employee' },
+  ];
+  const schedules = {
+    'moscow_6231:2026-11': {
+      pointId: 'moscow_6231',
+      month: '2026-11',
+      rows: [
+        {
+          employeeId: 'runner-alpha',
+          rowType: 'runner',
+          days: {
+            1: { runnerHours: '5.5' },
+            2: { runnerHours: '2', rateRub: '999' },
+          },
+        },
+        {
+          employeeId: 'employee-main',
+          rowType: 'employee',
+          days: { 1: { rateRub: '1000', issuedCount: '4' } },
+        },
+      ],
+    },
+    'krasnogorsk_466:2026-11': {
+      pointId: 'krasnogorsk_466',
+      month: '2026-11',
+      rows: [
+        {
+          employeeId: 'runner-alpha',
+          rowType: 'runner',
+          days: { 3: { runnerHours: '4' } },
+        },
+        {
+          employeeId: 'runner-beta',
+          rowType: 'runner',
+          days: { 3: { runnerHours: '' } },
+        },
+      ],
+    },
+    'moscow_6231:2026-12': {
+      pointId: 'moscow_6231',
+      month: '2026-12',
+      rows: [{
+        employeeId: 'runner-beta',
+        rowType: 'runner',
+        days: { 1: { runnerHours: '9' } },
+      }],
+    },
+  };
+
+  const report = buildRunnerReport(users, schedules, '2026-11');
+  assert.equal(report.rows.length, 1);
+  assert.equal(report.rows[0].employeeId, 'runner-alpha');
+  assert.equal(report.rows[0].hoursTotal, '11.5');
+  assert.deepEqual(report.rows[0].points.map((point) => ({
+    pointId: point.pointId,
+    hours: point.hours,
+  })), [
+    { pointId: 'krasnogorsk_466', hours: '4' },
+    { pointId: 'moscow_6231', hours: '7.5' },
+  ]);
+  assert.deepEqual(report.totals, { hoursTotal: '11.5' });
 });
 
 test('development proposals are scoped by access and reviewed by owner', async () => {

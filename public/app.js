@@ -35,6 +35,7 @@ const state = {
   adminPayrollReport: null,
   employeePayrollReport: null,
   expenseReport: null,
+  runnerReport: null,
   employeePayrollFilters: {
     pointId: '',
     adminId: '',
@@ -619,6 +620,10 @@ async function handleLogout() {
     state.reportOptions = [];
     state.adminPayrollReport = null;
     state.employeePayrollReport = null;
+    state.expenseReport = null;
+    state.runnerReport = null;
+    resetEmployeePayrollFilters();
+    resetExpenseReportFilters();
     state.claimEmployees = [];
     state.revealedEmployeePasswords = {};
     state.selectedEmployeeId = null;
@@ -2503,6 +2508,7 @@ async function loadReports() {
       state.adminPayrollReport = null;
       state.employeePayrollReport = null;
       state.expenseReport = null;
+      state.runnerReport = null;
       resetEmployeePayrollFilters();
       resetExpenseReportFilters();
       els.employeePayrollFilters?.classList.add('is-hidden');
@@ -2517,6 +2523,7 @@ function renderReportsUnavailable() {
   state.adminPayrollReport = null;
   state.employeePayrollReport = null;
   state.expenseReport = null;
+  state.runnerReport = null;
   resetEmployeePayrollFilters();
   resetExpenseReportFilters();
   els.employeePayrollFilters?.classList.add('is-hidden');
@@ -2567,6 +2574,7 @@ async function openReport(reportId) {
   state.adminPayrollReport = null;
   state.employeePayrollReport = null;
   state.expenseReport = null;
+  state.runnerReport = null;
   resetEmployeePayrollFilters();
   resetExpenseReportFilters();
   if (!els.reportMonthInput.value) {
@@ -2581,6 +2589,7 @@ function closeReport() {
   state.adminPayrollReport = null;
   state.employeePayrollReport = null;
   state.expenseReport = null;
+  state.runnerReport = null;
   resetEmployeePayrollFilters();
   resetExpenseReportFilters();
   els.employeePayrollFilters?.classList.add('is-hidden');
@@ -2603,6 +2612,10 @@ async function loadSelectedReport() {
   }
   if (state.selectedReportId === 'expense-report') {
     await loadExpenseReport();
+    return;
+  }
+  if (state.selectedReportId === 'runner-report') {
+    await loadRunnerReport();
   }
 }
 
@@ -2637,6 +2650,101 @@ async function loadExpenseReport() {
     renderExpenseReport();
     showNotice(els.reportsNotice, '');
   }, els.reportsNotice);
+}
+
+async function loadRunnerReport() {
+  await runWithButton(els.loadReport, async () => {
+    const month = els.reportMonthInput.value || currentMonth();
+    const data = await api(`/api/reports/runner-report?month=${encodeURIComponent(month)}`);
+    state.runnerReport = data.report;
+    state.permissions.canManageReports = Boolean(data.canManage);
+    renderRunnerReport();
+    showNotice(els.reportsNotice, '');
+  }, els.reportsNotice);
+}
+
+function renderRunnerReport() {
+  const report = state.runnerReport;
+  if (!report) return;
+  els.reportDetailsTitle.textContent = `${report.title} · ${formatMonth(report.month)}`;
+  els.saveAdminPayrollReport.classList.add('is-hidden');
+  els.employeePayrollFilters?.classList.add('is-hidden');
+  els.reportContent.replaceChildren();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'table-wrap report-table-wrap';
+  const table = document.createElement('table');
+  table.className = 'reports-table runner-report-table';
+  const thead = document.createElement('thead');
+  const header = document.createElement('tr');
+  ['ФИО', 'Торговые точки и часы', 'Итого часов'].forEach((title, index) => {
+    const th = document.createElement('th');
+    th.textContent = title;
+    if (index === 2) th.className = 'numeric-cell';
+    header.append(th);
+  });
+  thead.append(header);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  if (!report.rows.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 3;
+    cell.className = 'empty-state';
+    cell.textContent = 'За выбранный месяц выходов бегунков нет.';
+    row.append(cell);
+    tbody.append(row);
+  } else {
+    for (const rowData of report.rows) {
+      tbody.append(buildRunnerReportRow(rowData));
+    }
+  }
+  table.append(tbody);
+  table.append(buildRunnerReportFooter(report.totals || {}));
+  wrap.append(table);
+  els.reportContent.append(wrap);
+
+  if (report.generatedAt) {
+    const generated = document.createElement('p');
+    generated.className = 'report-updated';
+    generated.textContent = `Сформировано: ${formatDateTime(report.generatedAt)}`;
+    els.reportContent.append(generated);
+  }
+}
+
+function buildRunnerReportRow(rowData) {
+  const row = document.createElement('tr');
+  appendCell(row, rowData.fullName || '', 'report-name-cell');
+
+  const pointsCell = document.createElement('td');
+  pointsCell.className = 'runner-points-cell';
+  const list = document.createElement('div');
+  list.className = 'runner-points-list';
+  for (const point of rowData.points || []) {
+    const item = document.createElement('div');
+    item.className = 'runner-point-item';
+    const name = document.createElement('span');
+    name.textContent = point.pointName || point.pointId || '';
+    const hours = document.createElement('strong');
+    hours.textContent = `${formatMoney(toNumber(point.hours))} ч`;
+    item.append(name, hours);
+    list.append(item);
+  }
+  pointsCell.append(list);
+  row.append(pointsCell);
+  appendCell(row, formatMoney(toNumber(rowData.hoursTotal)), 'numeric-cell report-payable-cell');
+  return row;
+}
+
+function buildRunnerReportFooter(totals) {
+  const tfoot = document.createElement('tfoot');
+  const row = document.createElement('tr');
+  appendCell(row, 'Итого', 'summary-total-label');
+  appendCell(row, '');
+  appendCell(row, formatMoney(toNumber(totals.hoursTotal)), 'numeric-cell report-payable-cell');
+  tfoot.append(row);
+  return tfoot;
 }
 
 function renderExpenseReport() {

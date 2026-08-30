@@ -887,6 +887,10 @@ tbody tr:last-child td {
   min-width: 920px;
 }
 
+.runner-report-table {
+  min-width: 780px;
+}
+
 .reports-table th,
 .reports-table td {
   padding: 8px;
@@ -927,6 +931,26 @@ tbody tr:last-child td {
   background: #ffe1e1;
   color: #8b1d1d;
   font-weight: 850;
+}
+
+.runner-points-cell {
+  min-width: 340px;
+}
+
+.runner-points-list {
+  display: grid;
+  gap: 6px;
+}
+
+.runner-point-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 520px;
+}
+
+.runner-point-item strong {
+  white-space: nowrap;
 }
 
 .status-cell {
