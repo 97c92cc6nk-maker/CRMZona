@@ -6356,6 +6356,7 @@ async function api(path, options = {}) {
   const init = {
     method: options.method || 'GET',
     credentials: 'same-origin',
+    cache: 'no-store',
     headers: {},
   };
 
@@ -6364,9 +6365,19 @@ async function api(path, options = {}) {
     init.body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(path, init);
+  let response;
+  try {
+    response = await fetch(path, init);
+  } catch {
+    throw new Error('Не удалось связаться с сервером CRM. Обновите страницу и повторите запрос; если ошибка останется, проверьте интернет и статус Vercel.');
+  }
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : {};
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = { error: text || response.statusText || 'Сервер вернул некорректный ответ.' };
+  }
 
   if (!response.ok) {
     const details = Array.isArray(payload.details) ? ` ${payload.details.join(' ')}` : '';

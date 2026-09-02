@@ -82,6 +82,8 @@ test('assistant status exposes readiness without leaking secrets', () => {
   assert.equal(status.openAiConfigured, true);
   assert.equal(status.tencentMemoryConfigured, true);
   assert.equal(status.model, 'gpt-test');
+  assert.equal(status.openAiBaseUrlHost, 'api.openai.com');
+  assert.equal(status.openAiTimeoutMs, 45000);
   assert.equal(status.memory.endpointHost, 'memory.example');
   assert.equal(JSON.stringify(status).includes('sk-openai-secret'), false);
   assert.equal(JSON.stringify(status).includes('sk-memory-secret'), false);
@@ -175,6 +177,57 @@ test('assistant message recalls memory, calls OpenAI, and captures clean convers
   assert.equal(captureBody.messages[0].content, 'Что важно сегодня?');
   assert.equal(captureBody.messages[0].content.includes('<relevant-memories>'), false);
   assert.equal(captureBody.session_id, 'sess-12345');
+});
+
+test('assistant message reports OpenAI network failures clearly', async () => {
+  const networkError = new TypeError('fetch failed');
+  networkError.cause = { code: 'ENOTFOUND', name: 'Error' };
+
+  await assert.rejects(
+    () => handleAssistantMessage({
+      user: { id: 'user-1', fullName: 'Тестовый Владелец', role: 'owner' },
+      appContext: { text: 'Контекст CRM.' },
+      message: 'Проверь помощника',
+      sessionId: 'sess-12345',
+      fetchImpl: async (url) => {
+        if (url.endsWith('/responses')) throw networkError;
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+      env: {
+        OPENAI_API_KEY: 'sk-openai-secret',
+        OPENAI_MODEL: 'gpt-test',
+      },
+    }),
+    (error) => error.status === 502 && /OPENAI_BASE_URL/.test(error.message),
+  );
+});
+
+test('assistant message translates OpenAI quota errors', async () => {
+  await assert.rejects(
+    () => handleAssistantMessage({
+      user: { id: 'user-1', fullName: 'Тестовый Владелец', role: 'owner' },
+      appContext: { text: 'Контекст CRM.' },
+      message: 'Проверь помощника',
+      sessionId: 'sess-12345',
+      fetchImpl: async (url) => {
+        if (url.endsWith('/responses')) {
+          return jsonResponse({
+            error: {
+              message: 'You exceeded your current quota.',
+              type: 'insufficient_quota',
+              code: 'insufficient_quota',
+            },
+          }, 429);
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+      env: {
+        OPENAI_API_KEY: 'sk-openai-secret',
+        OPENAI_MODEL: 'gpt-test',
+      },
+    }),
+    (error) => error.status === 429 && /OpenAI API Platform/.test(error.message),
+  );
 });
 
 test('assistant CRM context omits retail point credentials', async () => {

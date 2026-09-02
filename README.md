@@ -107,6 +107,8 @@ npm run migrate:supabase
 ```text
 OPENAI_API_KEY=sk-your-openai-api-key
 OPENAI_MODEL=gpt-5
+OPENAI_TIMEOUT_MS=45000
+# OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
 Для долгосрочной памяти добавьте TencentDB Agent Memory:
@@ -120,7 +122,7 @@ TENCENT_MEMORY_AGENT_ID=crmzona-assistant
 TENCENT_MEMORY_API_VERSION=v3
 ```
 
-Ключи храните только в `.env` или Environment Variables хостинга. Клиент не получает секреты: он видит только статусы готовности, имя модели, host endpoint и активность памяти.
+Ключи храните только в `.env` или Environment Variables хостинга. `OPENAI_BASE_URL` обычно не нужен; задавайте его только для прокси/совместимого шлюза, иначе используется официальный `https://api.openai.com/v1`. Клиент не получает секреты: он видит только статусы готовности, имя модели, host endpoint, таймаут OpenAI и активность памяти.
 
 ## Google Drive для чеков
 
