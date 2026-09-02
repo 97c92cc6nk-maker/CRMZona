@@ -758,7 +758,7 @@ h3 {
 
 .expense-form {
   display: grid;
-  grid-template-columns: minmax(170px, 0.9fr) minmax(140px, 0.65fr) minmax(130px, 0.65fr) minmax(150px, 0.7fr) minmax(210px, 1fr) auto;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(135px, 0.55fr) minmax(120px, 0.55fr) minmax(150px, 0.65fr) minmax(150px, 0.65fr) minmax(190px, 0.85fr) auto;
   gap: 12px;
   align-items: end;
   margin-top: 16px;

@@ -51,12 +51,14 @@ const state = {
   employeeSortMode: 'name',
   expenseFilters: {
     point: '',
+    type: '',
     payment: '',
     author: '',
   },
   repairStatuses: [],
   repairPriorities: [],
   expensePaymentMethods: [],
+  expenseTypes: [],
   schedule: null,
   canEditSchedule: false,
   canManageAllSchedule: false,
@@ -232,8 +234,10 @@ function bindElements() {
     expenseForm: document.getElementById('expenseForm'),
     expensePointSelect: document.getElementById('expensePointSelect'),
     expenseDateInput: document.getElementById('expenseDateInput'),
+    expenseTypeSelect: document.getElementById('expenseTypeSelect'),
     expensePaymentMethod: document.getElementById('expensePaymentMethod'),
     expensePointFilter: document.getElementById('expensePointFilter'),
+    expenseTypeFilter: document.getElementById('expenseTypeFilter'),
     expensePaymentFilter: document.getElementById('expensePaymentFilter'),
     expenseAuthorFilter: document.getElementById('expenseAuthorFilter'),
     refreshExpenses: document.getElementById('refreshExpenses'),
@@ -355,6 +359,7 @@ function bindEvents() {
   els.repairsBody.addEventListener('change', handleRepairStatusChange);
   els.expenseForm.addEventListener('submit', handleExpenseCreate);
   els.expensePointFilter.addEventListener('change', () => updateExpenseFilter('point', els.expensePointFilter.value));
+  els.expenseTypeFilter.addEventListener('change', () => updateExpenseFilter('type', els.expenseTypeFilter.value));
   els.expensePaymentFilter.addEventListener('change', () => updateExpenseFilter('payment', els.expensePaymentFilter.value));
   els.expenseAuthorFilter.addEventListener('change', () => updateExpenseFilter('author', els.expenseAuthorFilter.value));
   els.expensesBody.addEventListener('click', handleExpenseTableClick);
@@ -630,6 +635,7 @@ async function handleLogout() {
     state.expensePoints = [];
     state.schedule = null;
     state.expenses = [];
+    state.expenseTypes = [];
     state.claims = [];
     state.claimPoints = [];
     state.claimStatuses = [];
@@ -3730,6 +3736,7 @@ async function loadExpenses() {
     const data = await api('/api/expenses');
     state.expenses = data.expenses;
     state.expensePaymentMethods = data.paymentMethods || [];
+    state.expenseTypes = data.expenseTypes || [];
     state.expensePoints = data.points || state.expensePoints || [];
     state.permissions.canManageExpenses = data.canManage;
     renderExpenses();
@@ -3739,6 +3746,7 @@ async function loadExpenses() {
 function renderExpenses() {
   els.expensesBody.replaceChildren();
   fillExpensePaymentMethods();
+  fillExpenseTypes();
   const selectedExpensePoint = els.expensePointSelect.value;
   fillPointSelect(els.expensePointSelect, state.expensePoints);
   if (selectedExpensePoint && state.expensePoints.some((point) => point.id === selectedExpensePoint)) {
@@ -3756,7 +3764,7 @@ function renderExpenses() {
   if (!state.expenses.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = 9;
     cell.className = 'empty-state';
     cell.textContent = 'Хозрасходов пока нет.';
     row.append(cell);
@@ -3768,7 +3776,7 @@ function renderExpenses() {
   if (!expenses.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = 9;
     cell.className = 'empty-state';
     cell.textContent = 'Нет расходов по выбранному фильтру.';
     row.append(cell);
@@ -3798,8 +3806,31 @@ function fillExpensePaymentMethods() {
   }));
 }
 
+function fillExpenseTypes() {
+  const types = state.expenseTypes.length
+    ? state.expenseTypes
+    : [
+        { value: 'household', label: 'Хозрасходы' },
+        { value: 'internet', label: 'Интернет' },
+        { value: 'video', label: 'Видеонаблюдение' },
+        { value: 'repair', label: 'Ремонт' },
+        { value: 'other', label: 'Прочее' },
+      ];
+  const selected = els.expenseTypeSelect.value;
+  els.expenseTypeSelect.replaceChildren(...types.map((type) => {
+    const option = document.createElement('option');
+    option.value = type.value;
+    option.textContent = type.label;
+    return option;
+  }));
+  if (selected && types.some((type) => type.value === selected)) {
+    els.expenseTypeSelect.value = selected;
+  }
+}
+
 function fillExpenseTableFilters() {
   fillExpenseColumnFilter(els.expensePointFilter, 'point', 'Все точки');
+  fillExpenseColumnFilter(els.expenseTypeFilter, 'type', 'Все типы');
   fillExpenseColumnFilter(els.expensePaymentFilter, 'payment', 'Все оплаты');
   fillExpenseColumnFilter(els.expenseAuthorFilter, 'author', 'Все авторы');
 }
@@ -3834,6 +3865,7 @@ function buildExpenseRow(expense) {
   row.dataset.expenseId = expense.id;
   appendCell(row, expense.expenseDate ? formatDate(expense.expenseDate) : formatDateTime(expense.createdAt));
   appendCell(row, expense.pointName);
+  appendCell(row, expense.expenseTypeLabel || 'Не указано');
   appendCell(row, formatMoney(expense.amount), 'numeric-cell');
   appendCell(row, expense.paymentMethodLabel);
   appendCell(row, expense.createdByName || '');
@@ -3886,7 +3918,7 @@ function buildExpenseTotalRow(expenses) {
   row.className = 'expense-total-row';
 
   const labelCell = document.createElement('td');
-  labelCell.colSpan = 2;
+  labelCell.colSpan = 3;
   labelCell.className = 'expense-total-label';
   labelCell.textContent = 'Итого по списку';
 
@@ -3904,6 +3936,7 @@ function buildExpenseTotalRow(expenses) {
 function filterExpenses(expenses) {
   return expenses.filter((expense) => (
     expenseMatchesFilter(expense, 'point')
+    && expenseMatchesFilter(expense, 'type')
     && expenseMatchesFilter(expense, 'payment')
     && expenseMatchesFilter(expense, 'author')
   ));
@@ -3934,6 +3967,7 @@ function expenseFilterOptions(filterName) {
 function expenseFilterValue(expense, filterName) {
   if (filterName === 'author') return expense.createdByName || 'Не указано';
   if (filterName === 'payment') return expense.paymentMethodLabel || 'Не указано';
+  if (filterName === 'type') return expense.expenseTypeLabel || 'Не указано';
   if (filterName === 'point') return expense.pointName || 'Не указано';
   return '';
 }

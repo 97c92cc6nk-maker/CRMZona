@@ -2311,6 +2311,7 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
     const expense = await store.createExpense(admin, {
       pointId: 'moscow_6231',
       expenseDate: '2026-07-09',
+      expenseType: 'household',
       amount: '123,45',
       paymentMethod: 'cash',
       receipt,
@@ -2322,12 +2323,15 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
     const otherPointExpense = await store.createExpense(admin, {
       pointId: 'krasnogorsk_466',
       expenseDate: '2026-07-10',
+      expenseType: 'repair',
       amount: '321',
       paymentMethod: 'card',
       receipt: otherPointReceipt,
     });
 
     assert.equal(expense.expenseDate, '2026-07-09');
+    assert.equal(expense.expenseType, 'household');
+    assert.equal(expense.expenseTypeLabel, 'Хозрасходы');
     assert.equal(expense.amount, '123.45');
     assert.equal(expense.paymentMethodLabel, 'наличные');
     assert.equal(expense.googleDrive.status, 'unavailable');
@@ -2335,6 +2339,7 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
     assert.match(expense.receiptUrl, /^\/api\/receipts\//);
     assert.match(expense.receipt.fileName, /^2026-07-09-Иван_Администратор-МОСКВА_6231-[a-f0-9]+\.pdf$/);
     assert.equal(otherPointExpense.pointId, 'krasnogorsk_466');
+    assert.equal(otherPointExpense.expenseTypeLabel, 'Ремонт');
     assert.equal(otherPointExpense.amount, '321');
 
     const file = await store.readReceiptFile(expense.receipt);
@@ -2352,16 +2357,28 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
       () => store.createExpense(admin, {
         pointId: 'moscow_6231',
         expenseDate: '2026-07-09',
+        expenseType: 'household',
         amount: '100',
         paymentMethod: 'cash',
       }),
       (error) => error instanceof ApiError && error.status === 400 && /чек/i.test(error.message),
+    );
+    await assert.rejects(
+      () => store.createExpense(admin, {
+        pointId: 'moscow_6231',
+        expenseDate: '2026-07-09',
+        amount: '100',
+        paymentMethod: 'cash',
+        receipt,
+      }),
+      (error) => error instanceof ApiError && error.status === 400 && /тип расхода/i.test(error.message),
     );
 
     await assert.rejects(
       () => store.createExpense(employee, {
         pointId: 'moscow_6231',
         expenseDate: '2026-07-09',
+        expenseType: 'household',
         amount: '100',
         paymentMethod: 'cash',
         receipt,
@@ -2535,6 +2552,7 @@ test('housekeeping receipt upload is shared by link in Google Drive', async () =
     const expense = await store.createExpense(admin, {
       pointId: 'moscow_6231',
       expenseDate: '2026-07-11',
+      expenseType: 'other',
       amount: '900',
       paymentMethod: 'card',
       receipt: {
