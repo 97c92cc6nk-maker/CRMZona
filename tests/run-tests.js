@@ -84,6 +84,9 @@ test('assistant status exposes readiness without leaking secrets', () => {
   assert.equal(status.model, 'gpt-test');
   assert.equal(status.openAiBaseUrlHost, 'api.openai.com');
   assert.equal(status.openAiTimeoutMs, 45000);
+  assert.equal(status.openAiMaxOutputTokens, 2500);
+  assert.equal(status.openAiReasoningEffort, null);
+  assert.equal(status.openAiTextVerbosity, null);
   assert.equal(status.memory.endpointHost, 'memory.example');
   assert.equal(JSON.stringify(status).includes('sk-openai-secret'), false);
   assert.equal(JSON.stringify(status).includes('sk-memory-secret'), false);
@@ -142,6 +145,8 @@ test('assistant message recalls memory, calls OpenAI, and captures clean convers
     if (url.endsWith('/responses')) {
       const body = JSON.parse(options.body);
       assert.equal(body.model, 'gpt-test');
+      assert.equal(body.reasoning, undefined);
+      assert.deepEqual(body.text, { format: { type: 'text' } });
       assert.equal(body.input.includes('<relevant-memories>'), true);
       assert.equal(body.instructions.includes('<user-profile>'), true);
       assert.equal(body.input.includes('Контекст CRM'), true);
@@ -177,6 +182,51 @@ test('assistant message recalls memory, calls OpenAI, and captures clean convers
   assert.equal(captureBody.messages[0].content, 'Что важно сегодня?');
   assert.equal(captureBody.messages[0].content.includes('<relevant-memories>'), false);
   assert.equal(captureBody.session_id, 'sess-12345');
+});
+
+test('assistant message retries when OpenAI spends output budget before text', async () => {
+  const openAiBodies = [];
+  const fetchImpl = async (url, options) => {
+    if (!url.endsWith('/responses')) {
+      throw new Error(`Unexpected URL: ${url}`);
+    }
+    const body = JSON.parse(options.body);
+    openAiBodies.push(body);
+    if (openAiBodies.length === 1) {
+      return jsonResponse({
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [{ type: 'reasoning', content: [] }],
+        usage: {
+          output_tokens: body.max_output_tokens,
+          output_tokens_details: { reasoning_tokens: body.max_output_tokens },
+        },
+      });
+    }
+    return jsonResponse({
+      output: [{ type: 'message', content: [{ type: 'output_text', text: 'Готово, помощник отвечает.' }] }],
+    });
+  };
+
+  const result = await handleAssistantMessage({
+    user: { id: 'user-1', fullName: 'Тестовый Владелец', role: 'owner' },
+    appContext: { text: 'Контекст CRM.' },
+    message: 'Проверь помощника',
+    sessionId: 'sess-12345',
+    fetchImpl,
+    env: {
+      OPENAI_API_KEY: 'sk-openai-secret',
+      OPENAI_MODEL: 'gpt-5',
+    },
+  });
+
+  assert.equal(result.answer, 'Готово, помощник отвечает.');
+  assert.equal(openAiBodies.length, 2);
+  assert.equal(openAiBodies[0].max_output_tokens, 2500);
+  assert.deepEqual(openAiBodies[0].reasoning, { effort: 'low' });
+  assert.deepEqual(openAiBodies[0].text, { format: { type: 'text' }, verbosity: 'low' });
+  assert.equal(openAiBodies[1].max_output_tokens, 5000);
+  assert.deepEqual(openAiBodies[1].reasoning, { effort: 'minimal' });
 });
 
 test('assistant message reports OpenAI network failures clearly', async () => {

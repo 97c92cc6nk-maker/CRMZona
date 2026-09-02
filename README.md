@@ -108,6 +108,9 @@ npm run migrate:supabase
 OPENAI_API_KEY=sk-your-openai-api-key
 OPENAI_MODEL=gpt-5
 OPENAI_TIMEOUT_MS=45000
+OPENAI_MAX_OUTPUT_TOKENS=2500
+OPENAI_REASONING_EFFORT=low
+OPENAI_TEXT_VERBOSITY=low
 # OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
