@@ -88,8 +88,25 @@ test('assistant status exposes readiness without leaking secrets', () => {
   assert.equal(status.openAiReasoningEffort, null);
   assert.equal(status.openAiTextVerbosity, null);
   assert.equal(status.memory.endpointHost, 'memory.example');
+  assert.equal(status.memory.hasApiKey, true);
+  assert.equal(status.memory.hasServiceId, true);
+  assert.deepEqual(status.memory.missing, []);
   assert.equal(JSON.stringify(status).includes('sk-openai-secret'), false);
   assert.equal(JSON.stringify(status).includes('sk-memory-secret'), false);
+});
+
+test('assistant status explains missing TencentDB memory credentials', () => {
+  const status = assistantStatus({ OPENAI_API_KEY: 'sk-openai-secret' });
+
+  assert.equal(status.tencentMemoryConfigured, false);
+  assert.equal(status.memory.endpointHost, 'memory.tdai.tencentyun.com');
+  assert.equal(status.memory.hasApiKey, false);
+  assert.equal(status.memory.hasServiceId, false);
+  assert.deepEqual(status.memory.missing, [
+    'TENCENT_MEMORY_API_KEY',
+    'TENCENT_MEMORY_SERVICE_ID',
+  ]);
+  assert.equal(JSON.stringify(status).includes('sk-openai-secret'), false);
 });
 
 test('TencentDB memory client uses v3 routes and isolation fields', async () => {

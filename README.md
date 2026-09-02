@@ -117,15 +117,15 @@ OPENAI_TEXT_VERBOSITY=low
 Для долгосрочной памяти добавьте TencentDB Agent Memory:
 
 ```text
-TENCENT_MEMORY_ENDPOINT=https://memory.tdai.tencentyun.com
 TENCENT_MEMORY_API_KEY=sk-your-tencent-memory-api-key
 TENCENT_MEMORY_SERVICE_ID=tdai-mem-your-instance-id
 TENCENT_MEMORY_TEAM_ID=crmzona
 TENCENT_MEMORY_AGENT_ID=crmzona-assistant
+# TENCENT_MEMORY_ENDPOINT=https://memory.tdai.tencentyun.com
 TENCENT_MEMORY_API_VERSION=v3
 ```
 
-Ключи храните только в `.env` или Environment Variables хостинга. `OPENAI_BASE_URL` обычно не нужен; задавайте его только для прокси/совместимого шлюза, иначе используется официальный `https://api.openai.com/v1`. Клиент не получает секреты: он видит только статусы готовности, имя модели, host endpoint, таймаут OpenAI и активность памяти.
+Для Vercel обязательны `TENCENT_MEMORY_API_KEY` и `TENCENT_MEMORY_SERVICE_ID`; endpoint по умолчанию берется как `https://memory.tdai.tencentyun.com`. Ключи храните только в `.env` или Environment Variables хостинга. `OPENAI_BASE_URL` обычно не нужен; задавайте его только для прокси/совместимого шлюза, иначе используется официальный `https://api.openai.com/v1`. Клиент не получает секреты: он видит только статусы готовности, имя модели, host endpoint, таймаут OpenAI и активность памяти.
 
 ## Google Drive для чеков
 

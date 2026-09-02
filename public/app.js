@@ -814,10 +814,15 @@ function addAssistantMessage(role, text) {
 }
 
 function memoryStatusText(status) {
-  if (!status.tencentMemoryConfigured) return 'Память работает в локальном режиме этой вкладки';
+  const memory = status.memory || {};
+  if (!status.tencentMemoryConfigured) {
+    const missing = Array.isArray(memory.missing) ? memory.missing : [];
+    if (missing.length) return `TencentDB Memory не подключена: нет ${missing.join(', ')}`;
+    return 'Память работает в локальном режиме этой вкладки';
+  }
   const parts = ['TencentDB Memory подключена'];
-  if (status.memory?.endpointHost) parts.push(status.memory.endpointHost);
-  if (status.memory?.apiVersion) parts.push(status.memory.apiVersion);
+  if (memory.endpointHost) parts.push(memory.endpointHost);
+  if (memory.apiVersion) parts.push(memory.apiVersion);
   return parts.join(' · ');
 }
 
