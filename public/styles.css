@@ -1095,20 +1095,23 @@ tbody tr:last-child td {
   margin-top: 16px;
 }
 
-.expense-header-filter {
+.expense-header-filter,
+.claim-header-filter {
   display: grid;
   gap: 5px;
   min-width: 130px;
 }
 
-.expense-header-filter span {
+.expense-header-filter span,
+.claim-header-filter span {
   color: inherit;
   font: inherit;
   letter-spacing: inherit;
   text-transform: inherit;
 }
 
-.expense-header-filter select {
+.expense-header-filter select,
+.claim-header-filter select {
   min-height: 30px;
   padding: 4px 8px;
   border-radius: 6px;

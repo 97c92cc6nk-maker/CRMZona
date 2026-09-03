@@ -32,6 +32,11 @@ const state = {
   claimPoints: [],
   claimStatuses: [],
   claimCompanyOptions: [],
+  claimFilters: {
+    point: '',
+    employee: '',
+    company: '',
+  },
   reports: [],
   reportOptions: [],
   adminPayrollReport: null,
@@ -255,6 +260,9 @@ function bindElements() {
     claimCompanyField: document.getElementById('claimCompanyField'),
     claimCompanySelect: document.getElementById('claimCompanySelect'),
     claimCompanyHeader: document.getElementById('claimCompanyHeader'),
+    claimPointFilter: document.getElementById('claimPointFilter'),
+    claimCompanyFilter: document.getElementById('claimCompanyFilter'),
+    claimEmployeeFilter: document.getElementById('claimEmployeeFilter'),
     claimEmployeeSelect: document.getElementById('claimEmployeeSelect'),
     claimAttachmentFiles: document.getElementById('claimAttachmentFiles'),
     refreshClaims: document.getElementById('refreshClaims'),
@@ -371,6 +379,9 @@ function bindEvents() {
   els.refreshExpenses.addEventListener('click', loadExpenses);
   els.claimForm.addEventListener('submit', handleClaimCreate);
   els.claimStatusSelect.addEventListener('change', syncClaimResolutionDateField);
+  els.claimPointFilter?.addEventListener('change', () => updateClaimFilter('point', els.claimPointFilter.value));
+  els.claimCompanyFilter?.addEventListener('change', () => updateClaimFilter('company', els.claimCompanyFilter.value));
+  els.claimEmployeeFilter?.addEventListener('change', () => updateClaimFilter('employee', els.claimEmployeeFilter.value));
   els.claimsBody.addEventListener('click', handleClaimTableClick);
   els.claimsBody.addEventListener('change', handleClaimTableChange);
   els.refreshClaims.addEventListener('click', loadClaims);
@@ -647,6 +658,7 @@ async function handleLogout() {
     state.claimPoints = [];
     state.claimStatuses = [];
     state.claimCompanyOptions = [];
+    state.claimFilters = { point: '', employee: '', company: '' };
     state.tasks = [];
     state.taskPriorities = [];
     state.taskAssigneeOptions = [];
@@ -4106,6 +4118,7 @@ function renderClaims() {
   fillClaimStatusSelect(els.claimStatusSelect, els.claimStatusSelect?.value || 'new');
   fillClaimCompanyOptions();
   fillClaimEmployeeOptions();
+  fillClaimTableFilters();
   els.claimCreatePanel?.classList.toggle('is-hidden', !canManage);
   els.claimCompanyField?.classList.toggle('is-hidden', !canViewCompany);
   els.claimCompanyHeader?.classList.toggle('is-hidden', !canViewCompany);
@@ -4141,7 +4154,19 @@ function renderClaims() {
     return;
   }
 
-  for (const claim of [...state.claims].sort(compareClaimsByDateDesc)) {
+  const claims = filterClaims(state.claims).sort(compareClaimsByDateDesc);
+  if (!claims.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = claimTableColumnCount();
+    cell.className = 'empty-state';
+    cell.textContent = 'Нет претензий по выбранному фильтру.';
+    row.append(cell);
+    els.claimsBody.append(row);
+    return;
+  }
+
+  for (const claim of claims) {
     els.claimsBody.append(buildClaimRow(claim));
   }
 }
@@ -4190,6 +4215,37 @@ function fillClaimCompanyOptions() {
     ...options.map((company) => selectOption(company.value, company.label)),
   );
   els.claimCompanySelect.value = options.some((company) => company.value === previous) ? previous : '';
+}
+
+function fillClaimTableFilters() {
+  fillClaimColumnFilter(els.claimPointFilter, 'point', 'Все точки');
+  fillClaimColumnFilter(els.claimEmployeeFilter, 'employee', 'Все сотрудники');
+  if (state.permissions.canViewClaimCompany) {
+    fillClaimColumnFilter(els.claimCompanyFilter, 'company', 'Все компании');
+  } else if (els.claimCompanyFilter) {
+    state.claimFilters.company = '';
+    els.claimCompanyFilter.replaceChildren(selectOption('', 'Все компании'));
+    els.claimCompanyFilter.value = '';
+  }
+}
+
+function fillClaimColumnFilter(select, filterName, allLabel) {
+  if (!select) return;
+  const options = claimFilterOptions(filterName);
+  const currentValue = state.claimFilters[filterName] || '';
+  select.replaceChildren(selectOption('', allLabel));
+  for (const option of options) {
+    select.append(selectOption(option.value, option.label));
+  }
+  if (currentValue && !options.some((option) => option.value === currentValue)) {
+    state.claimFilters[filterName] = '';
+  }
+  select.value = state.claimFilters[filterName] || '';
+}
+
+function updateClaimFilter(filterName, value) {
+  state.claimFilters[filterName] = value || '';
+  renderClaims();
 }
 
 function claimPointOptions() {
@@ -4258,6 +4314,58 @@ function claimCompanyOptions() {
 
 function claimTableColumnCount() {
   return state.permissions.canViewClaimCompany ? 11 : 10;
+}
+
+function filterClaims(claims) {
+  return claims.filter((claim) => (
+    claimMatchesFilter(claim, 'point')
+    && claimMatchesFilter(claim, 'employee')
+    && claimMatchesFilter(claim, 'company')
+  ));
+}
+
+function claimMatchesFilter(claim, filterName) {
+  const filterValue = state.claimFilters[filterName];
+  return !filterValue || claimFilterOption(claim, filterName).value === filterValue;
+}
+
+function claimFilterOptions(filterName) {
+  const grouped = new Map();
+  for (const claim of state.claims) {
+    const option = claimFilterOption(claim, filterName);
+    if (!grouped.has(option.value)) {
+      grouped.set(option.value, option);
+    }
+  }
+  return [...grouped.values()].sort((left, right) => left.label.localeCompare(right.label, 'ru'));
+}
+
+function claimFilterOption(claim, filterName) {
+  if (filterName === 'point') {
+    const value = claim.pointId || claim.pointName || 'Не указано';
+    return {
+      value,
+      label: claim.pointName || pointLabel(claim.pointId) || value,
+    };
+  }
+  if (filterName === 'employee') {
+    const value = claim.guiltyEmployeeId || claim.guiltyEmployeeName || 'Не указано';
+    return {
+      value,
+      label: claim.guiltyEmployeeName || claimEmployeeLabel(value) || value,
+    };
+  }
+  if (filterName === 'company') {
+    const value = claim.company || 'Не указано';
+    return { value, label: value };
+  }
+  return { value: '', label: '' };
+}
+
+function claimEmployeeLabel(employeeId) {
+  const employee = state.claimEmployees.find((item) => item.id === employeeId)
+    || state.users.find((item) => item.id === employeeId);
+  return employee?.fullName || '';
 }
 
 function buildClaimRow(claim) {
