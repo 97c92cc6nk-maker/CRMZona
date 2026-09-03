@@ -598,10 +598,33 @@ test('admin payroll report calculates monthly payout fields', () => {
   }, '2026-07', [
     {
       id: 'claim-admin-1',
-      date: '2026-07-15',
+      date: '2026-06-15',
+      resolutionDate: '2026-07-15',
       amount: '250',
       pointId: 'moscow_6231',
       claimNumber: 'A-1',
+      company: 'Marketplace',
+      status: 'withheld',
+      guiltyEmployeeId: 'admin-1',
+    },
+    {
+      id: 'claim-admin-annulled',
+      date: '2026-07-15',
+      resolutionDate: '2026-07-17',
+      amount: '999',
+      pointId: 'moscow_6231',
+      claimNumber: 'A-1-A',
+      company: 'Marketplace',
+      status: 'annulled',
+      guiltyEmployeeId: 'admin-1',
+    },
+    {
+      id: 'claim-admin-next-month',
+      date: '2026-07-20',
+      resolutionDate: '2026-08-01',
+      amount: '777',
+      pointId: 'moscow_6231',
+      claimNumber: 'A-1-B',
       company: 'Marketplace',
       status: 'withheld',
       guiltyEmployeeId: 'admin-1',
@@ -671,10 +694,12 @@ test('employee payroll report calculates monthly schedule totals', () => {
   const claims = [
     {
       id: 'claim-1',
-      date: '2026-07-20',
+      date: '2026-06-20',
+      resolutionDate: '2026-07-20',
       amount: '30',
       pointId: 'moscow_6231',
       guiltyEmployeeId: 'employee-1',
+      status: 'withheld',
     },
   ];
 
@@ -1960,6 +1985,14 @@ test('claims are visible by point access and withheld amounts are applied to the
     allowedSections: ['schedule', 'claims'],
     allowedPoints: ['moscow_6231', 'krasnogorsk_466'],
   });
+  store.saveCompanies([
+    {
+      id: 'company_claims_marketplace',
+      name: 'ООО Маркетплейс',
+      shortName: 'Маркетплейс',
+      pointIds: ['moscow_6231', 'krasnogorsk_466'],
+    },
+  ]);
 
   store.saveSchedule(owner, 'moscow_6231', '2026-06', [{
     employeeId: employee.id,
@@ -1983,12 +2016,13 @@ test('claims are visible by point access and withheld amounts are applied to the
   assert.equal(beforeClaim.claims, '');
 
   const firstClaim = await store.createClaim(owner, {
-    date: '2026-06-10',
+    date: '2026-05-10',
     amount: '1200',
     pointId: 'krasnogorsk_466',
     claimNumber: 'CL-001',
     company: 'Маркетплейс',
     status: 'withheld',
+    resolutionDate: '2026-06-10',
     guiltyEmployeeId: employee.id,
     comment: 'Недостача',
   });
@@ -1999,6 +2033,7 @@ test('claims are visible by point access and withheld amounts are applied to the
     claimNumber: 'CL-002',
     company: 'Маркетплейс',
     status: 'withheld',
+    resolutionDate: '2026-06-20',
     guiltyEmployeeId: employee.id,
     comment: 'Повторная претензия',
   });
@@ -2012,10 +2047,58 @@ test('claims are visible by point access and withheld amounts are applied to the
     guiltyEmployeeId: employee.id,
     comment: 'Еще рассматривается',
   });
+  await store.createClaim(owner, {
+    date: '2026-06-22',
+    amount: '700',
+    pointId: 'moscow_6231',
+    claimNumber: 'CL-004',
+    company: 'Маркетплейс',
+    status: 'withheld',
+    resolutionDate: '2026-07-01',
+    guiltyEmployeeId: employee.id,
+    comment: 'Удержание в следующем месяце',
+  });
+  await store.createClaim(owner, {
+    date: '2026-06-23',
+    amount: '888',
+    pointId: 'moscow_6231',
+    claimNumber: 'CL-005',
+    company: 'Маркетплейс',
+    status: 'annulled',
+    resolutionDate: '2026-06-23',
+    guiltyEmployeeId: employee.id,
+    comment: 'Аннулирована',
+  });
+  await assert.rejects(
+    () => store.createClaim(owner, {
+      date: '2026-06-24',
+      amount: '100',
+      pointId: 'moscow_6231',
+      claimNumber: 'CL-006',
+      company: 'Маркетплейс',
+      status: 'withheld',
+      guiltyEmployeeId: employee.id,
+    }),
+    (error) => error instanceof ApiError && error.status === 400 && /дату удержания/i.test(error.message),
+  );
+  await assert.rejects(
+    () => store.createClaim(owner, {
+      date: '2026-06-25',
+      amount: '100',
+      pointId: 'moscow_6231',
+      claimNumber: 'CL-007',
+      company: 'Неизвестная',
+      status: 'new',
+      guiltyEmployeeId: employee.id,
+    }),
+    (error) => error instanceof ApiError && error.status === 400 && /справочника/i.test(error.message),
+  );
 
-  assert.equal(store.listClaims(owner).length, 3);
+  assert.equal(firstClaim.resolutionDate, '2026-06-10');
+  assert.equal(firstClaim.company, 'Маркетплейс');
+  assert.equal(store.listClaims(owner).length, 5);
   const employeeClaims = store.listClaims(employee);
-  assert.equal(employeeClaims.length, 3);
+  assert.equal(employeeClaims.length, 5);
   assert.equal(employeeClaims.every((claim) => claim.company === ''), true);
 
   const moscow = store.getSchedule('moscow_6231', '2026-06', owner)

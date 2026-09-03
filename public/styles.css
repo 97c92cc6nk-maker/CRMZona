@@ -775,7 +775,7 @@ h3 {
 
 .claim-form {
   display: grid;
-  grid-template-columns: minmax(130px, 0.6fr) minmax(120px, 0.55fr) minmax(160px, 0.8fr) minmax(145px, 0.7fr) minmax(145px, 0.7fr) minmax(150px, 0.75fr) minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(120px, 0.55fr) minmax(110px, 0.5fr) minmax(150px, 0.7fr) minmax(130px, 0.6fr) minmax(130px, 0.6fr) minmax(145px, 0.65fr) minmax(150px, 0.7fr) minmax(210px, 1fr) auto;
   gap: 12px;
   align-items: end;
   margin-top: 16px;
@@ -912,7 +912,7 @@ tbody tr:last-child td {
 }
 
 .claims-table {
-  min-width: 1360px;
+  min-width: 1520px;
 }
 
 .claims-table td {

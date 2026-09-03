@@ -31,6 +31,7 @@ const state = {
   claims: [],
   claimPoints: [],
   claimStatuses: [],
+  claimCompanyOptions: [],
   reports: [],
   reportOptions: [],
   adminPayrollReport: null,
@@ -248,7 +249,11 @@ function bindElements() {
     claimDateInput: document.getElementById('claimDateInput'),
     claimPointSelect: document.getElementById('claimPointSelect'),
     claimStatusSelect: document.getElementById('claimStatusSelect'),
+    claimResolutionDateField: document.getElementById('claimResolutionDateField'),
+    claimResolutionDateLabel: document.getElementById('claimResolutionDateLabel'),
+    claimResolutionDateInput: document.getElementById('claimResolutionDateInput'),
     claimCompanyField: document.getElementById('claimCompanyField'),
+    claimCompanySelect: document.getElementById('claimCompanySelect'),
     claimCompanyHeader: document.getElementById('claimCompanyHeader'),
     claimEmployeeSelect: document.getElementById('claimEmployeeSelect'),
     claimAttachmentFiles: document.getElementById('claimAttachmentFiles'),
@@ -365,7 +370,9 @@ function bindEvents() {
   els.expensesBody.addEventListener('click', handleExpenseTableClick);
   els.refreshExpenses.addEventListener('click', loadExpenses);
   els.claimForm.addEventListener('submit', handleClaimCreate);
+  els.claimStatusSelect.addEventListener('change', syncClaimResolutionDateField);
   els.claimsBody.addEventListener('click', handleClaimTableClick);
+  els.claimsBody.addEventListener('change', handleClaimTableChange);
   els.refreshClaims.addEventListener('click', loadClaims);
   els.loadSchedule.addEventListener('click', loadSchedule);
   els.pointSelect.addEventListener('change', loadSchedule);
@@ -639,6 +646,7 @@ async function handleLogout() {
     state.claims = [];
     state.claimPoints = [];
     state.claimStatuses = [];
+    state.claimCompanyOptions = [];
     state.tasks = [];
     state.taskPriorities = [];
     state.taskAssigneeOptions = [];
@@ -1381,6 +1389,7 @@ async function loadCompanies() {
     const data = await api('/api/companies');
     state.companies = data.companies || [];
     state.retailPointCompanyOptions = companyOptionsFromCompanies(state.companies);
+    state.claimCompanyOptions = companyOptionsFromCompanies(state.companies);
     fillRetailPointCompanySelect(els.retailPointLegalEntity, els.retailPointLegalEntity?.value || '');
     const point = selectedRetailPoint();
     if (point) {
@@ -1768,6 +1777,7 @@ function replaceCompanyInState(company) {
     state.companies.splice(index, 1, company);
   }
   state.retailPointCompanyOptions = companyOptionsFromCompanies(state.companies);
+  state.claimCompanyOptions = companyOptionsFromCompanies(state.companies);
   fillRetailPointCompanySelect(els.retailPointLegalEntity, els.retailPointLegalEntity?.value || '');
   const point = selectedRetailPoint();
   if (point) {
@@ -4070,6 +4080,7 @@ async function loadClaims() {
     state.claims = data.claims || [];
     state.claimPoints = data.points || [];
     state.claimStatuses = data.statuses || [];
+    state.claimCompanyOptions = data.companyOptions || [];
     state.claimEmployees = data.employeeOptions || [];
     state.permissions.canManageClaims = Boolean(data.canManage);
     state.permissions.canViewClaimCompany = Boolean(data.canViewCompany);
@@ -4080,25 +4091,33 @@ async function loadClaims() {
 function renderClaims() {
   if (!els.claimsBody) return;
   els.claimsBody.replaceChildren();
-  const canManage = Boolean(state.permissions.canManageClaims && claimPointOptions().length && state.claimEmployees.length);
+  const canManage = Boolean(state.permissions.canManageClaims);
   const canViewCompany = Boolean(state.permissions.canViewClaimCompany);
+  const canCreate = Boolean(
+    canManage
+      && claimPointOptions().length
+      && state.claimEmployees.length
+      && (!canViewCompany || claimCompanyOptions().length),
+  );
   if (!els.claimDateInput.value) {
     els.claimDateInput.value = currentDate();
   }
   fillClaimPointOptions();
   fillClaimStatusSelect(els.claimStatusSelect, els.claimStatusSelect?.value || 'new');
+  fillClaimCompanyOptions();
   fillClaimEmployeeOptions();
   els.claimCreatePanel?.classList.toggle('is-hidden', !canManage);
   els.claimCompanyField?.classList.toggle('is-hidden', !canViewCompany);
   els.claimCompanyHeader?.classList.toggle('is-hidden', !canViewCompany);
   if (els.claimForm) {
     Array.from(els.claimForm.elements).forEach((field) => {
-      field.disabled = !canManage;
+      field.disabled = !canCreate;
     });
     if (els.claimForm.elements.company) {
       els.claimForm.elements.company.required = canViewCompany;
     }
   }
+  syncClaimResolutionDateField();
 
   if (!state.permissions.canViewClaims) {
     const row = document.createElement('tr');
@@ -4160,6 +4179,19 @@ function fillClaimStatusSelect(select, value = 'new') {
   select.value = statuses.some((status) => status.value === value) ? value : 'new';
 }
 
+function fillClaimCompanyOptions() {
+  if (!els.claimCompanySelect) return;
+  const previous = els.claimCompanySelect.value;
+  const options = claimCompanyOptions();
+  const placeholder = selectOption('', options.length ? 'Выберите компанию' : 'Нет компаний');
+  placeholder.disabled = true;
+  els.claimCompanySelect.replaceChildren(
+    placeholder,
+    ...options.map((company) => selectOption(company.value, company.label)),
+  );
+  els.claimCompanySelect.value = options.some((company) => company.value === previous) ? previous : '';
+}
+
 function claimPointOptions() {
   return state.claimPoints.length ? state.claimPoints : state.points;
 }
@@ -4171,11 +4203,61 @@ function claimStatusOptions() {
         { value: 'new', label: 'Новая' },
         { value: 'review', label: 'На рассмотрении' },
         { value: 'withheld', label: 'Удержана' },
+        { value: 'annulled', label: 'Аннулирована' },
       ];
 }
 
+function claimRequiresResolutionDate(status) {
+  return status === 'withheld' || status === 'annulled';
+}
+
+function claimResolutionDateLabel(status) {
+  if (status === 'annulled') return 'Дата аннуляции';
+  if (status === 'withheld') return 'Дата удержания';
+  return 'Дата удержания/аннуляции';
+}
+
+function syncClaimResolutionDateField() {
+  if (!els.claimResolutionDateField || !els.claimResolutionDateInput || !els.claimStatusSelect) return;
+  const status = els.claimStatusSelect.value || 'new';
+  const required = claimRequiresResolutionDate(status);
+  els.claimResolutionDateField.classList.toggle('is-hidden', !required);
+  if (els.claimResolutionDateLabel) {
+    els.claimResolutionDateLabel.textContent = claimResolutionDateLabel(status);
+  }
+  els.claimResolutionDateInput.required = required;
+  els.claimResolutionDateInput.disabled = els.claimStatusSelect.disabled || !required;
+  if (!required) {
+    els.claimResolutionDateInput.value = '';
+  }
+}
+
+function syncClaimRowResolutionDateControl(root, forcedStatus = '') {
+  const container = root?.closest?.('tr') || root;
+  if (!container) return;
+  const status = forcedStatus
+    || container.querySelector('[data-claim-field="status"]')?.value
+    || 'new';
+  const input = container.querySelector('[data-claim-resolution-date="true"]');
+  if (!input) return;
+  const required = claimRequiresResolutionDate(status);
+  input.required = required;
+  input.disabled = !required;
+  input.title = claimResolutionDateLabel(status);
+  input.closest('td')?.classList.toggle('muted-cell', !required);
+  if (!required) {
+    input.value = '';
+  }
+}
+
+function claimCompanyOptions() {
+  return state.claimCompanyOptions.length
+    ? state.claimCompanyOptions
+    : companyOptionsFromCompanies(state.companies);
+}
+
 function claimTableColumnCount() {
-  return state.permissions.canViewClaimCompany ? 10 : 9;
+  return state.permissions.canViewClaimCompany ? 11 : 10;
 }
 
 function buildClaimRow(claim) {
@@ -4194,8 +4276,12 @@ function buildClaimRow(claim) {
     row.append(claimSelectCell('pointId', claimPointOptions(), claim.pointId, 'id', 'name'));
     row.append(claimInputCell('claimNumber', claim.claimNumber || '', 'text', { maxlength: '120' }));
     row.append(claimSelectCell('status', claimStatusOptions(), claim.status || 'new', 'value', 'label'));
+    row.append(claimResolutionDateCell(claim.status || 'new', claim.resolutionDate || ''));
     if (canViewCompany) {
-      row.append(claimInputCell('company', claim.company || '', 'text', { maxlength: '160' }));
+      row.append(claimSelectCell('company', claimCompanyOptions(), claim.company || '', 'value', 'label', {
+        placeholder: 'Выберите компанию',
+        required: true,
+      }));
     }
     row.append(claimSelectCell('guiltyEmployeeId', state.claimEmployees, claim.guiltyEmployeeId, 'id', 'fullName'));
     row.append(claimTextareaCell('comment', claim.comment || ''));
@@ -4205,6 +4291,7 @@ function buildClaimRow(claim) {
     appendCell(row, claim.pointName || '');
     appendCell(row, claim.claimNumber || '');
     appendCell(row, claim.statusLabel || claim.status || '');
+    appendCell(row, claim.resolutionDate ? formatDate(claim.resolutionDate) : '');
     if (canViewCompany) appendCell(row, claim.company || '');
     appendCell(row, claim.guiltyEmployeeName || '');
     appendCell(row, claim.comment || '');
@@ -4261,12 +4348,20 @@ function claimTextareaCell(name, value) {
   return cell;
 }
 
-function claimSelectCell(name, options, value, valueKey, labelKey) {
+function claimSelectCell(name, options, value, valueKey, labelKey, attrs = {}) {
   const cell = document.createElement('td');
   const select = document.createElement('select');
   select.className = 'claim-table-select';
   select.name = name;
   select.dataset.claimField = name;
+  if (attrs.required) select.required = true;
+  if (attrs.placeholder) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = attrs.placeholder;
+    option.disabled = true;
+    select.append(option);
+  }
   for (const item of options || []) {
     const option = document.createElement('option');
     option.value = item[valueKey];
@@ -4277,6 +4372,20 @@ function claimSelectCell(name, options, value, valueKey, labelKey) {
   }
   select.value = value || '';
   cell.append(select);
+  return cell;
+}
+
+function claimResolutionDateCell(status, value) {
+  const cell = document.createElement('td');
+  const input = document.createElement('input');
+  input.className = 'claim-table-input';
+  input.name = 'resolutionDate';
+  input.dataset.claimField = 'resolutionDate';
+  input.dataset.claimResolutionDate = 'true';
+  input.type = 'date';
+  input.value = value || '';
+  cell.append(input);
+  syncClaimRowResolutionDateControl(input.closest('tr') || cell, status);
   return cell;
 }
 
@@ -4324,6 +4433,12 @@ function claimSortTime(claim) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function handleClaimTableChange(event) {
+  if (event.target?.dataset?.claimField === 'status') {
+    syncClaimRowResolutionDateControl(event.target);
+  }
+}
+
 async function handleClaimCreate(event) {
   event.preventDefault();
   if (!state.permissions.canManageClaims || !claimPointOptions().length || !state.claimEmployees.length) {
@@ -4352,7 +4467,7 @@ async function handleClaimCreate(event) {
       els.claimPointSelect.value = points[0].id;
     }
     renderClaims();
-    await refreshViewsAfterClaimChange(data.claim.date);
+    await refreshViewsAfterClaimChange(...claimRefreshDates(data.claim));
     await loadAudit();
     const storageWarning = storageWarningText(data.storage);
     const driveWarning = repairAttachmentsDriveWarning(data.claim.attachments || []);
@@ -4388,7 +4503,7 @@ async function handleClaimTableClick(event) {
     });
     state.claims = state.claims.filter((item) => item.id !== data.claim.id);
     renderClaims();
-    await refreshViewsAfterClaimChange(data.claim.date);
+    await refreshViewsAfterClaimChange(...claimRefreshDates(data.claim));
     await loadAudit();
     const storageWarning = storageWarningText(data.storage);
     const driveWarning = claimDeleteDriveWarning(data.claim.googleDriveCleanup);
@@ -4413,7 +4528,7 @@ async function handleClaimSave(button) {
     });
     state.claims = state.claims.map((item) => (item.id === data.claim.id ? data.claim : item));
     renderClaims();
-    await refreshViewsAfterClaimChange(current.date, data.claim.date);
+    await refreshViewsAfterClaimChange(...claimRefreshDates(current), ...claimRefreshDates(data.claim));
     await loadAudit();
     const storageWarning = storageWarningText(data.storage);
     showNotice(
@@ -4433,6 +4548,10 @@ function claimPayloadFromRow(row) {
     payload.company = '';
   }
   return payload;
+}
+
+function claimRefreshDates(claim) {
+  return [claim?.date, claim?.resolutionDate].filter(Boolean);
 }
 
 async function refreshScheduleForClaimMonth(date) {

@@ -1020,9 +1020,13 @@
               Статус
               <select name="status" id="claimStatusSelect" required></select>
             </label>
+            <label id="claimResolutionDateField" class="is-hidden">
+              <span id="claimResolutionDateLabel">Дата удержания/аннуляции</span>
+              <input name="resolutionDate" id="claimResolutionDateInput" type="date">
+            </label>
             <label id="claimCompanyField">
               Компания
-              <input name="company" type="text" maxlength="160" required>
+              <select name="company" id="claimCompanySelect" required></select>
             </label>
             <label>
               Виновный сотрудник
@@ -1051,6 +1055,7 @@
                   <th>Торговая точка</th>
                   <th>Номер претензии</th>
                   <th>Статус</th>
+                  <th>Дата удержания/аннуляции</th>
                   <th id="claimCompanyHeader">Компания</th>
                   <th>Виновный сотрудник</th>
                   <th>Комментарий</th>
