@@ -3099,7 +3099,7 @@ function renderExpenseReportDetails(expenses) {
   table.className = 'reports-table expense-report-details-table';
   const thead = document.createElement('thead');
   const header = document.createElement('tr');
-  ['Дата расхода', 'Сумма', 'Оплата', 'Автор', 'Чек', 'Google Drive'].forEach((titleText, index) => {
+  ['Дата расхода', 'Сумма', 'Оплата', 'Автор', 'Комментарий', 'Чек', 'Google Drive'].forEach((titleText, index) => {
     const th = document.createElement('th');
     th.textContent = titleText;
     if (index === 1) th.className = 'numeric-cell';
@@ -3115,6 +3115,7 @@ function renderExpenseReportDetails(expenses) {
     appendCell(row, formatMoney(toNumber(expense.amount)), 'numeric-cell');
     appendCell(row, expense.paymentMethodLabel || '');
     appendCell(row, expense.createdByName || '');
+    appendCell(row, expense.comment || '');
     row.append(buildReportLinkCell(expense.receiptUrl, 'Открыть чек', 'Нет чека'));
     row.append(buildReportLinkCell(expense.googleDrive?.webViewLink, 'В архиве', expense.googleDrive?.reason || 'Нет ссылки'));
     tbody.append(row);
@@ -3764,7 +3765,7 @@ function renderExpenses() {
   if (!state.expenses.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 9;
+    cell.colSpan = 10;
     cell.className = 'empty-state';
     cell.textContent = 'Хозрасходов пока нет.';
     row.append(cell);
@@ -3776,7 +3777,7 @@ function renderExpenses() {
   if (!expenses.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 9;
+    cell.colSpan = 10;
     cell.className = 'empty-state';
     cell.textContent = 'Нет расходов по выбранному фильтру.';
     row.append(cell);
@@ -3869,6 +3870,7 @@ function buildExpenseRow(expense) {
   appendCell(row, formatMoney(expense.amount), 'numeric-cell');
   appendCell(row, expense.paymentMethodLabel);
   appendCell(row, expense.createdByName || '');
+  appendCell(row, expense.comment || '');
 
   const receiptCell = document.createElement('td');
   if (expense.receiptUrl) {
@@ -3927,7 +3929,7 @@ function buildExpenseTotalRow(expenses) {
   amountCell.textContent = formatMoney(sumExpenses(expenses));
 
   const restCell = document.createElement('td');
-  restCell.colSpan = 5;
+  restCell.colSpan = 6;
 
   row.append(labelCell, amountCell, restCell);
   return row;

@@ -1160,6 +1160,10 @@
               Чек
               <input name="receipt" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.pdf" required>
             </label>
+            <label class="expense-comment-field">
+              Комментарий
+              <textarea name="comment" maxlength="1000"></textarea>
+            </label>
             <button class="primary" type="submit">Сохранить расход</button>
           </form>
         </section>
@@ -1198,6 +1202,7 @@
                       <select id="expenseAuthorFilter" aria-label="Фильтр по автору"></select>
                     </label>
                   </th>
+                  <th>Комментарий</th>
                   <th>Чек</th>
                   <th>Google Drive</th>
                   <th>Действие</th>

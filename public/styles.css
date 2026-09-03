@@ -764,6 +764,15 @@ h3 {
   margin-top: 16px;
 }
 
+.expense-comment-field {
+  grid-column: 1 / -2;
+}
+
+.expense-comment-field textarea {
+  min-height: 44px;
+  resize: vertical;
+}
+
 .claim-form {
   display: grid;
   grid-template-columns: minmax(130px, 0.6fr) minmax(120px, 0.55fr) minmax(160px, 0.8fr) minmax(145px, 0.7fr) minmax(145px, 0.7fr) minmax(150px, 0.75fr) minmax(220px, 1fr) auto;
@@ -1506,6 +1515,10 @@ tbody tr:last-child td {
   .claim-form,
   .repair-form {
     grid-template-columns: 1fr;
+  }
+
+  .expense-comment-field {
+    grid-column: 1 / -1;
   }
 
   .premium-history-row {

@@ -845,6 +845,7 @@ test('expense report summarizes monthly expenses by point and payment method', (
       expenseDate: '2026-08-03',
       amount: '100',
       paymentMethod: 'cash',
+      comment: 'Канцелярия',
       createdBy: 'admin-expense-author',
       createdAt: '2026-08-03T10:00:00.000Z',
     },
@@ -882,6 +883,7 @@ test('expense report summarizes monthly expenses by point and payment method', (
   const krasnogorsk = report.points.find((point) => point.pointId === 'krasnogorsk_466');
 
   assert.equal(report.expenses.length, 3);
+  assert.equal(report.expenses[2].comment, 'Канцелярия');
   assert.equal(moscow.cashTotal, '100');
   assert.equal(moscow.cardTotal, '250.5');
   assert.equal(moscow.total, '350.5');
@@ -2314,6 +2316,7 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
       expenseType: 'household',
       amount: '123,45',
       paymentMethod: 'cash',
+      comment: 'Покупка ламп',
       receipt,
     });
     const otherPointReceipt = {
@@ -2334,6 +2337,7 @@ test('admin can create housekeeping expense with receipt and drive fallback', as
     assert.equal(expense.expenseTypeLabel, 'Хозрасходы');
     assert.equal(expense.amount, '123.45');
     assert.equal(expense.paymentMethodLabel, 'наличные');
+    assert.equal(expense.comment, 'Покупка ламп');
     assert.equal(expense.googleDrive.status, 'unavailable');
     assert.equal(expense.googleDrive.sourceUnavailable, true);
     assert.match(expense.receiptUrl, /^\/api\/receipts\//);
