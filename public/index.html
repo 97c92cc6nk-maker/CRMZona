@@ -448,6 +448,7 @@
             <label>Арендодатель<input name="landlord" type="text" maxlength="160"></label>
             <label>Юр.лицо<select name="legalEntity" id="retailPointLegalEntity"></select></label>
             <label>Стоимость аренды<input name="rentCost" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16"></label>
+            <label>Коэф. распределения прибыли, %<input name="profitDistributionRate" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?%?" maxlength="8" required value="100"></label>
             <label>Имя собственника<input name="ownerName" type="text" maxlength="160"></label>
             <label>Телефон<input name="phone" type="tel" maxlength="32"></label>
             <label>Email<input name="email" type="email" maxlength="180"></label>
@@ -467,6 +468,7 @@
             <label>Арендодатель<input name="landlord" type="text" maxlength="160"></label>
             <label>Юр.лицо<select name="legalEntity" id="retailPointCardLegalEntity"></select></label>
             <label>Стоимость аренды<input name="rentCost" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16"></label>
+            <label>Коэф. распределения прибыли, %<input name="profitDistributionRate" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?%?" maxlength="8" required></label>
             <label>Имя собственника<input name="ownerName" type="text" maxlength="160"></label>
             <label>Телефон<input name="phone" type="tel" maxlength="32"></label>
             <label>Email<input name="email" type="email" maxlength="180"></label>
@@ -549,6 +551,7 @@
           <form class="company-form" id="companyForm">
             <label>Краткое наименование<input name="shortName" type="text" required maxlength="120"></label>
             <label>Полное наименование<input name="name" type="text" required maxlength="240"></label>
+            <label>Ставка налога, %<input name="taxRate" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?%?" maxlength="8" required value="8"></label>
             <label>ИНН<input name="inn" type="text" maxlength="32"></label>
             <label>ОГРН/ОГРНИП<input name="ogrnip" type="text" maxlength="32"></label>
             <label>Телефон<input name="phone" type="tel" maxlength="32"></label>
@@ -565,6 +568,7 @@
           <form class="company-form" id="companyCardForm">
             <label>Краткое наименование<input name="shortName" type="text" required maxlength="120"></label>
             <label>Полное наименование<input name="name" type="text" required maxlength="240"></label>
+            <label>Ставка налога, %<input name="taxRate" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?%?" maxlength="8" required></label>
             <label>Юридический адрес<input name="legalAddress" type="text" maxlength="300"></label>
             <label>Фактический адрес<input name="actualAddress" type="text" maxlength="300"></label>
             <label>Почтовый адрес<input name="postalAddress" type="text" maxlength="300"></label>

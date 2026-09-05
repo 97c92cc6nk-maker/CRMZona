@@ -1054,7 +1054,18 @@ function renderRetailPointCard() {
     els.retailPointCardTitle.textContent = `Карточка торговой точки: ${point.name || 'без названия'}`;
   }
 
-  const fields = ['name', 'address', 'landlord', 'legalEntity', 'rentCost', 'ownerName', 'phone', 'email', 'comment'];
+  const fields = [
+    'name',
+    'address',
+    'landlord',
+    'legalEntity',
+    'rentCost',
+    'profitDistributionRate',
+    'ownerName',
+    'phone',
+    'email',
+    'comment',
+  ];
   for (const field of fields) {
     setRetailPointFormValue(field, point[field]);
   }
@@ -1307,6 +1318,7 @@ function retailPointPayloadFromBasicForm(form) {
     landlord: values.landlord,
     legalEntity: values.legalEntity,
     rentCost: values.rentCost,
+    profitDistributionRate: values.profitDistributionRate,
     ownerName: values.ownerName,
     phone: values.phone,
     email: values.email,
@@ -1322,6 +1334,7 @@ function retailPointPayloadFromCard(form) {
     landlord: values.landlord,
     legalEntity: values.legalEntity,
     rentCost: values.rentCost,
+    profitDistributionRate: values.profitDistributionRate,
     ownerName: values.ownerName,
     phone: values.phone,
     email: values.email,
@@ -1523,6 +1536,7 @@ function renderCompanyCard() {
   [
     'shortName',
     'name',
+    'taxRate',
     'legalAddress',
     'actualAddress',
     'postalAddress',
@@ -1747,6 +1761,7 @@ function companyPayloadFromBasicForm(form) {
   return {
     shortName: values.shortName,
     name: values.name,
+    taxRate: values.taxRate,
     inn: values.inn,
     ogrnip: values.ogrnip,
     phone: values.phone,
@@ -1759,6 +1774,7 @@ function companyPayloadFromCard(form) {
   return {
     shortName: values.shortName,
     name: values.name,
+    taxRate: values.taxRate,
     legalAddress: values.legalAddress,
     actualAddress: values.actualAddress,
     postalAddress: values.postalAddress,

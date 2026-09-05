@@ -2996,6 +2996,18 @@ test('retail point seed fills an empty store', () => {
   assert.equal(saved.length, 26);
   assert.ok(points.some((point) => point.name.endsWith('_123')));
   assert.ok(points.some((point) => point.rentCost === '125000'));
+  assert.equal(points.find((point) => point.name === 'МОСКВА_6231').profitDistributionRate, '100');
+  [
+    'НАХАБИНО_41',
+    'КРАСНОГОРСК_455',
+    'ИСТРА_123',
+    'WB Сказка',
+    'КРАСНОГОРСК_452',
+    'НИКОЛО_УРЮПИНО_4',
+    'КРАСНОГОРСК_466',
+  ].forEach((pointName) => {
+    assert.equal(points.find((point) => point.name === pointName).profitDistributionRate, '50');
+  });
 });
 
 test('retail points can store cards and Google Drive documents', async () => {
@@ -3056,6 +3068,7 @@ test('retail points can store cards and Google Drive documents', async () => {
   assert.equal(point.curatorAdminId, '');
   assert.equal(point.curatorAdminName, '');
   assert.equal(point.rentCost, '125000');
+  assert.equal(point.profitDistributionRate, '100');
   assert.equal(point.comment, 'Rent test');
   assert.equal(point.internet.payment, 'invoice');
   assert.equal(point.video.camerasCount, '6');
@@ -3075,12 +3088,14 @@ test('retail points can store cards and Google Drive documents', async () => {
 
   const updated = store.updateRetailPoint(owner, point.id, {
     ...point,
+    profitDistributionRate: '75',
     internet: {
       ...point.internet,
       login: 'updated-login',
     },
   });
   assert.equal(updated.internet.login, 'updated-login');
+  assert.equal(updated.profitDistributionRate, '75');
   assert.equal(updated.curatorAdminName, 'Ольга Администратор');
 
   const previousFetch = global.fetch;
@@ -3218,6 +3233,7 @@ test('companies can store requisites, point links and Google Drive documents', a
   });
 
   assert.equal(company.shortName, 'ИП ТСТ');
+  assert.equal(company.taxRate, '8');
   assert.deepEqual(company.pointNames, ['МОСКВА_6231']);
   assert.throws(
     () => store.createCompany(owner, {
@@ -3244,9 +3260,11 @@ test('companies can store requisites, point links and Google Drive documents', a
   const updated = store.updateCompany(admin, company.id, {
     ...company,
     bankName: 'ПАО Новый Банк',
+    taxRate: '6',
     pointIds: ['moscow_6231'],
   });
   assert.equal(updated.bankName, 'ПАО Новый Банк');
+  assert.equal(updated.taxRate, '6');
 
   const previousFetch = global.fetch;
   const previousToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
