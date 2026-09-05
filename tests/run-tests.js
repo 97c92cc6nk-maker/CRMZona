@@ -15,6 +15,7 @@ const {
   buildAssistantContextForUser,
   buildEmployeePayrollReport,
   buildExpenseReport,
+  buildManagementReport,
   buildRunnerReport,
   createCaptchaChallenge,
   permissionsFor,
@@ -992,6 +993,138 @@ test('runner report summarizes monthly substitution hours by employee and point'
     { pointId: 'moscow_6231', hours: '7.5' },
   ]);
   assert.deepEqual(report.totals, { hoursTotal: '11.5' });
+});
+
+test('management report combines payroll, rent, expenses, tax, and manual fields', () => {
+  const users = [
+    {
+      id: 'employee-management',
+      fullName: 'Иван Отчетный',
+      role: 'employee',
+      allowedPoints: ['moscow_6231'],
+      premiumHistory: [
+        { active: true, amount: '500', startDate: '2026-07-01' },
+      ],
+    },
+  ];
+  const schedules = {
+    'moscow_6231:2026-07': {
+      pointId: 'moscow_6231',
+      month: '2026-07',
+      rows: [{
+        employeeId: 'employee-management',
+        rowType: 'employee',
+        days: {
+          1: { rateRub: '1000', issuedCount: '10' },
+          16: { rateRub: '2000', issuedCount: '20' },
+        },
+        advanceCard: '',
+        salaryCard: '',
+        bonusExtra: '500',
+        claims: '',
+      }],
+    },
+  };
+  const expenses = [
+    { id: 'expense-household', pointId: 'moscow_6231', expenseDate: '2026-07-02', expenseType: 'household', amount: '100', paymentMethod: 'cash' },
+    { id: 'expense-internet', pointId: 'moscow_6231', expenseDate: '2026-07-03', expenseType: 'internet', amount: '300', paymentMethod: 'card' },
+    { id: 'expense-video', pointId: 'moscow_6231', expenseDate: '2026-07-04', expenseType: 'video', amount: '400', paymentMethod: 'card' },
+    { id: 'expense-repair', pointId: 'moscow_6231', expenseDate: '2026-07-05', expenseType: 'repair', amount: '200', paymentMethod: 'cash' },
+    { id: 'expense-other', pointId: 'moscow_6231', expenseDate: '2026-07-06', expenseType: 'other', amount: '500', paymentMethod: 'card' },
+    { id: 'expense-next-month', pointId: 'moscow_6231', expenseDate: '2026-08-01', expenseType: 'repair', amount: '999', paymentMethod: 'cash' },
+  ];
+  const retailPoints = [
+    {
+      id: 'moscow_6231',
+      name: 'МОСКВА_6231',
+      address: 'Москва, ул. Тестовая, 1',
+      legalEntity: 'ОИА',
+      rentCost: '1000',
+      profitDistributionRate: '50',
+    },
+  ];
+  const companies = [
+    {
+      id: 'company-oia',
+      name: 'ИП ОИА',
+      shortName: 'ОИА',
+      taxRate: '8',
+      pointIds: ['moscow_6231'],
+    },
+  ];
+  const reports = {
+    managementReport: {
+      '2026-07': {
+        updatedAt: '2026-07-31T12:00:00.000Z',
+        rows: {
+          moscow_6231: {
+            utilities: '600',
+            accountingPayrollTaxesOther: '700',
+            requirementsOffset: '800',
+            revenue: '9000',
+            reward: '10000',
+          },
+        },
+      },
+    },
+  };
+
+  const report = buildManagementReport(users, schedules, [], expenses, retailPoints, companies, reports, '2026-07');
+  const row = report.rows.find((item) => item.pointId === 'moscow_6231');
+
+  assert.equal(report.title, 'Управленческий отчет');
+  assert.equal(report.updatedAt, '2026-07-31T12:00:00.000Z');
+  assert.equal(row.address, 'Москва, ул. Тестовая, 1');
+  assert.equal(row.companyShortName, 'ОИА');
+  assert.equal(row.salary, '3650');
+  assert.equal(row.rent, '1000');
+  assert.equal(row.utilities, '600');
+  assert.equal(row.repair, '200');
+  assert.equal(row.internet, '300');
+  assert.equal(row.video, '400');
+  assert.equal(row.other, '500');
+  assert.equal(row.accountingPayrollTaxesOther, '700');
+  assert.equal(row.household, '100');
+  assert.equal(row.requirementsOffset, '800');
+  assert.equal(row.totalExpenses, '8250');
+  assert.equal(row.issuedTotal, '30');
+  assert.equal(row.revenue, '9000');
+  assert.equal(row.averageCheck, '300');
+  assert.equal(row.reward, '10000');
+  assert.equal(row.taxes, '800');
+  assert.equal(row.profitDistributionRate, '50');
+  assert.equal(row.profit, '475');
+  assert.equal(report.totals.salary, '3650');
+  assert.equal(report.totals.totalExpenses, '8250');
+  assert.equal(report.totals.issuedTotal, '30');
+  assert.equal(report.totals.averageCheck, '300');
+  assert.equal(report.totals.taxes, '800');
+  assert.equal(report.totals.profit, '475');
+});
+
+test('management report is visible only to owners', () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Management Report',
+    phone: '+79990000206',
+    email: 'owner-management-report@example.com',
+    password: 'OwnerPass123',
+  });
+  const admin = store.createUser({
+    fullName: 'Admin Management Report',
+    phone: '+79990000207',
+    email: 'admin-management-report@example.com',
+    password: 'AdminPass123',
+    role: 'admin',
+    allowedSections: ['reports'],
+    allowedReports: ['management-report', 'expense-report'],
+    unofficialSalary: '1',
+  });
+
+  assert.equal(reportDirectoryForUser(owner).some((report) => report.id === 'management-report'), true);
+  assert.deepEqual(admin.allowedReports, ['expense-report']);
+  assert.equal(reportDirectoryForUser(admin).some((report) => report.id === 'management-report'), false);
+  assert.equal(permissionsFor(admin).allowedReports.includes('management-report'), false);
 });
 
 test('development proposals are scoped by access and reviewed by owner', async () => {

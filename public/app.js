@@ -43,6 +43,7 @@ const state = {
   employeePayrollReport: null,
   expenseReport: null,
   runnerReport: null,
+  managementReport: null,
   employeePayrollFilters: {
     pointId: '',
     adminId: '',
@@ -85,6 +86,35 @@ const state = {
 };
 
 const ASSISTANT_SESSION_STORAGE_PREFIX = 'crmzonaAssistantSessionId:';
+const MANAGEMENT_REPORT_MANUAL_FIELDS = [
+  'utilities',
+  'accountingPayrollTaxesOther',
+  'requirementsOffset',
+  'revenue',
+  'reward',
+];
+const MANAGEMENT_REPORT_COLUMNS = [
+  { key: 'number', label: 'п/п', numeric: true },
+  { key: 'pointName', label: 'Торговая точка' },
+  { key: 'address', label: 'Адрес' },
+  { key: 'salary', label: 'ЗП', numeric: true },
+  { key: 'rent', label: 'Аренда', numeric: true },
+  { key: 'utilities', label: 'Коммуналка', numeric: true, manual: true },
+  { key: 'repair', label: 'Ремонт', numeric: true },
+  { key: 'internet', label: 'Интернет', numeric: true },
+  { key: 'video', label: 'Видео', numeric: true },
+  { key: 'other', label: 'Прочее', numeric: true },
+  { key: 'accountingPayrollTaxesOther', label: 'Бух, зп налоги, др.', numeric: true, manual: true },
+  { key: 'household', label: 'Хозрасходы', numeric: true },
+  { key: 'requirementsOffset', label: 'Зачет требований', numeric: true, manual: true },
+  { key: 'totalExpenses', label: 'Итого расходов', numeric: true, calculated: true },
+  { key: 'issuedTotal', label: 'Посылок выдано', numeric: true },
+  { key: 'revenue', label: 'Выручка', numeric: true, manual: true },
+  { key: 'averageCheck', label: 'Средний чек', numeric: true, calculated: true, integer: true },
+  { key: 'reward', label: 'Вознаграждение', numeric: true, manual: true },
+  { key: 'taxes', label: 'Налоги', numeric: true, calculated: true, integer: true },
+  { key: 'profit', label: 'Прибыль', numeric: true, calculated: true, integer: true },
+];
 
 const els = {};
 
@@ -670,6 +700,7 @@ async function handleLogout() {
     state.employeePayrollReport = null;
     state.expenseReport = null;
     state.runnerReport = null;
+    state.managementReport = null;
     resetEmployeePayrollFilters();
     resetExpenseReportFilters();
     state.claimEmployees = [];
@@ -2733,6 +2764,7 @@ async function loadReports() {
       state.employeePayrollReport = null;
       state.expenseReport = null;
       state.runnerReport = null;
+      state.managementReport = null;
       resetEmployeePayrollFilters();
       resetExpenseReportFilters();
       els.employeePayrollFilters?.classList.add('is-hidden');
@@ -2748,6 +2780,7 @@ function renderReportsUnavailable() {
   state.employeePayrollReport = null;
   state.expenseReport = null;
   state.runnerReport = null;
+  state.managementReport = null;
   resetEmployeePayrollFilters();
   resetExpenseReportFilters();
   els.employeePayrollFilters?.classList.add('is-hidden');
@@ -2799,6 +2832,7 @@ async function openReport(reportId) {
   state.employeePayrollReport = null;
   state.expenseReport = null;
   state.runnerReport = null;
+  state.managementReport = null;
   resetEmployeePayrollFilters();
   resetExpenseReportFilters();
   if (!els.reportMonthInput.value) {
@@ -2814,6 +2848,7 @@ function closeReport() {
   state.employeePayrollReport = null;
   state.expenseReport = null;
   state.runnerReport = null;
+  state.managementReport = null;
   resetEmployeePayrollFilters();
   resetExpenseReportFilters();
   els.employeePayrollFilters?.classList.add('is-hidden');
@@ -2840,6 +2875,10 @@ async function loadSelectedReport() {
   }
   if (state.selectedReportId === 'runner-report') {
     await loadRunnerReport();
+    return;
+  }
+  if (state.selectedReportId === 'management-report') {
+    await loadManagementReport();
   }
 }
 
@@ -2885,6 +2924,213 @@ async function loadRunnerReport() {
     renderRunnerReport();
     showNotice(els.reportsNotice, '');
   }, els.reportsNotice);
+}
+
+async function loadManagementReport() {
+  await runWithButton(els.loadReport, async () => {
+    const month = els.reportMonthInput.value || currentMonth();
+    const data = await api(`/api/reports/management-report?month=${encodeURIComponent(month)}`);
+    state.managementReport = data.report;
+    state.permissions.canManageReports = Boolean(data.canManage);
+    renderManagementReport();
+    showNotice(els.reportsNotice, '');
+  }, els.reportsNotice);
+}
+
+function renderManagementReport() {
+  const report = state.managementReport;
+  if (!report) return;
+  const canManage = Boolean(state.permissions.canManageReports);
+  els.reportDetailsTitle.textContent = `${report.title} · ${formatMonth(report.month)}`;
+  els.saveAdminPayrollReport.classList.toggle('is-hidden', !canManage);
+  els.employeePayrollFilters?.classList.add('is-hidden');
+  els.reportContent.replaceChildren();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'table-wrap report-table-wrap';
+  const table = document.createElement('table');
+  table.className = 'reports-table management-report-table';
+  const thead = document.createElement('thead');
+  const header = document.createElement('tr');
+  for (const column of MANAGEMENT_REPORT_COLUMNS) {
+    const th = document.createElement('th');
+    th.textContent = column.label;
+    if (column.numeric) th.className = 'numeric-cell';
+    header.append(th);
+  }
+  thead.append(header);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  const rows = report.rows || [];
+  if (!rows.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = MANAGEMENT_REPORT_COLUMNS.length;
+    cell.className = 'empty-state';
+    cell.textContent = 'Торговые точки для отчета не найдены.';
+    row.append(cell);
+    tbody.append(row);
+  } else {
+    for (const rowData of rows) {
+      applyManagementReportCalculations(rowData);
+      tbody.append(buildManagementReportRow(rowData, canManage));
+    }
+  }
+  table.append(tbody);
+
+  if (rows.length) {
+    table.append(buildManagementReportFooter(calculateManagementReportTotals(rows)));
+  }
+
+  wrap.append(table);
+  els.reportContent.append(wrap);
+
+  if (report.updatedAt) {
+    const updated = document.createElement('p');
+    updated.className = 'report-updated';
+    updated.textContent = `Сохранено: ${formatDateTime(report.updatedAt)}`;
+    els.reportContent.append(updated);
+  }
+}
+
+function buildManagementReportRow(rowData, canManage) {
+  const row = document.createElement('tr');
+  row.dataset.managementPointId = rowData.pointId;
+
+  for (const column of MANAGEMENT_REPORT_COLUMNS) {
+    if (column.manual) {
+      const cell = document.createElement('td');
+      cell.className = 'numeric-cell';
+      cell.append(managementReportNumberInput(rowData, column.key, canManage));
+      row.append(cell);
+      continue;
+    }
+
+    const value = managementReportDisplayValue(rowData, column);
+    const classNames = [
+      column.numeric ? 'numeric-cell' : '',
+      column.key === 'pointName' ? 'report-name-cell' : '',
+      column.key === 'address' ? 'management-address-cell' : '',
+      column.key === 'profit' ? 'report-payable-cell' : '',
+    ].filter(Boolean).join(' ');
+    const cell = appendCell(row, value, classNames);
+    if (column.calculated) {
+      cell.dataset.managementCalculated = column.key;
+    }
+  }
+
+  return row;
+}
+
+function managementReportNumberInput(rowData, field, canManage) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.inputMode = 'decimal';
+  input.pattern = '\\d*([,.]\\d+)?';
+  input.maxLength = 16;
+  input.value = rowData[field] || '';
+  input.disabled = !canManage;
+  input.className = 'report-number-input management-report-input';
+  input.dataset.managementPointId = rowData.pointId;
+  input.dataset.reportField = field;
+  return input;
+}
+
+function managementReportDisplayValue(rowData, column) {
+  if (column.integer) return formatMoney(Math.round(toNumber(rowData[column.key])));
+  if (column.numeric) return formatMoney(toNumber(rowData[column.key]));
+  return rowData[column.key] || '';
+}
+
+function applyManagementReportCalculations(rowData) {
+  const totalExpenses = toNumber(rowData.salary)
+    + toNumber(rowData.rent)
+    + toNumber(rowData.utilities)
+    + toNumber(rowData.repair)
+    + toNumber(rowData.internet)
+    + toNumber(rowData.video)
+    + toNumber(rowData.other)
+    + toNumber(rowData.accountingPayrollTaxesOther)
+    + toNumber(rowData.household)
+    + toNumber(rowData.requirementsOffset);
+  const issuedTotal = toNumber(rowData.issuedTotal);
+  const revenue = toNumber(rowData.revenue);
+  const averageCheck = issuedTotal > 0 ? Math.round(revenue / issuedTotal) : 0;
+  const reward = toNumber(rowData.reward);
+  const taxes = Math.round(reward * toNumber(rowData.taxRate) / 100);
+  const profit = Math.round((reward - taxes - totalExpenses) * toNumber(rowData.profitDistributionRate) / 100);
+
+  rowData.totalExpenses = String(Math.round((totalExpenses + Number.EPSILON) * 100) / 100);
+  rowData.averageCheck = String(averageCheck);
+  rowData.taxes = String(taxes);
+  rowData.profit = String(profit);
+}
+
+function calculateManagementReportTotals(rows) {
+  const totals = {};
+  for (const column of MANAGEMENT_REPORT_COLUMNS) {
+    if (column.numeric && column.key !== 'number') {
+      totals[column.key] = 0;
+    }
+  }
+  for (const row of rows) {
+    applyManagementReportCalculations(row);
+    for (const key of Object.keys(totals)) {
+      if (key === 'averageCheck') continue;
+      totals[key] += toNumber(row[key]);
+    }
+  }
+  totals.averageCheck = totals.issuedTotal > 0 ? Math.round(totals.revenue / totals.issuedTotal) : 0;
+  return totals;
+}
+
+function buildManagementReportFooter(totals) {
+  const tfoot = document.createElement('tfoot');
+  const row = document.createElement('tr');
+  for (const column of MANAGEMENT_REPORT_COLUMNS) {
+    if (column.key === 'number') {
+      appendCell(row, 'Итого', 'summary-total-label');
+    } else if (column.numeric) {
+      const value = column.integer
+        ? formatMoney(Math.round(toNumber(totals[column.key])))
+        : formatMoney(toNumber(totals[column.key]));
+      const cell = appendCell(row, value, 'numeric-cell');
+      cell.dataset.managementTotal = column.key;
+    } else {
+      appendCell(row, '');
+    }
+  }
+  tfoot.append(row);
+  return tfoot;
+}
+
+function updateManagementReportRow(input) {
+  const rowData = state.managementReport?.rows?.find((row) => row.pointId === input.dataset.managementPointId);
+  if (!rowData) return;
+  rowData[input.dataset.reportField] = input.value;
+  applyManagementReportCalculations(rowData);
+
+  const rowElement = input.closest('tr');
+  for (const column of MANAGEMENT_REPORT_COLUMNS.filter((item) => item.calculated)) {
+    const cell = rowElement?.querySelector(`[data-management-calculated="${column.key}"]`);
+    if (cell) {
+      cell.textContent = managementReportDisplayValue(rowData, column);
+    }
+  }
+  updateManagementReportFooter();
+}
+
+function updateManagementReportFooter() {
+  const rows = state.managementReport?.rows || [];
+  const totals = calculateManagementReportTotals(rows);
+  for (const column of MANAGEMENT_REPORT_COLUMNS.filter((item) => item.numeric && item.key !== 'number')) {
+    const cell = els.reportContent.querySelector(`[data-management-total="${column.key}"]`);
+    if (!cell) continue;
+    cell.textContent = column.integer
+      ? formatMoney(Math.round(toNumber(totals[column.key])))
+      : formatMoney(toNumber(totals[column.key]));
+  }
 }
 
 function renderRunnerReport() {
@@ -3512,7 +3758,12 @@ function reportNumberInput(rowData, field, canManage) {
 
 function handleReportContentInput(event) {
   const input = event.target.closest('[data-report-field]');
-  if (!input || state.selectedReportId !== 'admin-payroll' || !state.adminPayrollReport) return;
+  if (!input) return;
+  if (state.selectedReportId === 'management-report' && state.managementReport) {
+    updateManagementReportRow(input);
+    return;
+  }
+  if (state.selectedReportId !== 'admin-payroll' || !state.adminPayrollReport) return;
   const row = state.adminPayrollReport.rows.find((item) => item.employeeId === input.dataset.employeeId);
   if (!row) return;
   row[input.dataset.reportField] = input.value;
@@ -3549,6 +3800,10 @@ function calculateAdminPayrollPayable(row) {
 }
 
 async function saveAdminPayrollReport() {
+  if (state.selectedReportId === 'management-report') {
+    await saveManagementReport();
+    return;
+  }
   if (!state.adminPayrollReport || !state.permissions.canManageReports) return;
   await runWithButton(els.saveAdminPayrollReport, async () => {
     const data = await api('/api/reports/admin-payroll', {
@@ -3567,6 +3822,31 @@ async function saveAdminPayrollReport() {
     });
     state.adminPayrollReport = data.report;
     renderAdminPayrollReport();
+    await loadAudit();
+    const storageWarning = storageWarningText(data.storage);
+    showNotice(
+      els.reportsNotice,
+      ['Отчет сохранен.', storageWarning].filter(Boolean).join(' '),
+      storageWarning ? 'warning' : 'success',
+    );
+  }, els.reportsNotice);
+}
+
+async function saveManagementReport() {
+  if (!state.managementReport || !state.permissions.canManageReports) return;
+  await runWithButton(els.saveAdminPayrollReport, async () => {
+    const data = await api('/api/reports/management-report', {
+      method: 'POST',
+      body: {
+        month: state.managementReport.month,
+        rows: state.managementReport.rows.map((row) => ({
+          pointId: row.pointId,
+          ...Object.fromEntries(MANAGEMENT_REPORT_MANUAL_FIELDS.map((field) => [field, row[field] || ''])),
+        })),
+      },
+    });
+    state.managementReport = data.report;
+    renderManagementReport();
     await loadAudit();
     const storageWarning = storageWarningText(data.storage);
     showNotice(

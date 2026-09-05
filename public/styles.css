@@ -998,6 +998,10 @@ tbody tr:last-child td {
   min-width: 780px;
 }
 
+.management-report-table {
+  min-width: 2600px;
+}
+
 .reports-table th,
 .reports-table td {
   padding: 8px;
@@ -1026,6 +1030,10 @@ tbody tr:last-child td {
   text-align: center;
 }
 
+.management-report-input {
+  max-width: 96px;
+}
+
 .report-comment-input {
   min-width: 220px;
 }
@@ -1042,6 +1050,10 @@ tbody tr:last-child td {
 
 .runner-points-cell {
   min-width: 340px;
+}
+
+.management-address-cell {
+  min-width: 260px;
 }
 
 .runner-points-list {
