@@ -896,6 +896,15 @@ test('expense report summarizes monthly expenses by point and payment method', (
     {
       id: 'expense-4',
       pointId: 'moscow_6231',
+      expenseDate: '2026-08-06',
+      amount: '400',
+      paymentMethod: 'bank_account',
+      createdBy: 'admin-expense-author',
+      createdAt: '2026-08-06T10:00:00.000Z',
+    },
+    {
+      id: 'expense-5',
+      pointId: 'moscow_6231',
       expenseDate: '2026-09-01',
       amount: '999',
       paymentMethod: 'cash',
@@ -908,19 +917,20 @@ test('expense report summarizes monthly expenses by point and payment method', (
   const moscow = report.points.find((point) => point.pointId === 'moscow_6231');
   const krasnogorsk = report.points.find((point) => point.pointId === 'krasnogorsk_466');
 
-  assert.equal(report.expenses.length, 3);
-  assert.equal(report.expenses[2].comment, 'Канцелярия');
+  assert.equal(report.expenses.length, 4);
+  assert.equal(report.expenses.find((expense) => expense.paymentMethod === 'bank_account').paymentMethodLabel, 'С р/с');
+  assert.equal(report.expenses[3].comment, 'Канцелярия');
   assert.equal(moscow.cashTotal, '100');
   assert.equal(moscow.cardTotal, '250.5');
-  assert.equal(moscow.total, '350.5');
+  assert.equal(moscow.total, '750.5');
   assert.equal(krasnogorsk.cashTotal, '0');
   assert.equal(krasnogorsk.cardTotal, '300');
   assert.equal(krasnogorsk.total, '300');
   assert.deepEqual(report.totals, {
     cashTotal: '100',
     cardTotal: '550.5',
-    total: '650.5',
-    count: 3,
+    total: '1050.5',
+    count: 4,
   });
   assert.deepEqual(report.authorOptions.map((author) => author.id), [
     'admin-expense-author',

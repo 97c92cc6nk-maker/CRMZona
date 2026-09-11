@@ -4258,6 +4258,7 @@ function fillExpensePaymentMethods() {
         { value: 'corp_card', label: 'корп.карта' },
         { value: 'cash', label: 'наличные' },
         { value: 'card', label: 'карта' },
+        { value: 'bank_account', label: 'С р/с' },
       ];
   els.expensePaymentMethod.replaceChildren(...methods.map((method) => {
     const option = document.createElement('option');
