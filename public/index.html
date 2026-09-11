@@ -104,6 +104,7 @@
           <button class="tab is-hidden" type="button" data-view="employeesView" id="employeesTab">Сотрудники</button>
           <button class="tab" type="button" data-view="retailPointsView">Торговые точки</button>
           <button class="tab" type="button" data-view="companiesView">Компании</button>
+          <button class="tab" type="button" data-view="constantsView">Константы</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="reportsView">Отчеты</button>
           <button class="tab" type="button" data-view="tasksView">Задачи</button>
@@ -743,6 +744,33 @@
         </section>
 
         <div class="notice" id="reportsNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="constantsView" aria-labelledby="constantsTitle">
+        <div class="section-head">
+          <h2 id="constantsTitle">Константы</h2>
+          <button class="secondary" type="button" id="refreshConstants">Обновить</button>
+        </div>
+
+        <section class="panel" aria-labelledby="constantsListTitle">
+          <h3 id="constantsListTitle">Список констант</h3>
+          <div class="table-wrap">
+            <table class="constants-table">
+              <thead>
+                <tr>
+                  <th>Константа</th>
+                  <th>Актуально сейчас</th>
+                  <th>История</th>
+                  <th>Новое значение</th>
+                  <th>Дата применения</th>
+                  <th>Действие</th>
+                </tr>
+              </thead>
+              <tbody id="constantsBody"></tbody>
+            </table>
+          </div>
+          <p class="notice" id="constantsNotice"></p>
+        </section>
       </section>
 
       <section class="view" id="developmentView" aria-labelledby="developmentTitle">

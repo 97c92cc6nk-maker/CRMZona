@@ -1008,9 +1008,9 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
     },
   ];
   const schedules = {
-    'moscow_6231:2026-07': {
+    'moscow_6231:2026-08': {
       pointId: 'moscow_6231',
-      month: '2026-07',
+      month: '2026-08',
       rows: [{
         employeeId: 'employee-management',
         rowType: 'employee',
@@ -1026,12 +1026,12 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
     },
   };
   const expenses = [
-    { id: 'expense-household', pointId: 'moscow_6231', expenseDate: '2026-07-02', expenseType: 'household', amount: '100', paymentMethod: 'cash' },
-    { id: 'expense-internet', pointId: 'moscow_6231', expenseDate: '2026-07-03', expenseType: 'internet', amount: '300', paymentMethod: 'card' },
-    { id: 'expense-video', pointId: 'moscow_6231', expenseDate: '2026-07-04', expenseType: 'video', amount: '400', paymentMethod: 'card' },
-    { id: 'expense-repair', pointId: 'moscow_6231', expenseDate: '2026-07-05', expenseType: 'repair', amount: '200', paymentMethod: 'cash' },
-    { id: 'expense-other', pointId: 'moscow_6231', expenseDate: '2026-07-06', expenseType: 'other', amount: '500', paymentMethod: 'card' },
-    { id: 'expense-next-month', pointId: 'moscow_6231', expenseDate: '2026-08-01', expenseType: 'repair', amount: '999', paymentMethod: 'cash' },
+    { id: 'expense-household', pointId: 'moscow_6231', expenseDate: '2026-08-02', expenseType: 'household', amount: '100', paymentMethod: 'cash' },
+    { id: 'expense-internet', pointId: 'moscow_6231', expenseDate: '2026-08-03', expenseType: 'internet', amount: '300', paymentMethod: 'card' },
+    { id: 'expense-video', pointId: 'moscow_6231', expenseDate: '2026-08-04', expenseType: 'video', amount: '400', paymentMethod: 'card' },
+    { id: 'expense-repair', pointId: 'moscow_6231', expenseDate: '2026-08-05', expenseType: 'repair', amount: '200', paymentMethod: 'cash' },
+    { id: 'expense-other', pointId: 'moscow_6231', expenseDate: '2026-08-06', expenseType: 'other', amount: '500', paymentMethod: 'card' },
+    { id: 'expense-next-month', pointId: 'moscow_6231', expenseDate: '2026-09-01', expenseType: 'repair', amount: '999', paymentMethod: 'cash' },
   ];
   const retailPoints = [
     {
@@ -1039,7 +1039,7 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
       name: 'МОСКВА_6231',
       address: 'Москва, ул. Тестовая, 1',
       legalEntity: 'ОИА',
-      rentCost: '1000',
+      rentCost: '20000',
       profitDistributionRate: '50',
     },
   ];
@@ -1054,30 +1054,31 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
   ];
   const reports = {
     managementReport: {
-      '2026-07': {
-        updatedAt: '2026-07-31T12:00:00.000Z',
+      '2026-08': {
+        updatedAt: '2026-08-31T12:00:00.000Z',
         rows: {
           moscow_6231: {
             utilities: '600',
             accountingPayrollTaxesOther: '700',
             requirementsOffset: '800',
             revenue: '9000',
-            reward: '10000',
+            reward: '40000',
+            additionalIncome: '300',
           },
         },
       },
     },
   };
 
-  const report = buildManagementReport(users, schedules, [], expenses, retailPoints, companies, reports, '2026-07');
+  const report = buildManagementReport(users, schedules, [], expenses, retailPoints, companies, reports, '2026-08');
   const row = report.rows.find((item) => item.pointId === 'moscow_6231');
 
   assert.equal(report.title, 'Управленческий отчет');
-  assert.equal(report.updatedAt, '2026-07-31T12:00:00.000Z');
+  assert.equal(report.updatedAt, '2026-08-31T12:00:00.000Z');
   assert.equal(row.address, 'Москва, ул. Тестовая, 1');
   assert.equal(row.companyShortName, 'ОИА');
   assert.equal(row.salary, '3650');
-  assert.equal(row.rent, '1000');
+  assert.equal(row.rent, '20000');
   assert.equal(row.utilities, '600');
   assert.equal(row.repair, '200');
   assert.equal(row.internet, '300');
@@ -1086,20 +1087,24 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
   assert.equal(row.accountingPayrollTaxesOther, '700');
   assert.equal(row.household, '100');
   assert.equal(row.requirementsOffset, '800');
-  assert.equal(row.totalExpenses, '8250');
+  assert.equal(row.manager, '14000');
+  assert.equal(row.totalExpenses, '13250');
   assert.equal(row.issuedTotal, '30');
   assert.equal(row.revenue, '9000');
   assert.equal(row.averageCheck, '300');
-  assert.equal(row.reward, '10000');
-  assert.equal(row.taxes, '800');
+  assert.equal(row.reward, '40000');
+  assert.equal(row.additionalIncome, '300');
+  assert.equal(row.taxes, '3200');
   assert.equal(row.profitDistributionRate, '50');
-  assert.equal(row.profit, '475');
+  assert.equal(row.profit, '11925');
   assert.equal(report.totals.salary, '3650');
-  assert.equal(report.totals.totalExpenses, '8250');
+  assert.equal(report.totals.manager, '28000');
+  assert.equal(report.totals.totalExpenses, '-750');
   assert.equal(report.totals.issuedTotal, '30');
   assert.equal(report.totals.averageCheck, '300');
-  assert.equal(report.totals.taxes, '800');
-  assert.equal(report.totals.profit, '475');
+  assert.equal(report.totals.additionalIncome, '300');
+  assert.equal(report.totals.taxes, '3200');
+  assert.equal(report.totals.profit, '18925');
 });
 
 test('management report is visible only to owners', () => {
@@ -1125,6 +1130,24 @@ test('management report is visible only to owners', () => {
   assert.deepEqual(admin.allowedReports, ['expense-report']);
   assert.equal(reportDirectoryForUser(admin).some((report) => report.id === 'management-report'), false);
   assert.equal(permissionsFor(admin).allowedReports.includes('management-report'), false);
+  assert.equal(permissionsFor(owner).canViewConstants, true);
+  assert.equal(permissionsFor(owner).canManageConstants, true);
+  assert.equal(permissionsFor(admin).canViewConstants, false);
+  assert.equal(permissionsFor(admin).canManageConstants, false);
+  assert.deepEqual(store.loadJson('constants.json', [])[0], {
+    id: 'manager',
+    name: 'Управляющий',
+    entries: [{
+      id: 'manager-2026-08-01',
+      value: '14000',
+      effectiveDate: '2026-08-01',
+      createdAt: '1970-01-01T00:00:00.000Z',
+      createdBy: 'system',
+    }],
+    createdAt: '1970-01-01T00:00:00.000Z',
+    updatedAt: '1970-01-01T00:00:00.000Z',
+    updatedBy: 'system',
+  });
 });
 
 test('development proposals are scoped by access and reviewed by owner', async () => {

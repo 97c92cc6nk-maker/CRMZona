@@ -915,6 +915,10 @@ tbody tr:last-child td {
   min-width: 1520px;
 }
 
+.constants-table {
+  min-width: 980px;
+}
+
 .claims-table td {
   vertical-align: top;
 }
@@ -999,7 +1003,7 @@ tbody tr:last-child td {
 }
 
 .management-report-table {
-  min-width: 2600px;
+  min-width: 2860px;
 }
 
 .reports-table th,
@@ -1054,6 +1058,27 @@ tbody tr:last-child td {
 
 .management-address-cell {
   min-width: 260px;
+}
+
+.constant-name-cell {
+  font-weight: 800;
+  min-width: 180px;
+}
+
+.constant-history-cell {
+  min-width: 220px;
+}
+
+.constant-value-input {
+  max-width: 140px;
+  text-align: center;
+}
+
+.compact-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .runner-points-list {

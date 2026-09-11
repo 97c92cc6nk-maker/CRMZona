@@ -16,6 +16,7 @@ const state = {
   retailPointCompanyOptions: [],
   companies: [],
   companyPoints: [],
+  constants: [],
   repairs: [],
   tasks: [],
   requests: [],
@@ -92,6 +93,7 @@ const MANAGEMENT_REPORT_MANUAL_FIELDS = [
   'requirementsOffset',
   'revenue',
   'reward',
+  'additionalIncome',
 ];
 const MANAGEMENT_REPORT_COLUMNS = [
   { key: 'number', label: 'п/п', numeric: true },
@@ -107,11 +109,13 @@ const MANAGEMENT_REPORT_COLUMNS = [
   { key: 'accountingPayrollTaxesOther', label: 'Бух, зп налоги, др.', numeric: true, manual: true },
   { key: 'household', label: 'Хозрасходы', numeric: true },
   { key: 'requirementsOffset', label: 'Зачет требований', numeric: true, manual: true },
+  { key: 'manager', label: 'Управляющий', numeric: true },
   { key: 'totalExpenses', label: 'Итого расходов', numeric: true, calculated: true },
   { key: 'issuedTotal', label: 'Посылок выдано', numeric: true },
   { key: 'revenue', label: 'Выручка', numeric: true, manual: true },
   { key: 'averageCheck', label: 'Средний чек', numeric: true, calculated: true, integer: true },
   { key: 'reward', label: 'Вознаграждение', numeric: true, manual: true },
+  { key: 'additionalIncome', label: 'Доп.доход', numeric: true, manual: true },
   { key: 'taxes', label: 'Налоги', numeric: true, calculated: true, integer: true },
   { key: 'profit', label: 'Прибыль', numeric: true, calculated: true, integer: true },
 ];
@@ -213,6 +217,9 @@ function bindElements() {
     refreshCompanies: document.getElementById('refreshCompanies'),
     companiesBody: document.getElementById('companiesBody'),
     companiesNotice: document.getElementById('companiesNotice'),
+    refreshConstants: document.getElementById('refreshConstants'),
+    constantsBody: document.getElementById('constantsBody'),
+    constantsNotice: document.getElementById('constantsNotice'),
     reportsListPanel: document.getElementById('reportsListPanel'),
     reportsList: document.getElementById('reportsList'),
     reportsNotice: document.getElementById('reportsNotice'),
@@ -363,6 +370,8 @@ function bindEvents() {
   els.uploadCompanyDocument.addEventListener('click', handleCompanyDocumentUpload);
   els.companyDocumentsList.addEventListener('click', handleCompanyDocumentClick);
   els.refreshCompanies.addEventListener('click', loadCompanies);
+  els.refreshConstants?.addEventListener('click', loadConstants);
+  els.constantsBody?.addEventListener('click', handleConstantsTableClick);
   els.refreshReports.addEventListener('click', loadReports);
   els.reportsList.addEventListener('click', handleReportsListClick);
   els.closeReport.addEventListener('click', closeReport);
@@ -485,6 +494,11 @@ async function loadAppData() {
     loaders.push(loadCompanies());
   } else {
     renderCompanies();
+  }
+  if (state.permissions.canViewConstants) {
+    loaders.push(loadConstants());
+  } else {
+    renderConstants();
   }
   if (state.permissions.canViewReports) {
     loaders.push(loadReports());
@@ -694,6 +708,7 @@ async function handleLogout() {
     state.taskAssigneeOptions = [];
     state.developmentProposals = [];
     state.developmentStatuses = [];
+    state.constants = [];
     state.reports = [];
     state.reportOptions = [];
     state.adminPayrollReport = null;
@@ -789,6 +804,9 @@ function refreshViewData(viewId) {
     loadAssistantStatus();
     renderAssistant();
   }
+  if (viewId === 'constantsView') {
+    loadConstants();
+  }
 }
 
 function renderProfile() {
@@ -803,6 +821,7 @@ function renderProfile() {
   setTabVisibility('assistantView', Boolean(state.permissions.canUseAssistant));
   setTabVisibility('retailPointsView', Boolean(state.permissions.canViewRetailPoints));
   setTabVisibility('companiesView', Boolean(state.permissions.canViewCompanies));
+  setTabVisibility('constantsView', Boolean(state.permissions.canViewConstants));
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('reportsView', Boolean(state.permissions.canViewReports));
   setTabVisibility('tasksView', Boolean(state.permissions.canViewTasks));
@@ -2746,6 +2765,127 @@ function developmentAttachmentMime(file) {
   return '';
 }
 
+async function loadConstants() {
+  if (!state.permissions.canViewConstants) return;
+  await runWithButton(els.refreshConstants, async () => {
+    const data = await api('/api/constants');
+    state.constants = data.constants || [];
+    state.permissions.canManageConstants = Boolean(data.canManage);
+    renderConstants();
+    showNotice(els.constantsNotice, '');
+  }, els.constantsNotice);
+}
+
+function renderConstants() {
+  if (!els.constantsBody) return;
+  els.constantsBody.replaceChildren();
+
+  if (!state.permissions.canViewConstants) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    cell.className = 'empty-state';
+    cell.textContent = 'Нет доступа к разделу констант.';
+    row.append(cell);
+    els.constantsBody.append(row);
+    return;
+  }
+
+  if (!state.constants.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    cell.className = 'empty-state';
+    cell.textContent = 'Константы пока не настроены.';
+    row.append(cell);
+    els.constantsBody.append(row);
+    return;
+  }
+
+  for (const item of state.constants) {
+    const row = document.createElement('tr');
+    const current = currentConstantEntry(item);
+    appendCell(row, item.name || item.id, 'constant-name-cell');
+    appendCell(row, current ? `${formatMoney(toNumber(current.value))} с ${formatDate(current.effectiveDate)}` : '-');
+
+    const historyCell = document.createElement('td');
+    historyCell.className = 'constant-history-cell';
+    const history = document.createElement('ul');
+    history.className = 'compact-list';
+    for (const entry of item.entries || []) {
+      const li = document.createElement('li');
+      li.textContent = `${formatDate(entry.effectiveDate)} · ${formatMoney(toNumber(entry.value))}`;
+      history.append(li);
+    }
+    historyCell.append(history);
+    row.append(historyCell);
+
+    const valueCell = document.createElement('td');
+    const valueInput = document.createElement('input');
+    valueInput.type = 'text';
+    valueInput.inputMode = 'decimal';
+    valueInput.pattern = '\\d*([,.]\\d+)?';
+    valueInput.className = 'constant-value-input';
+    valueInput.dataset.constantValue = item.id;
+    valueInput.disabled = !state.permissions.canManageConstants;
+    valueCell.append(valueInput);
+    row.append(valueCell);
+
+    const dateCell = document.createElement('td');
+    const dateInput = document.createElement('input');
+    dateInput.type = 'date';
+    dateInput.value = currentDate();
+    dateInput.dataset.constantDate = item.id;
+    dateInput.disabled = !state.permissions.canManageConstants;
+    dateCell.append(dateInput);
+    row.append(dateCell);
+
+    const actionCell = document.createElement('td');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary';
+    button.dataset.addConstantEntry = item.id;
+    button.textContent = 'Сохранить';
+    button.disabled = !state.permissions.canManageConstants;
+    actionCell.append(button);
+    row.append(actionCell);
+
+    els.constantsBody.append(row);
+  }
+}
+
+function currentConstantEntry(constant) {
+  const today = currentDate();
+  return (constant.entries || []).find((entry) => entry.effectiveDate <= today) || null;
+}
+
+async function handleConstantsTableClick(event) {
+  const button = event.target.closest('[data-add-constant-entry]');
+  if (!button) return;
+  const constantId = button.dataset.addConstantEntry;
+  const value = els.constantsBody.querySelector(`[data-constant-value="${cssEscape(constantId)}"]`)?.value || '';
+  const effectiveDate = els.constantsBody.querySelector(`[data-constant-date="${cssEscape(constantId)}"]`)?.value || '';
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/constants/${encodeURIComponent(constantId)}/entries`, {
+      method: 'POST',
+      body: { value, effectiveDate },
+    });
+    state.constants = data.constants || [];
+    renderConstants();
+    const storageWarning = storageWarningText(data.storage);
+    showNotice(
+      els.constantsNotice,
+      ['Константа сохранена.', storageWarning].filter(Boolean).join(' '),
+      storageWarning ? 'warning' : 'success',
+    );
+  }, els.constantsNotice);
+}
+
+function cssEscape(value) {
+  return window.CSS?.escape ? window.CSS.escape(value) : String(value).replace(/"/g, '\\"');
+}
+
 function shortText(value, maxLength) {
   const text = String(value || '').trim();
   if (text.length <= maxLength) return text;
@@ -3053,13 +3193,15 @@ function applyManagementReportCalculations(rowData) {
     + toNumber(rowData.other)
     + toNumber(rowData.accountingPayrollTaxesOther)
     + toNumber(rowData.household)
-    + toNumber(rowData.requirementsOffset);
+    + toNumber(rowData.requirementsOffset)
+    - toNumber(rowData.manager);
   const issuedTotal = toNumber(rowData.issuedTotal);
   const revenue = toNumber(rowData.revenue);
   const averageCheck = issuedTotal > 0 ? Math.round(revenue / issuedTotal) : 0;
   const reward = toNumber(rowData.reward);
+  const additionalIncome = toNumber(rowData.additionalIncome);
   const taxes = Math.round(reward * toNumber(rowData.taxRate) / 100);
-  const profit = Math.round((reward - taxes - totalExpenses) * toNumber(rowData.profitDistributionRate) / 100);
+  const profit = Math.round((reward + additionalIncome - taxes - totalExpenses) * toNumber(rowData.profitDistributionRate) / 100);
 
   rowData.totalExpenses = String(Math.round((totalExpenses + Number.EPSILON) * 100) / 100);
   rowData.averageCheck = String(averageCheck);
