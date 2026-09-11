@@ -1038,6 +1038,62 @@ tbody tr:last-child td {
   max-width: 96px;
 }
 
+.management-note-cell {
+  position: relative;
+}
+
+.management-note-cell.has-note::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 0;
+  height: 0;
+  border-top: 10px solid #f2b705;
+  border-left: 10px solid transparent;
+  pointer-events: none;
+}
+
+.management-note-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% - 1px);
+  left: 8px;
+  z-index: 40;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 10px 12px;
+  border: 1px solid #d7dce5;
+  border-radius: 6px;
+  background: #fffdf3;
+  box-shadow: 0 14px 34px rgba(31, 41, 55, 0.18);
+  color: #1f2937;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+}
+
+.management-note-cell.has-note:hover .management-note-tooltip,
+.management-note-cell.has-note:focus-within .management-note-tooltip {
+  display: block;
+}
+
+.management-note-text,
+.management-note-meta {
+  display: block;
+}
+
+.management-note-text {
+  margin-bottom: 8px;
+  font-weight: 650;
+}
+
+.management-note-meta {
+  color: #6b7280;
+  font-size: 11px;
+}
+
 .report-comment-input {
   min-width: 220px;
 }

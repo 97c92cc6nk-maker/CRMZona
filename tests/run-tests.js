@@ -1074,6 +1074,14 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
             revenue: '9000',
             reward: '40000',
             additionalIncome: '300',
+            notes: {
+              rent: {
+                text: 'Проверить договор аренды',
+                createdBy: 'owner-1',
+                createdByName: 'Owner User',
+                createdAt: '2026-08-02T10:00:00.000Z',
+              },
+            },
           },
         },
       },
@@ -1107,6 +1115,8 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
   assert.equal(row.taxes, '3200');
   assert.equal(row.profitDistributionRate, '50');
   assert.equal(row.profit, '11925');
+  assert.equal(row.notes.rent.text, 'Проверить договор аренды');
+  assert.equal(row.notes.rent.createdByName, 'Owner User');
   assert.equal(report.totals.salary, '3650');
   assert.equal(report.totals.manager, '28000');
   assert.equal(report.totals.totalExpenses, '-750');

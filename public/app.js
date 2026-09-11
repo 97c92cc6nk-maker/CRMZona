@@ -393,6 +393,7 @@ function bindEvents() {
   els.reportContent.addEventListener('input', handleReportContentInput);
   els.reportContent.addEventListener('change', handleReportContentChange);
   els.reportContent.addEventListener('click', handleReportContentClick);
+  els.reportContent.addEventListener('dblclick', handleReportContentDoubleClick);
   els.taskForm?.addEventListener('submit', handleTaskCreate);
   els.refreshTasks?.addEventListener('click', loadTasks);
   els.requestForm?.addEventListener('submit', handleRequestCreate);
@@ -3143,6 +3144,7 @@ function buildManagementReportRow(rowData, canManage) {
       const cell = document.createElement('td');
       cell.className = 'numeric-cell';
       cell.append(managementReportNumberInput(rowData, column.key, canManage));
+      decorateManagementReportCell(cell, rowData, column.key, canManage);
       row.append(cell);
       continue;
     }
@@ -3158,9 +3160,73 @@ function buildManagementReportRow(rowData, canManage) {
     if (column.calculated) {
       cell.dataset.managementCalculated = column.key;
     }
+    decorateManagementReportCell(cell, rowData, column.key, canManage);
   }
 
   return row;
+}
+
+function decorateManagementReportCell(cell, rowData, field, canManage) {
+  cell.classList.add('management-note-cell');
+  cell.dataset.managementPointId = rowData.pointId;
+  cell.dataset.managementNoteField = field;
+  cell.classList.remove('has-note');
+  delete cell.dataset.managementNoteEditable;
+  cell.removeAttribute('title');
+
+  const existingTooltip = cell.querySelector('.management-note-tooltip');
+  if (existingTooltip) existingTooltip.remove();
+
+  if (canManage) {
+    cell.dataset.managementNoteEditable = 'true';
+    cell.title = 'Двойной клик — добавить или изменить примечание';
+  }
+
+  const note = managementReportCellNote(rowData, field);
+  if (!note) return;
+  cell.classList.add('has-note');
+  cell.removeAttribute('title');
+  cell.append(managementReportNoteTooltip(note));
+}
+
+function managementReportCellNote(rowData, field) {
+  const note = rowData?.notes?.[field];
+  if (!note) return null;
+  if (typeof note === 'string') {
+    const text = note.trim();
+    return text ? { text } : null;
+  }
+  const text = String(note.text || '').trim();
+  if (!text) return null;
+  return { ...note, text };
+}
+
+function managementReportNoteTooltip(note) {
+  const tooltip = document.createElement('span');
+  tooltip.className = 'management-note-tooltip';
+
+  const text = document.createElement('span');
+  text.className = 'management-note-text';
+  text.textContent = note.text;
+  tooltip.append(text);
+
+  const meta = document.createElement('span');
+  meta.className = 'management-note-meta';
+  const createdBy = note.createdByName || 'Неизвестный пользователь';
+  const createdAt = formatDateTime(note.createdAt);
+  meta.textContent = createdAt ? `Создал: ${createdBy} · ${createdAt}` : `Создал: ${createdBy}`;
+  tooltip.append(meta);
+
+  if (note.updatedAt) {
+    const updated = document.createElement('span');
+    updated.className = 'management-note-meta';
+    const updatedBy = note.updatedByName || 'Неизвестный пользователь';
+    const updatedAt = formatDateTime(note.updatedAt);
+    updated.textContent = updatedAt ? `Изменил: ${updatedBy} · ${updatedAt}` : `Изменил: ${updatedBy}`;
+    tooltip.append(updated);
+  }
+
+  return tooltip;
 }
 
 function managementReportNumberInput(rowData, field, canManage) {
@@ -3258,6 +3324,7 @@ function updateManagementReportRow(input) {
     const cell = rowElement?.querySelector(`[data-management-calculated="${column.key}"]`);
     if (cell) {
       cell.textContent = managementReportDisplayValue(rowData, column);
+      decorateManagementReportCell(cell, rowData, column.key, Boolean(state.permissions.canManageReports));
     }
   }
   updateManagementReportFooter();
@@ -3931,6 +3998,54 @@ function handleReportContentClick(event) {
   renderExpenseReport();
 }
 
+async function handleReportContentDoubleClick(event) {
+  const cell = event.target.closest('[data-management-note-field]');
+  if (!cell || state.selectedReportId !== 'management-report' || !state.managementReport) return;
+  if (!state.permissions.canManageReports) return;
+  event.preventDefault();
+  await editManagementReportCellNote(cell);
+}
+
+async function editManagementReportCellNote(cell) {
+  const pointId = cell.dataset.managementPointId;
+  const field = cell.dataset.managementNoteField;
+  const rowData = state.managementReport?.rows?.find((row) => row.pointId === pointId);
+  if (!rowData || !field) return;
+  const currentNote = managementReportCellNote(rowData, field);
+  const nextText = window.prompt('Примечание к ячейке. Чтобы удалить примечание, оставьте поле пустым.', currentNote?.text || '');
+  if (nextText === null) return;
+  const text = nextText.trim();
+  if (text.length > 1000) {
+    showNotice(els.reportsNotice, 'Примечание слишком длинное.', 'error');
+    return;
+  }
+
+  setManagementReportCellNote(rowData, field, text);
+  renderManagementReport();
+  await persistManagementReport(text ? 'Примечание сохранено.' : 'Примечание удалено.', null);
+}
+
+function setManagementReportCellNote(rowData, field, text) {
+  rowData.notes = rowData.notes && typeof rowData.notes === 'object' ? rowData.notes : {};
+  if (!text) {
+    delete rowData.notes[field];
+    return;
+  }
+
+  const existing = managementReportCellNote(rowData, field);
+  const timestamp = new Date().toISOString();
+  const authorName = state.user?.fullName || state.user?.email || 'Текущий пользователь';
+  rowData.notes[field] = {
+    text,
+    createdBy: existing?.createdBy || state.user?.id || '',
+    createdByName: existing?.createdByName || authorName,
+    createdAt: existing?.createdAt || timestamp,
+    updatedBy: existing ? state.user?.id || '' : '',
+    updatedByName: existing ? authorName : '',
+    updatedAt: existing ? timestamp : '',
+  };
+}
+
 function calculateAdminPayrollPayable(row) {
   return toNumber(row.unofficialSalary)
     + toNumber(row.premium)
@@ -3976,7 +4091,12 @@ async function saveAdminPayrollReport() {
 
 async function saveManagementReport() {
   if (!state.managementReport || !state.permissions.canManageReports) return;
-  await runWithButton(els.saveAdminPayrollReport, async () => {
+  await persistManagementReport('Отчет сохранен.', els.saveAdminPayrollReport);
+}
+
+async function persistManagementReport(successMessage = 'Отчет сохранен.', button = els.saveAdminPayrollReport) {
+  if (!state.managementReport || !state.permissions.canManageReports) return;
+  await runWithButton(button, async () => {
     const data = await api('/api/reports/management-report', {
       method: 'POST',
       body: {
@@ -3984,6 +4104,7 @@ async function saveManagementReport() {
         rows: state.managementReport.rows.map((row) => ({
           pointId: row.pointId,
           ...Object.fromEntries(MANAGEMENT_REPORT_MANUAL_FIELDS.map((field) => [field, row[field] || ''])),
+          notes: row.notes || {},
         })),
       },
     });
@@ -3993,7 +4114,7 @@ async function saveManagementReport() {
     const storageWarning = storageWarningText(data.storage);
     showNotice(
       els.reportsNotice,
-      ['Отчет сохранен.', storageWarning].filter(Boolean).join(' '),
+      [successMessage, storageWarning].filter(Boolean).join(' '),
       storageWarning ? 'warning' : 'success',
     );
   }, els.reportsNotice);
