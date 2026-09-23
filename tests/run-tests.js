@@ -549,6 +549,10 @@ test('employee archive hides user from active schedule options and clears sessio
   const archivedSchedule = store.getSchedule('moscow_6231', '2026-08', owner);
   assert.equal(archivedSchedule.employeeOptions.some((option) => option.id === employee.id), false);
   assert.equal(archivedSchedule.rows.some((row) => row.employeeId === employee.id), false);
+  await assert.rejects(
+    () => resetUserPasswordAsOwner(store, owner, employee.id),
+    (error) => error instanceof ApiError && error.status === 400,
+  );
 
   const restored = await archiveUserInStore(store, owner, employee.id, false);
   assert.equal(restored.archived, false);
