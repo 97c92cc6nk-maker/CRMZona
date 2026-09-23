@@ -1260,6 +1260,11 @@ tbody tr:last-child td {
   white-space: normal;
 }
 
+.employees-table tr.is-archived td {
+  background: #f8fafc;
+  color: var(--muted);
+}
+
 .password-reset-cell {
   min-width: 150px;
 }
@@ -1307,6 +1312,12 @@ tbody tr:last-child td {
   gap: 6px;
 }
 
+.employee-list-actions {
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 170px;
+}
+
 .danger {
   min-height: 40px;
   border: 1px solid #e6c2c2;
@@ -1320,7 +1331,8 @@ tbody tr:last-child td {
   background: #ffecec;
 }
 
-.employee-list-delete {
+.employee-list-delete,
+.employee-list-archive {
   min-height: 34px;
   padding: 6px 10px;
 }

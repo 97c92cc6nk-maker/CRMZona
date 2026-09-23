@@ -11,6 +11,7 @@ const {
   ApiError,
   Store,
   SupabaseStore,
+  archiveUserInStore,
   buildAdminPayrollReport,
   buildAssistantContextForUser,
   buildEmployeePayrollReport,
@@ -520,6 +521,42 @@ test('admin can manage employees but cannot change employee section access', () 
     (error) => error instanceof ApiError && error.status === 403,
   );
   assert.equal(owner.role, 'owner');
+});
+
+test('employee archive hides user from active schedule options and clears sessions', async () => {
+  const store = createTempStore();
+  const owner = store.createUser({
+    fullName: 'Owner Archive Employee',
+    phone: '+79990000134',
+    email: 'owner-archive-employee@example.com',
+    password: 'OwnerPass123',
+  });
+  const employee = store.createUser({
+    fullName: 'Archive Target Employee',
+    phone: '+79990000135',
+    email: 'archive-target-employee@example.com',
+    password: 'EmployeePass123',
+    role: 'employee',
+    allowedPoints: ['moscow_6231'],
+  });
+  const sessionId = store.createSession(employee.id);
+
+  const archived = await archiveUserInStore(store, owner, employee.id, true);
+  assert.equal(archived.archived, true);
+  assert.equal(Boolean(archived.archivedAt), true);
+  assert.equal(store.getSession(sessionId), null);
+
+  const archivedSchedule = store.getSchedule('moscow_6231', '2026-08', owner);
+  assert.equal(archivedSchedule.employeeOptions.some((option) => option.id === employee.id), false);
+  assert.equal(archivedSchedule.rows.some((row) => row.employeeId === employee.id), false);
+
+  const restored = await archiveUserInStore(store, owner, employee.id, false);
+  assert.equal(restored.archived, false);
+  assert.equal(restored.archivedAt, '');
+
+  const activeSchedule = store.getSchedule('moscow_6231', '2026-08', owner);
+  assert.equal(activeSchedule.employeeOptions.some((option) => option.id === employee.id), true);
+  assert.equal(activeSchedule.rows.some((row) => row.employeeId === employee.id), true);
 });
 
 test('retail point access belongs only to one admin', () => {

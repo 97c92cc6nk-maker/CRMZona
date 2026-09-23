@@ -57,6 +57,7 @@ const state = {
   claimEmployees: [],
   employeeDocumentTypes: [],
   employeeSortMode: 'name',
+  employeeArchiveFilter: 'active',
   expenseFilters: {
     point: '',
     type: '',
@@ -163,6 +164,7 @@ function bindElements() {
     refreshAssistant: document.getElementById('refreshAssistant'),
     employeesTab: document.getElementById('employeesTab'),
     employeeSortSelect: document.getElementById('employeeSortSelect'),
+    employeeArchiveFilter: document.getElementById('employeeArchiveFilter'),
     employeePasswordHeader: document.getElementById('employeePasswordHeader'),
     employeesBody: document.getElementById('employeesBody'),
     employeesNotice: document.getElementById('employeesNotice'),
@@ -339,6 +341,10 @@ function bindEvents() {
   els.employeeForm.addEventListener('submit', handleEmployeeCreate);
   els.employeeSortSelect?.addEventListener('change', () => {
     state.employeeSortMode = els.employeeSortSelect.value || 'name';
+    renderEmployees();
+  });
+  els.employeeArchiveFilter?.addEventListener('change', () => {
+    state.employeeArchiveFilter = els.employeeArchiveFilter.value || 'active';
     renderEmployees();
   });
   els.employeeForm.elements.role.addEventListener('change', renderEmployeeFormAccessControls);
@@ -5389,19 +5395,23 @@ function renderEmployees() {
   if (els.employeeSortSelect) {
     els.employeeSortSelect.value = state.employeeSortMode || 'name';
   }
+  if (els.employeeArchiveFilter) {
+    els.employeeArchiveFilter.value = state.employeeArchiveFilter || 'active';
+  }
 
-  if (!state.users.length) {
+  const employees = sortedEmployeesForList(filteredEmployeesForList(state.users));
+  if (!employees.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
     cell.colSpan = canResetPasswords ? 9 : 8;
     cell.className = 'empty-state';
-    cell.textContent = 'Нет сотрудников.';
+    cell.textContent = employeeEmptyStateText();
     row.append(cell);
     els.employeesBody.append(row);
     return;
   }
 
-  for (const user of sortedEmployeesForList(state.users)) {
+  for (const user of employees) {
     els.employeesBody.append(buildEmployeeRow(user));
   }
 }
@@ -5409,6 +5419,7 @@ function renderEmployees() {
 function buildEmployeeRow(user) {
   const row = document.createElement('tr');
   row.dataset.userId = user.id;
+  row.classList.toggle('is-archived', isArchivedEmployee(user));
   const nameParts = employeeNameParts(user);
 
   const lastNameCell = document.createElement('td');
@@ -5428,7 +5439,8 @@ function buildEmployeeRow(user) {
   if (canResetEmployeePasswords()) {
     row.append(employeePasswordCell(user));
   }
-  appendCell(row, user.roleLabel || user.role || '');
+  const roleLabel = user.roleLabel || user.role || '';
+  appendCell(row, isArchivedEmployee(user) ? `${roleLabel} · Архив` : roleLabel);
   row.append(employeeListActionsCell(user));
   return row;
 }
@@ -5482,12 +5494,31 @@ function employeeListActionsCell(user) {
     return cell;
   }
 
+  const actions = document.createElement('div');
+  actions.className = 'row-actions employee-list-actions';
+  if (isArchivedEmployee(user)) {
+    const restore = document.createElement('button');
+    restore.className = 'secondary employee-list-archive';
+    restore.type = 'button';
+    restore.textContent = 'Вернуть';
+    restore.addEventListener('click', () => archiveEmployee(user.id, false, restore));
+    actions.append(restore);
+  } else {
+    const archive = document.createElement('button');
+    archive.className = 'secondary employee-list-archive';
+    archive.type = 'button';
+    archive.textContent = 'В архив';
+    archive.addEventListener('click', () => archiveEmployee(user.id, true, archive));
+    actions.append(archive);
+  }
+
   const remove = document.createElement('button');
   remove.className = 'danger employee-list-delete';
   remove.type = 'button';
   remove.textContent = 'Удалить';
   remove.addEventListener('click', () => deleteEmployee(user.id, remove));
-  cell.append(remove);
+  actions.append(remove);
+  cell.append(actions);
   return cell;
 }
 
@@ -5509,6 +5540,26 @@ function sortedEmployeesForList(users) {
     }
     return employeeNameSortValue(left).localeCompare(employeeNameSortValue(right), 'ru');
   });
+}
+
+function filteredEmployeesForList(users) {
+  const filter = state.employeeArchiveFilter || 'active';
+  return (Array.isArray(users) ? users : []).filter((user) => {
+    const archived = isArchivedEmployee(user);
+    if (filter === 'archived') return archived;
+    if (filter === 'all') return true;
+    return !archived;
+  });
+}
+
+function employeeEmptyStateText() {
+  if (state.employeeArchiveFilter === 'archived') return 'В архиве пока нет сотрудников.';
+  if (state.employeeArchiveFilter === 'all') return 'Нет сотрудников.';
+  return 'Нет активных сотрудников.';
+}
+
+function isArchivedEmployee(user) {
+  return Boolean(user?.archived || user?.archivedAt);
 }
 
 function employeeNameSortValue(user) {
@@ -6303,6 +6354,32 @@ async function deleteEmployee(userId, button) {
     showNotice(
       els.employeesNotice,
       ['Сотрудник удален.', storageWarningText(data.storage)].filter(Boolean).join(' '),
+      data.storage?.persistent === false ? 'warning' : 'success',
+    );
+  }, els.employeesNotice);
+}
+
+async function archiveEmployee(userId, archived, button) {
+  if (!userId) return;
+  const message = archived
+    ? 'Перенести сотрудника в архив? Он будет скрыт из списка активных сотрудников.'
+    : 'Вернуть сотрудника из архива в активный список?';
+  if (!window.confirm(message)) return;
+
+  await runWithButton(button, async () => {
+    const data = await api(`/api/users/${encodeURIComponent(userId)}/archive`, {
+      method: 'PATCH',
+      body: { archived },
+    });
+    replaceUserInState(data.user);
+    if (archived && state.selectedEmployeeId === userId) {
+      state.selectedEmployeeId = null;
+    }
+    await loadUsers();
+    await refreshRetailPointsAfterEmployeeChange();
+    showNotice(
+      els.employeesNotice,
+      [archived ? 'Сотрудник перенесен в архив.' : 'Сотрудник возвращен из архива.', storageWarningText(data.storage)].filter(Boolean).join(' '),
       data.storage?.persistent === false ? 'warning' : 'success',
     );
   }, els.employeesNotice);
