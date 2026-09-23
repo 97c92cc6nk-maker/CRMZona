@@ -3266,14 +3266,14 @@ function applyManagementReportCalculations(rowData) {
     + toNumber(rowData.accountingPayrollTaxesOther)
     + toNumber(rowData.household)
     + toNumber(rowData.requirementsOffset)
-    - toNumber(rowData.manager);
+    + toNumber(rowData.manager);
   const issuedTotal = toNumber(rowData.issuedTotal);
   const revenue = toNumber(rowData.revenue);
   const averageCheck = issuedTotal > 0 ? Math.round(revenue / issuedTotal) : 0;
   const reward = toNumber(rowData.reward);
   const additionalIncome = toNumber(rowData.additionalIncome);
   const taxes = Math.round(reward * toNumber(rowData.taxRate) / 100);
-  const profit = Math.round((reward + additionalIncome - taxes - totalExpenses) * toNumber(rowData.profitDistributionRate) / 100);
+  const profit = Math.round((reward + additionalIncome - totalExpenses - taxes) * toNumber(rowData.profitDistributionRate) / 100);
 
   rowData.totalExpenses = String(Math.round((totalExpenses + Number.EPSILON) * 100) / 100);
   rowData.averageCheck = String(averageCheck);

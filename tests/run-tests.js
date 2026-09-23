@@ -1147,7 +1147,7 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
   assert.equal(row.household, '100');
   assert.equal(row.requirementsOffset, '800');
   assert.equal(row.manager, '14000');
-  assert.equal(row.totalExpenses, '13250');
+  assert.equal(row.totalExpenses, '41250');
   assert.equal(row.issuedTotal, '30');
   assert.equal(row.revenue, '9000');
   assert.equal(row.averageCheck, '300');
@@ -1155,17 +1155,17 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
   assert.equal(row.additionalIncome, '300');
   assert.equal(row.taxes, '3200');
   assert.equal(row.profitDistributionRate, '50');
-  assert.equal(row.profit, '11925');
+  assert.equal(row.profit, '-2075');
   assert.equal(row.notes.rent.text, 'Проверить договор аренды');
   assert.equal(row.notes.rent.createdByName, 'Owner User');
   assert.equal(report.totals.salary, '3650');
   assert.equal(report.totals.manager, '28000');
-  assert.equal(report.totals.totalExpenses, '-750');
+  assert.equal(report.totals.totalExpenses, '55250');
   assert.equal(report.totals.issuedTotal, '30');
   assert.equal(report.totals.averageCheck, '300');
   assert.equal(report.totals.additionalIncome, '300');
   assert.equal(report.totals.taxes, '3200');
-  assert.equal(report.totals.profit, '18925');
+  assert.equal(report.totals.profit, '-9075');
 });
 
 test('management report is visible only to owners', () => {
