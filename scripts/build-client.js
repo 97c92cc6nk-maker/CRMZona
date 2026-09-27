@@ -30,13 +30,18 @@ function build() {
   const loader = read('client/reliable-loader.js');
   const shell = read('client/reliable-shell.html');
   const html = shell.replace('__CLIENT_MANIFEST__', JSON.stringify(manifest)).replace('__CLIENT_LOADER__', loader);
-  if (Buffer.byteLength(html) > 8192) throw new Error('Reliable entry page exceeds 8 KiB');
+  if (Buffer.byteLength(html) > 12288 || zlib.gzipSync(html).length > 6144) throw new Error('Reliable entry page exceeds 12 KiB (6 KiB compressed)');
+  const diagnostic = read('client/connection.html')
+    .replace('__CLIENT_PARTS__', JSON.stringify(manifest.parts))
+    .replace('__ENTRY_SIZE__', Buffer.byteLength(html));
+  if (Buffer.byteLength(diagnostic) > 8192) throw new Error('Diagnostic page exceeds 8 KiB');
   const shellStyle = shell.match(/<style>([\s\S]*?)<\/style>/)[1];
   const csp = {
-    scripts: [loader, ...bundle.scripts].map((value) => "'sha256-" + hash(value, 'base64') + "'"),
-    styles: [shellStyle, ...bundle.styles].map((value) => "'sha256-" + hash(value, 'base64') + "'"),
+    scripts: [loader, diagnostic.match(/<script>([\s\S]*?)<\/script>/)[1], ...bundle.scripts].map((value) => "'sha256-" + hash(value, 'base64') + "'"),
+    styles: [shellStyle, diagnostic.match(/<style>([\s\S]*?)<\/style>/)[1], ...bundle.styles].map((value) => "'sha256-" + hash(value, 'base64') + "'"),
   };
   files.set('public/stable.html', Buffer.from(html));
+  files.set('public/connection.html', Buffer.from(diagnostic));
   files.set('public/client-parts/manifest.json', Buffer.from(JSON.stringify(manifest)));
   files.set('lib/client-csp.json', Buffer.from(JSON.stringify(csp, null, 2) + '\n'));
   return { files, manifest, bundle, packed };

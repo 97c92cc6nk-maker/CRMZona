@@ -1,6 +1,7 @@
 {
   "scripts": [
-    "'sha256-lK15ebDT/rX5PKcoCtLlBohv7jPvtbZicXa/XCTLyPA='",
+    "'sha256-9wO2qoRtKyqhwfBuinnu0pvXuv03Qv8+qa1ISI/2JyY='",
+    "'sha256-cVHSiOOFfmI0Konsro8N0oVmZ0iIZuSzlpnZ6dx6u+k='",
     "'sha256-Y18+0DihKgOonajJCRbIEY8U0MsUoxkEWU1hD6Zlfbg='",
     "'sha256-wcjFAoinLarokc4+k/P4myqnQwLte1QFoseEctUzuBQ='",
     "'sha256-vCw4Btp5sfI1nC3Adwa/U0JgtBFc/Xw9NdB3OSlEy+k='",
@@ -8,6 +9,7 @@
   ],
   "styles": [
     "'sha256-hygT07er1N1XnDWITgcC3XVjUtaM3hA9bdU1Ro4ZQz4='",
+    "'sha256-YLa7gRFqGiOOIiV+STHdefjNBtyDWOUNXDhA8bi382E='",
     "'sha256-ZMARb1pKLU/JLkn5YfNxNU59akijS8mC0jJUXYaYb64='",
     "'sha256-Ie4ujsMBRt2ixOWZB8+5WV3memkObn8ZvMfe8IevVnk='"
   ]

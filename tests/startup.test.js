@@ -65,11 +65,12 @@ test('entry HTML renders fallback before assets; forms are inert until initializ
 
 test('all inline bootstrap and diagnostic code is explicitly allowed by CSP', () => {
   const server = read('lib/app.js');
+  const generatedCsp = JSON.parse(read('lib/client-csp.json'));
   for (const file of ['public/index.html', 'public/connection.html']) {
     for (const match of read(file).matchAll(/<(style|script)(?: [^>]*)?>([\s\S]*?)<\/\1>/g)) {
       if (!match[2]) continue;
       const hash = crypto.createHash('sha256').update(match[2].replace(/\r\n/g, '\n')).digest('base64');
-      assert.ok(server.includes(`'sha256-${hash}'`), `Missing CSP hash for ${file} ${match[1]}`);
+      assert.ok(server.includes(`'sha256-${hash}'`) || [...generatedCsp.scripts, ...generatedCsp.styles].includes(`'sha256-${hash}'`), `Missing CSP hash for ${file} ${match[1]}`);
     }
   }
   assert.ok(Buffer.byteLength(read('public/connection.html')) < 8192);
