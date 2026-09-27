@@ -8,6 +8,28 @@ const { build } = require('../scripts/build-client');
 const handler = require('../api/client-part');
 const generated = build();
 
+test('server entry delivers the exact small shell with a complete length and optional gzip', async (t) => {
+  const server = http.createServer(require('../api/client-entry'));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); return new Promise((resolve) => server.close(resolve)); });
+  const base = `http://127.0.0.1:${server.address().port}/`;
+  for (const [encoding, compressed] of [['gzip, br', true], ['identity', false], ['gzip;q=0, br', false]]) {
+    const response = await fetch(base, { headers: { 'Accept-Encoding': encoding } });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store, no-transform');
+    assert.equal(response.headers.get('content-encoding'), compressed ? 'gzip' : null);
+    const bytes = generated.files.get('public/stable.html');
+    assert.equal(response.headers.get('content-length'), String(compressed ? require('node:zlib').gzipSync(bytes).length : bytes.length));
+    assert.equal(await response.text(), bytes.toString());
+  }
+  const head = await fetch(base, { method: 'HEAD' });
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), '');
+  const post = await fetch(base, { method: 'POST' });
+  assert.equal(post.status, 405);
+  assert.equal(await post.text(), 'METHOD_NOT_ALLOWED');
+});
+
 test('standalone public delivery returns exact bounded slices without database or authentication', async (t) => {
   const server = http.createServer(handler);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));

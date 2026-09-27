@@ -37,7 +37,9 @@ failed JavaScript, a stalled API response body, and a normal authenticated sessi
 
 `/`, `/index.html` and `/stable.html` all serve the resilient entry point, using
 the same authentication, API and database. Both Vercel routes and the local Node
-server map these addresses to `public/stable.html`. The main address no longer
+server deliver the generated `public/stable.html` contents through the lightweight
+`client-entry` handler, with explicit length, no-store/no-transform and gzip when
+accepted. It requires no database or authentication. The main address no longer
 requests `/styles.css` or the other large assets individually. `public/index.html`
 remains the build's markup source; do not replace it with the generated shell.
 The connection diagnostic tests this delivery path, not obsolete large assets.
@@ -71,7 +73,8 @@ browser with DecompressionStream and Web Crypto is required.
 
 When editing any frontend source, run `npm run build:client` and commit the generated
 `public/stable.html`, `public/connection.html`, `public/client-parts/*` and
-`lib/client-csp.json` and `lib/client-delivery.json` alongside it. Edit diagnostics in `client/connection.html`;
+`lib/client-csp.json`, `lib/client-entry.json` and `lib/client-delivery.json`
+alongside it. Edit diagnostics in `client/connection.html`;
 its manifest, entry size and CSP hashes are generated with the rest of the client.
 The legacy Vercel static builder serves these committed artifacts. `npm test`
 verifies that they match the source, including normalized line endings. The build

@@ -45,11 +45,15 @@
     },
     {
       "src": "/",
-      "dest": "/public/stable.html"
+      "dest": "/api/client-entry.js"
     },
     {
       "src": "/index\\.html",
-      "dest": "/public/stable.html"
+      "dest": "/api/client-entry.js"
+    },
+    {
+      "src": "/stable\\.html",
+      "dest": "/api/client-entry.js"
     },
     {
       "src": "/(.*)",

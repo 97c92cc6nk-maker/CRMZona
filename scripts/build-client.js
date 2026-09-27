@@ -43,6 +43,7 @@ function build() {
     styles: [shellStyle, diagnostic.match(/<style>([\s\S]*?)<\/style>/)[1], ...bundle.styles].map((value) => "'sha256-" + hash(value, 'base64') + "'"),
   };
   files.set('public/stable.html', Buffer.from(html));
+  files.set('lib/client-entry.json', Buffer.from(JSON.stringify(html) + '\n'));
   files.set('public/connection.html', Buffer.from(diagnostic));
   files.set('public/client-parts/manifest.json', Buffer.from(JSON.stringify(manifest)));
   files.set('lib/client-csp.json', Buffer.from(JSON.stringify(csp, null, 2) + '\n'));

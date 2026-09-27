@@ -18,7 +18,7 @@ test('production entry routes use small-part delivery, preserving API and diagno
     return url.replace(new RegExp('^(?:' + route.src + ')$'), route.dest);
   };
   for (const entry of ['/', '/index.html', '/stable.html']) {
-    assert.equal(resolve(entry), '/public/stable.html');
+    assert.equal(resolve(entry), '/api/client-entry.js');
   }
   assert.equal(resolve('/api/health'), '/api/health.js');
   assert.equal(resolve('/api/me'), '/api/index.js');
