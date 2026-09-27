@@ -1,0 +1,16 @@
+**
+!package.json
+!package-lock.json
+!Dockerfile
+!lib/
+!lib/**
+!public/
+!public/**
+!client/
+!client/**
+!scripts/
+!scripts/**
+**/.env
+**/*.env
+**/*.log
+**/node_modules
