@@ -1,0 +1,66 @@
+#surveillanceView { align-content: start; gap: 14px; }
+#surveillanceNotice:empty { display: none; }
+#surveillanceView > .table-wrap { max-height: 270px; margin: 0; }
+.surveillance-table th { position: sticky; top: 0; z-index: 1; }
+.topbar > .brand.compact { min-width: 0; }
+.topbar > .brand.compact p { white-space: normal; overflow-wrap: anywhere; }
+.surveillance-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; margin: 4px 0; }
+.surveillance-toolbar > label { flex: 1 1 210px; min-width: 0; }
+.surveillance-toolbar > .check-row { flex: 0 0 auto; padding-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.surveillance-toolbar input[type="checkbox"], .surveillance-point-options input[type="checkbox"], .camera-config-row input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; flex: 0 0 18px; accent-color: var(--accent); }
+.surveillance-point-picker { position: relative; flex: 1 1 250px; min-width: 0; }
+.surveillance-point-picker summary { cursor: pointer; background: white; border: 1px solid var(--line); border-radius: 6px; padding: 11px 12px; min-height: 44px; font-size: 14px; }
+.surveillance-point-options { position: absolute; z-index: 12; top: calc(100% + 6px); left: 0; width: max(100%, 300px); max-width: calc(100vw - 48px); padding: 14px; border: 1px solid var(--line); border-radius: 6px; background: white; box-shadow: var(--shadow); }
+.surveillance-picker-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+#surveillancePoints { max-height: 280px; overflow-y: auto; margin-top: 10px; }
+#surveillancePoints label { display: flex; align-items: center; gap: 8px; padding: 8px 0; overflow-wrap: anywhere; }
+.surveillance-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-block: 1px solid var(--line); padding: 18px 0; margin: 4px 0; gap: 16px; }
+.surveillance-metric { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.surveillance-metric strong { font-size: 28px; line-height: 1; font-weight: 650; }
+.surveillance-metric-offline strong { color: #a6272d; }
+.surveillance-metric-online strong { color: #267047; }
+.surveillance-metric-unknown strong { color: #93620b; }
+.surveillance-monitoring-state { font-size: 12px; color: var(--muted); margin: 0; }
+.surveillance-table { width: 100%; min-width: 750px; }
+.surveillance-table tr[data-status="offline"] td { background: #fff0f1; }
+.surveillance-table th, .surveillance-table td { white-space: normal; }
+.surveillance-table .link-button { padding: 0; min-height: 28px; border: 0; background: none; color: var(--accent-strong); text-decoration: underline; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.camera-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; line-height: 1.35; }
+.camera-status::before { content: ''; display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; background: currentColor; }
+.camera-status-online { color: #267047; }
+.camera-status-offline { color: #a6272d; }
+.camera-status-unknown { color: #93620b; }
+.camera-status-unconfigured { color: #66736f; }
+.surveillance-camera-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 4px; }
+.surveillance-camera { border: 1px solid var(--line); border-radius: 6px; background: white; overflow: hidden; min-width: 0; }
+.surveillance-camera header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 12px; min-height: 65px; }
+.surveillance-camera h3 { font-size: 14px; line-height: 1.45; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+.surveillance-frame { display: flex; position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 0; padding: 0; align-items: center; justify-content: center; background: #eef1f3; color: #46535b; overflow: hidden; white-space: normal; }
+.surveillance-frame:disabled { opacity: 1; cursor: default; }
+.surveillance-frame > span { padding: 24px; font-size: 13px; line-height: 1.5; }
+.surveillance-frame img { width: 100%; height: 100%; object-fit: contain; position: absolute; inset: 0; }
+.surveillance-frame > .surveillance-old-frame { position: absolute; bottom: 0; inset-inline: 0; padding: 6px; background: #fffffff0; color: #a6272d; }
+.surveillance-camera footer { min-height: 54px; display: grid; gap: 3px; padding: 10px 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.camera-failure-reason { color: #a6272d; }
+.surveillance-dialog { width: min(1100px, calc(100vw - 24px)); max-height: calc(100vh - 24px); border: 1px solid var(--line); border-radius: 6px; padding: 20px; }
+.surveillance-dialog::backdrop { background: #172022aa; }
+.surveillance-dialog form { display: flex; justify-content: end; }
+.surveillance-dialog form button { font-size: 24px; min-width: 40px; padding: 0; }
+.surveillance-dialog h3 { margin: 12px 0; font-size: 16px; overflow-wrap: anywhere; }
+.surveillance-dialog img { width: 100%; max-height: 70vh; object-fit: contain; }
+.surveillance-dialog p { font-size: 12px; color: var(--muted); }
+#retailPointCameraSettings[hidden] { display: none; }
+#retailPointCameraSettings { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+#retailPointCameraSettings h4 { margin: 0 0 12px; font-size: 14px; }
+.camera-config-row { display: grid; grid-template-columns: 110px minmax(150px, 1fr) minmax(220px, 2fr); align-items: center; gap: 12px; margin-bottom: 14px; }
+.camera-config-row .check-row { display: flex; align-items: center; gap: 8px; }
+.camera-config-row label { min-width: 0; }
+@media (max-width: 1100px) { .surveillance-camera-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 650px) {
+  .surveillance-camera-grid { grid-template-columns: minmax(0, 1fr); }
+  .surveillance-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; }
+  .surveillance-metric { align-items: start; }
+  .surveillance-toolbar > label, .surveillance-point-picker { flex-basis: 100%; }
+  .camera-config-row { grid-template-columns: minmax(0, 1fr); gap: 8px; padding-block: 12px; border-bottom: 1px solid var(--line); }
+  #surveillanceView .section-head { flex-wrap: wrap; gap: 10px; }
+}

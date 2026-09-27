@@ -551,6 +551,7 @@ async function loadAppData() {
 }
 
 function showAuth() {
+  surveillanceUI.reset();
   printFormsUI.reset();
   els.authScreen.classList.remove('is-hidden');
   els.appShell.classList.add('is-hidden');
@@ -789,6 +790,7 @@ async function handleAssistantSubmit(event) {
 }
 
 function activateView(viewId) {
+  surveillanceUI.pause();
   document.querySelectorAll('.tab').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.view === viewId);
   });
@@ -800,6 +802,7 @@ function activateView(viewId) {
 
 function refreshViewData(viewId) {
   if (viewId === 'printFormsView') printFormsUI.load();
+  if (viewId === 'surveillanceView') surveillanceUI.load();
   if (viewId === 'retailPointsView') {
     loadRetailPoints();
   }
@@ -834,6 +837,7 @@ function renderProfile() {
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('reportsView', Boolean(state.permissions.canViewReports));
   setTabVisibility('printFormsView', Boolean(state.permissions.canViewPrintForms));
+  setTabVisibility('surveillanceView', Boolean(state.permissions.canViewSurveillance));
   setTabVisibility('tasksView', Boolean(state.permissions.canViewTasks));
   setTabVisibility('requestsView', Boolean(state.permissions.canViewRequests));
   setTabVisibility('developmentView', Boolean(state.permissions.canViewDevelopment));
@@ -1150,6 +1154,7 @@ function renderRetailPointCard() {
   const editable = Boolean(state.permissions.canManageRetailPoints);
   setRetailPointCardEditable(editable);
   renderRetailPointDocuments(point.documents || [], editable);
+  surveillanceUI.loadConfig(point.id, editable);
 }
 
 function fillRetailPointPaymentOptions() {

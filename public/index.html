@@ -6,6 +6,7 @@
     <title>CRMZona App</title>
     <link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/surveillance.css">
   </head>
   <body>
     <main class="auth-screen" id="authScreen">
@@ -108,6 +109,7 @@
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="reportsView">Отчеты</button>
           <button class="tab is-hidden" type="button" data-view="printFormsView">Печатные формы</button>
+          <button class="tab is-hidden" type="button" data-view="surveillanceView">Видеонаблюдение</button>
           <button class="tab" type="button" data-view="tasksView">Задачи</button>
           <button class="tab" type="button" data-view="requestsView">Заявки</button>
           <button class="tab" type="button" data-view="developmentView">Разработка</button>
@@ -448,6 +450,40 @@
         <div class="notice" id="employeesNotice" role="status" aria-live="polite"></div>
       </section>
 
+      <section class="view" id="surveillanceView" aria-labelledby="surveillanceTitle">
+        <div class="section-head">
+          <h2 id="surveillanceTitle">Видеонаблюдение</h2>
+          <button class="secondary" type="button" id="refreshSurveillance">Проверить камеры</button>
+        </div>
+        <div class="surveillance-toolbar">
+          <label>Курирующий администратор<select id="surveillanceAdmin"><option value="">Все администраторы</option></select></label>
+          <details class="surveillance-point-picker" id="surveillancePointPicker">
+            <summary id="surveillancePointSummary">Торговые точки</summary>
+            <div class="surveillance-point-options">
+              <div class="surveillance-picker-actions"><button type="button" class="secondary" id="surveillanceSelectAll">Все</button><button type="button" class="secondary" id="surveillanceSelectNone">Снять выбор</button></div>
+              <input type="search" id="surveillancePointSearch" aria-label="Поиск торговой точки" placeholder="Название точки">
+              <div id="surveillancePoints"></div>
+            </div>
+          </details>
+          <label>Состояние<select id="surveillanceStatus"><option value="">Все состояния</option><option value="offline">Есть недоступные камеры</option><option value="online">Все камеры доступны</option><option value="unknown">Не проверено</option><option value="unconfigured">Нет RTSP</option></select></label>
+          <label class="check-row"><input type="checkbox" id="surveillanceAuto" checked>Автообновление</label>
+        </div>
+        <div class="surveillance-summary" id="surveillanceSummary" aria-live="polite"></div>
+        <div class="notice" id="surveillanceNotice" role="status" aria-live="polite"></div>
+        <p class="surveillance-monitoring-state" id="surveillanceMonitoringState"></p>
+        <div class="table-wrap">
+          <table class="surveillance-table">
+            <thead><tr><th>Торговая точка</th><th>Администратор</th><th>Оператор</th><th>Камеры</th><th>Состояние</th><th>Проверено</th></tr></thead>
+            <tbody id="surveillanceBody"></tbody>
+          </table>
+        </div>
+        <div class="surveillance-camera-grid" id="surveillanceCameraGrid"></div>
+        <dialog class="surveillance-dialog" id="surveillanceImageDialog">
+          <form method="dialog"><button class="secondary" aria-label="Закрыть изображение" title="Закрыть" type="submit">×</button></form>
+          <h3 id="surveillanceImageTitle"></h3><img id="surveillanceLargeImage" alt="Изображение с камеры"><p id="surveillanceImageTime"></p>
+        </dialog>
+      </section>
+
       <section class="view" id="printFormsView" aria-labelledby="printFormsTitle">
         <div class="section-head">
           <h2 id="printFormsTitle">Печатные формы</h2>
@@ -554,6 +590,12 @@
                 <label>Тариф<input name="video.tariff" type="text" maxlength="160"></label>
                 <label>Логин<input name="video.login" type="text" maxlength="160"></label>
                 <label>Пароль<input name="video.password" type="text" maxlength="160"></label>
+              </div>
+              <div id="retailPointCameraSettings" hidden>
+                <h4>RTSP-камеры</h4>
+                <div id="retailPointCameraInputs"></div>
+                <div class="notice" id="retailPointCameraNotice" role="status" aria-live="polite"></div>
+                <button class="secondary" type="button" id="saveRetailPointCameras">Сохранить камеры</button>
               </div>
             </fieldset>
 
@@ -1328,5 +1370,6 @@
     <script src="/print-forms-model.js" defer></script>
     <script src="/app.js" defer></script>
     <script src="/print-forms.js" defer></script>
+    <script src="/surveillance.js" defer></script>
   </body>
 </html>
