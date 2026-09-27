@@ -62,6 +62,10 @@ async function main() {
       assert.equal(await response.text(), entryHtml);
     }
     await assert.rejects(() => jsonFetch(`${baseUrl}/api/me`), /401/);
+    const partName = Object.keys(require('../lib/client-delivery.json'))[0];
+    const part = await fetch(`${baseUrl}/api/client-part?name=${partName}&offset=0`);
+    assert.equal(part.status, 200);
+    assert.equal((await part.arrayBuffer()).byteLength, 2048);
 
     const captcha = await jsonFetch(`${baseUrl}/api/captcha`);
     const registration = await jsonFetch(`${baseUrl}/api/register`, {

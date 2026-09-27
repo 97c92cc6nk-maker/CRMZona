@@ -20,6 +20,10 @@
       "dest": "/api/health.js"
     },
     {
+      "src": "/api/client-part",
+      "dest": "/api/client-part.js"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/index.js"
     },

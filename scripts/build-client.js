@@ -20,12 +20,14 @@ function build() {
   const packed = zlib.gzipSync(Buffer.from(json), { level: 9 });
   const manifest = { hash: hash(packed), size: Buffer.byteLength(json), parts: [] };
   const files = new Map();
+  const delivery = {};
   for (let offset = 0; offset < packed.length; offset += 6144) {
     const bytes = packed.subarray(offset, offset + 6144);
     const checksum = hash(bytes);
     const name = 'part-' + manifest.parts.length + '-' + checksum.slice(0, 12) + '.bin';
     manifest.parts.push([name, bytes.length, checksum]);
     files.set('public/client-parts/' + name, bytes);
+    delivery[name] = bytes.toString('base64');
   }
   const loader = read('client/reliable-loader.js');
   const shell = read('client/reliable-shell.html');
@@ -44,6 +46,7 @@ function build() {
   files.set('public/connection.html', Buffer.from(diagnostic));
   files.set('public/client-parts/manifest.json', Buffer.from(JSON.stringify(manifest)));
   files.set('lib/client-csp.json', Buffer.from(JSON.stringify(csp, null, 2) + '\n'));
+  files.set('lib/client-delivery.json', Buffer.from(JSON.stringify(delivery) + '\n'));
   return { files, manifest, bundle, packed };
 }
 

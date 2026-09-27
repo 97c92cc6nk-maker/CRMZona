@@ -10,6 +10,7 @@
   <h1>Проверка соединения</h1>
   <p id="context">CRMZona App</p>
   <p id="previous" hidden></p>
+  <p><label>Маршрут <select id="transport"><option value="api">Серверный API</option><option value="cdn">Статические файлы</option></select></label></p>
   <p id="status" role="status">Проверка запускается…</p>
   <table>
     <thead><tr><th>Ресурс</th><th>Результат</th><th>Получено</th></tr></thead>
@@ -23,13 +24,15 @@
   (() => {
     const byId = (id) => document.getElementById(id);
     const parts = [["part-0-f9caa7632610.bin",6144,"f9caa76326100b3ed81ff72447a342579a29b732dbe2192065d862fae47af574"],["part-1-adc9215fcce1.bin",6144,"adc9215fcce1a3073a441ab17cd7cfadcc6bbb4b7072ff4e7fc1e43f01b87961"],["part-2-51e584b0cbc5.bin",6144,"51e584b0cbc577f343fd148de094646b695041407590f68502d34ad7e7ed54c8"],["part-3-38d99b5dc471.bin",6144,"38d99b5dc471ce4f2ade7335c6ecf1672a3e343c6ac10666aba0095a42b0cb1d"],["part-4-9536a681fc44.bin",6144,"9536a681fc44e376a44fa0fb54133b8ac2d4408337ee6eb42c6d40bb64a5e481"],["part-5-aafd3db16d4c.bin",6144,"aafd3db16d4c181fb5778d8147039ec5d6e5d3fcecb777c0ca722c5d8a3ff926"],["part-6-5bc1858b2d85.bin",6144,"5bc1858b2d8517020628ececb3f3157f5105539a43feaf80d036385b468ca890"],["part-7-1bd237f1c43f.bin",6144,"1bd237f1c43f4c15e79a65d3477406f5afe589a797e5facd8f140c089db8fe26"],["part-8-a67340a1bbb6.bin",6144,"a67340a1bbb6b3e4213ff642ef3ae813b4f80f22c7332c57fe74bbf54f945bb9"],["part-9-a3efd373cb57.bin",6144,"a3efd373cb57050cae3a4a30d57b1e2142dc30c093ad6676419739ae8dbdb2fd"],["part-10-e90e8f5ba028.bin",6144,"e90e8f5ba028dd88d0d88f347d79f169040f13d6795d285b281a26234828ca93"],["part-11-bcb31b5125ed.bin",6144,"bcb31b5125ede0c7a0d6669536d5d944cce21f832fbf6ad4c5e94dd724dc6fc2"],["part-12-53136175158b.bin",6144,"53136175158bf8ce6211b584173cea2fe53b4f83300a0c70234125a7f90921ef"],["part-13-763e26ef00ee.bin",6144,"763e26ef00eebdcf2c83a5f6b5bb67036f0d23b20c9a11ee3555a80e6e6ad9c2"],["part-14-fc65f145ae37.bin",1713,"fc65f145ae37b3bf6d511bf65adec38b39f7d6c563600d9e072f20ce19955ae7"]];
-    const resources = [['/', 9085, ''], ...parts.map(([name, size, hash]) => ['/client-parts/' + name, size, hash])];
     try {
       const previous = sessionStorage.getItem('crm.loadFailure');
       if (previous) { byId('previous').textContent = 'Последний сбой: ' + previous; byId('previous').hidden = false; }
     } catch {}
     async function run() {
       byId('retry').disabled = true;
+      const api = byId('transport').value === 'api';
+      byId('transport').disabled = true;
+      const resources = [['/', 9832, ''], ...parts.map(([name, size, hash]) => [api ? '/api/client-part?name=' + name : '/client-parts/' + name, size, hash])];
       byId('checks').replaceChildren();
       byId('context').textContent = location.host + ' · ' + new Date().toLocaleString('ru-RU');
       byId('status').textContent = 'Проверяем загрузку…';
@@ -40,22 +43,27 @@
           const cell = document.createElement('td'); cell.textContent = text; row.append(cell); return cell;
         });
         byId('checks').append(row);
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
+        let controller, timer;
         const start = performance.now();
         let offset = 0, http = '';
         try {
-          const response = await fetch(path, { cache: 'reload', credentials: 'omit', signal: controller.signal });
-          http = 'HTTP ' + response.status;
-          if (!response.ok) throw new Error(http);
-          const reader = response.body.getReader(), bytes = new Uint8Array(size);
-          while (offset < size) {
-            const { value, done } = await reader.read();
-            if (done || offset + value.length > size) throw new Error('Неполный или изменённый файл');
-            bytes.set(value, offset); offset += value.length;
-            cells[2].textContent = offset + ' / ' + size + ' байт';
+          const bytes = new Uint8Array(size), viaApi = api && expected;
+          const step = viaApi ? 2048 : size;
+          for (let start = 0; start < size; start += step) {
+            controller = new AbortController();
+            timer = setTimeout(() => controller.abort(), 15000);
+            const response = await fetch(path + (viaApi ? '&offset=' + start : ''), { cache: 'no-store', credentials: 'omit', signal: controller.signal });
+            http = 'HTTP ' + response.status;
+            if (!response.ok) throw new Error(http);
+            const reader = response.body.getReader(), end = Math.min(start + step, size);
+            while (offset < end) {
+              const { value, done } = await reader.read();
+              if (done || offset + value.length > end) throw new Error('Неполный или изменённый файл');
+              bytes.set(value, offset); offset += value.length;
+              cells[2].textContent = offset + ' / ' + size + ' байт';
+            }
+            controller.abort(); clearTimeout(timer);
           }
-          controller.abort(); clearTimeout(timer);
           if (expected) {
             const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (b) => b.toString(16).padStart(2, '0')).join('');
             if (digest !== expected) throw new Error('CHECKSUM');
@@ -66,10 +74,11 @@
           failures++;
           cells[1].className = 'failed';
           cells[1].textContent = (http ? http + ', ' : '') + (error.name === 'AbortError' ? 'не получено за 15 с' : error.message);
-        } finally { clearTimeout(timer); controller.abort(); }
+        } finally { clearTimeout(timer); controller?.abort(); }
       }
       byId('status').textContent = failures ? 'Ошибок загрузки: ' + failures + '. Отправьте снимок результатов с названием провайдера.' : 'Все фрагменты получены и проверены.';
       byId('retry').disabled = false;
+      byId('transport').disabled = false;
     }
     byId('retry').addEventListener('click', run);
     run();

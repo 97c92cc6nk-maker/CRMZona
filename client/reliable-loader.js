@@ -11,6 +11,7 @@
   let saved = {};
   try { saved = JSON.parse(sessionStorage.getItem('crm.client') || '{}'); } catch { cacheAvailable = false; }
   if (!saved || saved.hash !== manifest.hash || !saved.parts || typeof saved.parts !== 'object') saved = { hash: manifest.hash, parts: {} };
+  let preferApi = saved.api === true;
   window.crmResilientLoading = true;
   window.crmStartup = { fail(code) {
     failed = true;
@@ -24,6 +25,28 @@
   window.addEventListener('error', onError);
   const hash = async (bytes) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (b) => b.toString(16).padStart(2, '0')).join('');
 
+  async function read(url, size, source) {
+    const controller = new AbortController();
+    active.add(controller);
+    let timedOut = false, offset = 0, http = '';
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 12000);
+    try {
+      const response = await fetch(url, { credentials: 'omit', cache: source === 'API' ? 'no-store' : 'default', signal: controller.signal });
+      http = 'HTTP ' + response.status + ', ';
+      if (!response.ok) throw new Error('HTTP_' + response.status);
+      const reader = response.body.getReader(), bytes = new Uint8Array(size);
+      // A verified byte count avoids waiting for a delayed HTTP EOF.
+      while (offset < size) {
+        const { value, done } = await reader.read();
+        if (done || offset + value.length > size) throw new Error('INCOMPLETE');
+        bytes.set(value, offset); offset += value.length;
+      }
+      return bytes;
+    } catch (error) {
+      throw new Error(source + ': ' + http + offset + '/' + size + ' байт, ' + (timedOut ? 'TIMEOUT' : error.message));
+    } finally { clearTimeout(timer); controller.abort(); active.delete(controller); }
+  }
+
   async function part(entry, number) {
     try {
       const cached = saved.parts[entry[0]];
@@ -32,38 +55,35 @@
         if (bytes.length === entry[1] && await hash(bytes) === entry[2]) return bytes;
       }
     } catch {}
+    const apiFirst = preferApi;
     for (let attempt = 0; attempt < 3; attempt++) {
       if (failed) throw new Error('STOPPED');
-      const controller = new AbortController();
-      active.add(controller);
-      let timedOut = false, offset = 0, http = '';
-      const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 12000);
+      const useApi = attempt === 0 ? apiFirst : (attempt === 1 ? !apiFirst : true);
       try {
-        const url = '/client-parts/' + entry[0] + (attempt ? '?retry=' + attempt : '');
-        const response = await fetch(url, { credentials: 'omit', cache: attempt ? 'reload' : 'default', signal: controller.signal });
-        http = 'HTTP ' + response.status + ', ';
-        if (!response.ok) throw new Error('HTTP_' + response.status);
-        const reader = response.body.getReader();
-        const bytes = new Uint8Array(entry[1]);
-        // The verified byte count, not a delayed HTTP EOF, determines completion.
-        while (offset < bytes.length) {
-          const { value, done } = await reader.read();
-          if (done || offset + value.length > bytes.length) throw new Error('INCOMPLETE');
-          bytes.set(value, offset); offset += value.length;
+        let bytes;
+        if (useApi) {
+          bytes = new Uint8Array(entry[1]);
+          for (let offset = 0; offset < bytes.length; offset += 2048) {
+            if (failed) throw new Error('STOPPED');
+            const url = '/api/client-part?name=' + encodeURIComponent(entry[0]) + '&offset=' + offset;
+            bytes.set(await read(url, Math.min(2048, bytes.length - offset), 'API'), offset);
+          }
+        } else {
+          bytes = await read('/client-parts/' + entry[0], entry[1], 'CDN');
         }
-        controller.abort();
         if (await hash(bytes) !== entry[2]) throw new Error('CHECKSUM');
+        preferApi = saved.api = useApi;
         saved.parts[entry[0]] = btoa(String.fromCharCode(...bytes));
         try { sessionStorage.setItem('crm.client', JSON.stringify(saved)); cacheAvailable = true; } catch { cacheAvailable = false; }
         return bytes;
       } catch (error) {
         if (failed) throw new Error('STOPPED');
-        lastFailure = 'Фрагмент ' + (number + 1) + ': ' + http + offset + '/' + entry[1] + ' байт, ' + (timedOut ? 'TIMEOUT' : error.message) + '.';
+        lastFailure = 'Фрагмент ' + (number + 1) + ': ' + error.message + '.';
         console.warn('[CRM download]', lastFailure, 'attempt', attempt + 1);
         if (attempt === 2) throw new Error('PART_' + (number + 1));
-        detail.textContent = 'Повторяем загрузку фрагмента ' + (number + 1) + '…';
+        detail.textContent = 'Повторяем фрагмент ' + (number + 1) + ' через ' + (useApi && apiFirst && attempt === 0 ? 'CDN' : 'API') + '…';
         await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 300));
-      } finally { clearTimeout(timer); controller.abort(); active.delete(controller); }
+      }
     }
   }
 

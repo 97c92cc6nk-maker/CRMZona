@@ -10,6 +10,7 @@
   <h1>Проверка соединения</h1>
   <p id="context">CRMZona App</p>
   <p id="previous" hidden></p>
+  <p><label>Маршрут <select id="transport"><option value="api">Серверный API</option><option value="cdn">Статические файлы</option></select></label></p>
   <p id="status" role="status">Проверка запускается…</p>
   <table>
     <thead><tr><th>Ресурс</th><th>Результат</th><th>Получено</th></tr></thead>
@@ -23,13 +24,15 @@
   (() => {
     const byId = (id) => document.getElementById(id);
     const parts = __CLIENT_PARTS__;
-    const resources = [['/', __ENTRY_SIZE__, ''], ...parts.map(([name, size, hash]) => ['/client-parts/' + name, size, hash])];
     try {
       const previous = sessionStorage.getItem('crm.loadFailure');
       if (previous) { byId('previous').textContent = 'Последний сбой: ' + previous; byId('previous').hidden = false; }
     } catch {}
     async function run() {
       byId('retry').disabled = true;
+      const api = byId('transport').value === 'api';
+      byId('transport').disabled = true;
+      const resources = [['/', __ENTRY_SIZE__, ''], ...parts.map(([name, size, hash]) => [api ? '/api/client-part?name=' + name : '/client-parts/' + name, size, hash])];
       byId('checks').replaceChildren();
       byId('context').textContent = location.host + ' · ' + new Date().toLocaleString('ru-RU');
       byId('status').textContent = 'Проверяем загрузку…';
@@ -40,22 +43,27 @@
           const cell = document.createElement('td'); cell.textContent = text; row.append(cell); return cell;
         });
         byId('checks').append(row);
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
+        let controller, timer;
         const start = performance.now();
         let offset = 0, http = '';
         try {
-          const response = await fetch(path, { cache: 'reload', credentials: 'omit', signal: controller.signal });
-          http = 'HTTP ' + response.status;
-          if (!response.ok) throw new Error(http);
-          const reader = response.body.getReader(), bytes = new Uint8Array(size);
-          while (offset < size) {
-            const { value, done } = await reader.read();
-            if (done || offset + value.length > size) throw new Error('Неполный или изменённый файл');
-            bytes.set(value, offset); offset += value.length;
-            cells[2].textContent = offset + ' / ' + size + ' байт';
+          const bytes = new Uint8Array(size), viaApi = api && expected;
+          const step = viaApi ? 2048 : size;
+          for (let start = 0; start < size; start += step) {
+            controller = new AbortController();
+            timer = setTimeout(() => controller.abort(), 15000);
+            const response = await fetch(path + (viaApi ? '&offset=' + start : ''), { cache: 'no-store', credentials: 'omit', signal: controller.signal });
+            http = 'HTTP ' + response.status;
+            if (!response.ok) throw new Error(http);
+            const reader = response.body.getReader(), end = Math.min(start + step, size);
+            while (offset < end) {
+              const { value, done } = await reader.read();
+              if (done || offset + value.length > end) throw new Error('Неполный или изменённый файл');
+              bytes.set(value, offset); offset += value.length;
+              cells[2].textContent = offset + ' / ' + size + ' байт';
+            }
+            controller.abort(); clearTimeout(timer);
           }
-          controller.abort(); clearTimeout(timer);
           if (expected) {
             const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (b) => b.toString(16).padStart(2, '0')).join('');
             if (digest !== expected) throw new Error('CHECKSUM');
@@ -66,10 +74,11 @@
           failures++;
           cells[1].className = 'failed';
           cells[1].textContent = (http ? http + ', ' : '') + (error.name === 'AbortError' ? 'не получено за 15 с' : error.message);
-        } finally { clearTimeout(timer); controller.abort(); }
+        } finally { clearTimeout(timer); controller?.abort(); }
       }
       byId('status').textContent = failures ? 'Ошибок загрузки: ' + failures + '. Отправьте снимок результатов с названием провайдера.' : 'Все фрагменты получены и проверены.';
       byId('retry').disabled = false;
+      byId('transport').disabled = false;
     }
     byId('retry').addEventListener('click', run);
     run();

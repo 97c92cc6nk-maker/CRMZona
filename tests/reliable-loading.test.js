@@ -22,6 +22,7 @@ test('production entry routes use small-part delivery, preserving API and diagno
   }
   assert.equal(resolve('/api/health'), '/api/health.js');
   assert.equal(resolve('/api/me'), '/api/index.js');
+  assert.equal(resolve('/api/client-part'), '/api/client-part.js');
   assert.equal(resolve('/connection.html'), '/public/connection.html');
   for (const [name] of generated.manifest.parts) {
     assert.equal(resolve('/client-parts/' + name), '/public/client-parts/' + name);
@@ -32,7 +33,8 @@ test('production entry routes use small-part delivery, preserving API and diagno
 });
 
 function setup({ missing = false, corrupt = false, retry = false, hang = false, initError = false,
-  storage = new Map(), blockedStorage = false, failFrom = Infinity, elapsedPerPart = 0 } = {}) {
+  storage = new Map(), blockedStorage = false, failFrom = Infinity, elapsedPerPart = 0,
+  staticFailFrom = Infinity, apiCorrupt = false, apiHang = false } = {}) {
   let elapsed = 0, inFlight = 0, maxInFlight = 0;
   const nodes = {
     clientManifest: { textContent: JSON.stringify(generated.manifest) },
@@ -51,7 +53,7 @@ function setup({ missing = false, corrupt = false, retry = false, hang = false, 
   };
   const window = { crypto: crypto.webcrypto, DecompressionStream: missing ? null : DecompressionStream, addEventListener() {}, removeEventListener() {} };
   const context = {
-    document, window, crypto: crypto.webcrypto, AbortController, TextEncoder, Blob, Response, DecompressionStream, Event, atob, btoa,
+    document, window, crypto: crypto.webcrypto, AbortController, TextEncoder, Blob, Response, DecompressionStream, Event, atob, btoa, encodeURIComponent,
     Date: class extends Date { static now() { return elapsed; } },
     sessionStorage: {
       getItem(key) { if (blockedStorage) throw new Error('Storage blocked'); return storage.get(key) || null; },
@@ -65,12 +67,20 @@ function setup({ missing = false, corrupt = false, retry = false, hang = false, 
       inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
       options.signal.addEventListener('abort', () => { inFlight--; }, { once: true });
       calls.push({ url, options });
-      const name = url.split('?')[0];
-      const bytes = generated.files.get('public' + name);
-      assert.ok(bytes, 'Only manifest files may be requested');
+      const parsed = new URL(url, 'https://crm.example');
+      const isApi = parsed.pathname === '/api/client-part';
+      const name = isApi ? parsed.searchParams.get('name') : parsed.pathname.split('/').pop();
+      const partBytes = generated.files.get('public/client-parts/' + name);
+      assert.ok(partBytes, 'Only manifest files may be requested');
+      const offset = isApi ? Number(parsed.searchParams.get('offset')) : 0;
+      const bytes = isApi ? partBytes.subarray(offset, offset + 2048) : partBytes;
+      if (isApi) assert.equal(options.cache, 'no-store');
       elapsed += elapsedPerPart;
-      if (corrupt) return new Response(Buffer.alloc(bytes.length, 1));
-      if (hang || Number(name.match(/part-(\d+)-/)[1]) >= failFrom || (retry && calls.length === 1)) {
+      if (!isApi && Number(name.match(/part-(\d+)-/)[1]) >= staticFailFrom) {
+        return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('Aborted'))));
+      }
+      if (corrupt || (apiCorrupt && isApi)) return new Response(Buffer.alloc(bytes.length, 1));
+      if (hang || (apiHang && isApi) || Number(name.match(/part-(\d+)-/)[1]) >= failFrom || (retry && calls.length === 1)) {
         return new Response(new ReadableStream({
           start(controller) {
             controller.enqueue(bytes.subarray(0, 100));
@@ -118,8 +128,7 @@ test('complete verified bodies load without waiting for HTTP EOF or DOMContentLo
 
 test('incomplete static part is retried; verified application executes exactly once', async () => {
   const app = setup({ retry: true }); await app.done;
-  assert.equal(app.calls.length, generated.manifest.parts.length + 1);
-  assert.equal(app.calls.filter(({ url }) => url.includes('?retry=1')).length, 1);
+  assert.ok(app.calls.some(({ url }) => url.startsWith('/api/client-part?')));
   assert.equal(app.scripts.length, 4);
   assert.equal(app.nodes.appRoot.hidden, false);
 });
@@ -131,8 +140,39 @@ test('persistent failure stops each worker after at most three reads and keeps l
   assert.equal(app.nodes.appRoot.inert, true);
   assert.equal(app.scripts.length, 0);
   assert.match(app.nodes.startupDetail.textContent, /PART_[12]/);
-  assert.match(app.nodes.startupDetail.textContent, /100\/6144/);
+  assert.match(app.nodes.startupDetail.textContent, /API:.*100\/2048/);
   assert.match(app.storage.get('crm.loadFailure'), /TIMEOUT/);
+});
+
+test('reported 8/15 failure resumes via bounded API slices without redownloading verified parts', async () => {
+  const parts = {};
+  for (const [name] of generated.manifest.parts.slice(0, 8)) {
+    parts[name] = generated.files.get('public/client-parts/' + name).toString('base64');
+  }
+  const storage = new Map([['crm.client', JSON.stringify({ hash: generated.manifest.hash, parts })]]);
+  const app = setup({ storage, staticFailFrom: 8 }); await app.done;
+  assert.equal(app.nodes.appRoot.hidden, false);
+  assert.deepEqual(app.scripts, generated.bundle.scripts);
+  assert.ok(app.calls.some(({ url }) => url.startsWith('/api/client-part?')));
+  for (const name of Object.keys(parts)) assert.ok(app.calls.every(({ url }) => !url.includes(name)));
+  assert.equal(app.maxInFlight(), 2);
+  assert.equal(JSON.parse(storage.get('crm.client')).api, true);
+});
+
+test('API fallback corruption or unavailability fails closed, without any user-data requests', async () => {
+  for (const options of [{ apiCorrupt: true }, { apiHang: true }]) {
+    const app = setup({ staticFailFrom: 0, ...options }); await app.done;
+    assert.equal(app.scripts.length, 0);
+    assert.equal(app.nodes.appRoot.inert, true);
+    assert.ok(app.calls.every(({ url, options }) => options.credentials === 'omit' && /^\/(client-parts\/|api\/client-part\?)/.test(url)));
+  }
+});
+
+test('a remembered API transport failure can recover through the static route', async () => {
+  const storage = new Map([['crm.client', JSON.stringify({ hash: generated.manifest.hash, parts: {}, api: true })]]);
+  const app = setup({ storage, apiHang: true }); await app.done;
+  assert.equal(app.nodes.appRoot.hidden, false);
+  assert.deepEqual(app.scripts, generated.bundle.scripts);
 });
 
 test('slow successful transfers are not cut off by the former two-minute global deadline', async () => {
@@ -180,6 +220,8 @@ test('connection diagnostics check actual bounded parts, with matching generated
   for (const [name] of generated.manifest.parts) assert.ok(html.includes(name));
   assert.ok(!html.includes('/styles.css'));
   assert.ok(html.includes('crm.loadFailure'));
+  assert.ok(html.includes('/api/client-part?name='));
+  assert.ok(html.includes('id="transport"'));
   assert.ok(html.includes(String(generated.files.get('public/stable.html').length)));
   for (const [, type, code] of html.matchAll(/<(style|script)>([\s\S]*?)<\/\1>/g)) {
     const digest = "'sha256-" + crypto.createHash('sha256').update(code).digest('base64') + "'";
