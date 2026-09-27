@@ -86,11 +86,19 @@ passing local Node test does not itself verify the Linux image build.
   keep the existing network restrictions. See `docs/gmail-mail.md`.
 - Gmail deployment `437582e` is Ready on Vercel with private Production variables
   (deployment `Aw6sK6CHB3hzBD8ueR2VLnApsnD7`). Timeweb saved the same configuration
-  and started deployment at 18:48; the build succeeded at 18:48:47, but activation
-  is still pending as of 18:56. Timeweb's public status page subsequently reported
-  degradation of App Platform in MSK-1: https://timeweb.cloud/live . Support was
-  informed of the activation delay in the existing ticket. Do not confuse a
-  successful build with active code; keep the old instance serving until healthy.
+  and started deployment at 18:48; the build succeeded at 18:48:47, but image
+  activation was delayed. Timeweb's status page reported App Platform MSK-1
+  degradation during the delay: https://timeweb.cloud/live . Support was informed
+  in the existing ticket. The image finished pulling at 19:09:13, passed its
+  healthcheck at 19:09:40 and deployment succeeded at 19:09:41 Moscow time.
+- Timeweb now reports `437582e` as the running version. At 19:14 Moscow,
+  `https://www.crmzona.net/health/ready` returned HTTP 200 with database available.
+  Saved mail settings were rechecked: `MAIL_TRANSPORT=gmail-api`, sender
+  `familycoex@gmail.com`, and Gmail credentials match the locally tested import.
+  The diagnostic email was sent from the workstation, not the production
+  container. Browser access to the server console failed, so a user-initiated
+  recovery after activation is still needed to confirm production delivery.
+  Do not reset a real user's password merely to test delivery.
 - Other server-side integrations still require live verification; database
   readiness alone does not confirm those services.
 
