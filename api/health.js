@@ -1,6 +1,7 @@
 'use strict';
 
 const { assistantStatus } = require('../lib/ai-assistant');
+const { binaryPath } = require('../lib/surveillance');
 
 module.exports = (req, res) => {
   const smtp = {
@@ -26,6 +27,7 @@ module.exports = (req, res) => {
     smtp,
     supabase,
     assistant: assistantStatus(),
+    surveillance: { mode: 'rtsp-snapshots', engineBundled: Boolean(binaryPath()) },
     at: new Date().toISOString(),
   }));
 };

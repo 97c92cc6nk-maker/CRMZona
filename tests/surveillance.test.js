@@ -72,6 +72,12 @@ test('FFmpeg binary executes and produces an actual JPEG', () => {
   assert.equal(result.stdout[0], 255); assert.equal(result.stdout[1], 216); assert.ok(result.stdout.length > 1000);
 });
 
+test('deployment health confirms the bundled decoder without exposing camera sources', () => {
+  let data;
+  require('../api/health')({}, { setHeader() {}, end(value) { data = JSON.parse(value); } });
+  assert.deepEqual(data.surveillance, { mode: 'rtsp-snapshots', engineBundled: true });
+});
+
 test('checks persist metadata, not images/secrets, and classify service failures separately', async () => {
   const records = new Map(), audit = [];
   const pointId = cryptoRandom();
