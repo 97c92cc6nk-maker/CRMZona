@@ -9,7 +9,10 @@ affected ISP. Vercel remains the rollback target. No database import is needed.
 - Repository: `97c92cc6nk-maker/CRMZona`, branch `main`.
 - Framework: Dockerfile, project directory: repository root.
 - Region: Moscow. Confirm the live panel price before ordering.
-- Dockerfile exposes port 8080; healthcheck path: `/health/live`.
+- Dockerfile exposes port 8080 and checks `/health/live` with Node.
+- Leave Timeweb's healthcheck-path field empty so its generated probe does not
+  replace the Dockerfile HEALTHCHECK. The platform override failed on this image;
+  the Dockerfile probe passed on the deployed container.
 - The official Node 24 Debian image installs Linux dependencies, including ffmpeg.
 - Container runs as non-root. The build context excludes local secrets and data.
 - Secrets are supplied through private platform environment variables, never Git.
@@ -51,3 +54,34 @@ readiness/liveness separation and the existing business logic tests.
 `npm run smoke` exercises the application against isolated local test data.
 Build the image on Timeweb when Docker is unavailable on the workstation; a
 passing local Node test does not itself verify the Linux image build.
+
+## Staging status (2026-09-27)
+
+- Timeweb application: `260923`, CRMZona, Moscow MSK-1, approved 810 RUB/month.
+- Test host: `97c92cc6nk-maker-crmzona-c6c2.twc1.net`.
+- Deployment `afc51ba` became healthy at 16:08 Moscow time.
+- Public HTTPS `/health/ready` returned 200 with database available.
+- Login page rendered without browser warnings/errors. All eight primary assets
+  downloaded completely with gzip (0.26-0.65 seconds each from the test client).
+- User login and affected-ISP verification are pending; production DNS unchanged.
+- SMTP request `12728715` is pending: only outgoing smtp.gmail.com TCP 465 was
+  authorized. Do not approve a broader unblock without user confirmation.
+
+### DNS before cutover
+
+Vercel hosts the authoritative DNS. Its panel currently manages these records
+(all TTL 60 seconds):
+
+| Name | Type | Value |
+| --- | --- | --- |
+| apex | ALIAS | `6e9796f088d2a292.vercel-dns-017.com` |
+| `*` | ALIAS | `cname.vercel-dns-017.com.` |
+| apex | CAA | `0 issue "pki.goog"` |
+| apex | CAA | `0 issue "sectigo.com"` |
+| apex | CAA | `0 issue "letsencrypt.org"` |
+
+Both apex and `www` remain attached to the Vercel `crm-zona` project; apex
+redirects to `www`. Timeweb requests an A record pointing to `147.45.185.13`
+before saving an external domain. Preserve the CAA records and the existing
+Vercel deployment for rollback. Do not change registrar nameservers as part of
+the web-record cutover.
