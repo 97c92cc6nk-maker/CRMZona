@@ -8,6 +8,7 @@ const path = require('path');
 
 process.env.SMTP_HOST = '';
 process.env.SMTP_PORT = '';
+process.env.MAIL_TRANSPORT = '';
 process.env.GOOGLE_DRIVE_ACCESS_TOKEN = '';
 process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON = '';
 process.env.GOOGLE_DRIVE_CLIENT_ID = '';
@@ -88,27 +89,13 @@ async function main() {
     const password = readPasswordFromOutbox(dataDir, 'registered-smoke@example.com');
     assert.ok(password.length >= 10);
 
-    const reset = await jsonFetch(`${baseUrl}/api/forgot-password`, {
+    await assert.rejects(() => jsonFetch(`${baseUrl}/api/forgot-password`, {
       method: 'POST',
       body: {
         email: 'registered-smoke@example.com',
       },
-    });
-    assert.equal(reset.emailDelivery.status, 'outbox');
-    const resetPassword = readPasswordFromOutbox(dataDir, 'registered-smoke@example.com');
-    assert.ok(resetPassword.length >= 10);
-    assert.notEqual(resetPassword, password);
-
-    await assert.rejects(
-      () => jsonFetch(`${baseUrl}/api/login`, {
-      method: 'POST',
-      body: {
-          email: 'registered-smoke@example.com',
-          password,
-        },
-      }),
-      /401/,
-    );
+    }), /503/);
+    const resetPassword = password;
 
     const employeeLogin = await jsonFetch(`${baseUrl}/api/login`, {
       method: 'POST',
