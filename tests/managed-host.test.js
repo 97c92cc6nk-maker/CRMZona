@@ -7,6 +7,16 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createRequestHandler, createStore, SupabaseStore } = require('../lib/app');
 
+test('managed image build context only includes application sources', () => {
+  const rules = fs.readFileSync(path.join(__dirname, '../.dockerignore'), 'utf8')
+    .trim().split(/\r?\n/);
+  assert.deepEqual(rules, [
+    '**', '!package.json', '!package-lock.json', '!Dockerfile',
+    '!lib/', '!lib/**', '!public/', '!public/**', '!client/', '!client/**',
+    '!scripts/', '!scripts/**', '**/.env', '**/*.env', '**/*.log', '**/node_modules',
+  ]);
+});
+
 async function serve(t, store) {
   const server = http.createServer(createRequestHandler(store, { standardClient: true, healthchecks: true }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));

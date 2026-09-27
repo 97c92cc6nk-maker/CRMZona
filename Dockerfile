@@ -1,13 +1,9 @@
 FROM node:24-bookworm-slim
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-COPY lib ./lib
-COPY public ./public
-COPY client ./client
-COPY scripts ./scripts
-RUN npm run build:client
+# .dockerignore is a strict allowlist; local secrets and data never enter the image.
+COPY . .
+RUN npm ci --omit=dev && npm run build:client && npm cache clean --force
 
 ENV NODE_ENV=production \
     PORT=8080 \

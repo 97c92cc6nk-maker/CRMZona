@@ -15,6 +15,8 @@ affected ISP. Vercel remains the rollback target. No database import is needed.
   the Dockerfile probe passed on the deployed container.
 - The official Node 24 Debian image installs Linux dependencies, including ffmpeg.
 - Container runs as non-root. The build context excludes local secrets and data.
+- A single allowlisted source copy and install/build step avoid unnecessary
+  build-layer overhead. The deny-by-default `.dockerignore` is covered by tests.
 - Secrets are supplied through private platform environment variables, never Git.
 - Preserve production Supabase, SMTP, Google Drive and other integration settings.
 - Do not copy Vercel system variables (`VERCEL*`) or local filesystem paths.
@@ -69,7 +71,10 @@ passing local Node test does not itself verify the Linux image build.
   Both were verified against the authoritative Vercel DNS server. Neither name
   has an AAAA record; public `www` HTTPS lookup returns no old Vercel route.
 - Both names are attached to Timeweb alongside the technical host. Saving the
-  domain list triggered a redeploy at 16:29 Moscow time; TLS verification pending.
+  domain list triggered a redeploy at 16:29 Moscow time. That attempt failed after
+  approximately 30 minutes, with multi-minute gaps between short Docker steps.
+  Support was notified; the Docker build has been simplified for the retry.
+  TLS verification is still pending.
 - SMTP request `12728715` is pending: only outgoing smtp.gmail.com TCP 465 was
   authorized. Do not approve a broader unblock without user confirmation.
 
