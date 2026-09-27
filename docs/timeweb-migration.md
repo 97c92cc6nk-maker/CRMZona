@@ -79,10 +79,20 @@ passing local Node test does not itself verify the Linux image build.
   domain redeploy at 16:29 failed after approximately 30 minutes, with multi-minute
   gaps between short Docker steps. After simplifying the Docker build, the
   deployment of `00d0e65` succeeded and both public domains passed HTTPS checks.
-- SMTP request `12728715` is pending: only outgoing smtp.gmail.com TCP 465 was
-  authorized. Do not approve a broader unblock without user confirmation.
-- Email delivery and other server-side integrations still require live
-  verification; database readiness alone does not confirm those services.
+- Gmail API delivery was authorized and configured after SMTP connection timeouts.
+  Only the `gmail.send` scope was granted, and Google Cloud reports the existing
+  OAuth application as In production. Google accepted the diagnostic email.
+- The request to open SMTP in ticket `12728715` was withdrawn at 18:54 Moscow:
+  keep the existing network restrictions. See `docs/gmail-mail.md`.
+- Gmail deployment `437582e` is Ready on Vercel with private Production variables
+  (deployment `Aw6sK6CHB3hzBD8ueR2VLnApsnD7`). Timeweb saved the same configuration
+  and started deployment at 18:48; the build succeeded at 18:48:47, but activation
+  is still pending as of 18:56. Timeweb's public status page subsequently reported
+  degradation of App Platform in MSK-1: https://timeweb.cloud/live . Support was
+  informed of the activation delay in the existing ticket. Do not confuse a
+  successful build with active code; keep the old instance serving until healthy.
+- Other server-side integrations still require live verification; database
+  readiness alone does not confirm those services.
 
 ### DNS before cutover
 
