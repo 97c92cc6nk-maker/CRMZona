@@ -63,13 +63,19 @@ passing local Node test does not itself verify the Linux image build.
 - Public HTTPS `/health/ready` returned 200 with database available.
 - Login page rendered without browser warnings/errors. All eight primary assets
   downloaded completely with gzip (0.26-0.65 seconds each from the test client).
-- User login and affected-ISP verification are pending; production DNS unchanged.
+- User confirmed the temporary site opens without VPN. Authenticated business
+  data verification is still pending.
+- Apex and `www` A records now point to `147.45.185.13` (TTL 60 seconds).
+  Both were verified against the authoritative Vercel DNS server. Neither name
+  has an AAAA record; public `www` HTTPS lookup returns no old Vercel route.
+- Both names are attached to Timeweb alongside the technical host. Saving the
+  domain list triggered a redeploy at 16:29 Moscow time; TLS verification pending.
 - SMTP request `12728715` is pending: only outgoing smtp.gmail.com TCP 465 was
   authorized. Do not approve a broader unblock without user confirmation.
 
 ### DNS before cutover
 
-Vercel hosts the authoritative DNS. Its panel currently manages these records
+Vercel hosts the authoritative DNS. Before cutover its panel managed these records
 (all TTL 60 seconds):
 
 | Name | Type | Value |
@@ -81,7 +87,7 @@ Vercel hosts the authoritative DNS. Its panel currently manages these records
 | apex | CAA | `0 issue "letsencrypt.org"` |
 
 Both apex and `www` remain attached to the Vercel `crm-zona` project; apex
-redirects to `www`. Timeweb requests an A record pointing to `147.45.185.13`
+redirects to `www` when routed to Vercel. Timeweb requests an A record pointing to `147.45.185.13`
 before saving an external domain. Preserve the CAA records and the existing
 Vercel deployment for rollback. Do not change registrar nameservers as part of
 the web-record cutover.
