@@ -551,6 +551,7 @@ async function loadAppData() {
 }
 
 function showAuth() {
+  printFormsUI.reset();
   els.authScreen.classList.remove('is-hidden');
   els.appShell.classList.add('is-hidden');
 }
@@ -798,6 +799,7 @@ function activateView(viewId) {
 }
 
 function refreshViewData(viewId) {
+  if (viewId === 'printFormsView') printFormsUI.load();
   if (viewId === 'retailPointsView') {
     loadRetailPoints();
   }
@@ -831,6 +833,7 @@ function renderProfile() {
   setTabVisibility('constantsView', Boolean(state.permissions.canViewConstants));
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('reportsView', Boolean(state.permissions.canViewReports));
+  setTabVisibility('printFormsView', Boolean(state.permissions.canViewPrintForms));
   setTabVisibility('tasksView', Boolean(state.permissions.canViewTasks));
   setTabVisibility('requestsView', Boolean(state.permissions.canViewRequests));
   setTabVisibility('developmentView', Boolean(state.permissions.canViewDevelopment));
@@ -5680,6 +5683,7 @@ function renderEmployeeCard() {
   form.elements.unofficialSalary.value = user.unofficialSalary || '';
   form.elements.hireDate.value = user.hireDate || '';
   form.elements.officialEmployment.checked = Boolean(user.officialEmployment);
+  printFormsUI.renderEmployeeDetails(user);
 
   renderEmployeeCardRole(user, editable);
   renderEmployeeCardAccess(user, editable);
@@ -6449,6 +6453,7 @@ function employeePayloadFromForm(form) {
 
 function employeePayloadFromCard(form) {
   const values = formValues(form);
+  values.employmentDetails = printFormsUI.collectEmployeeDetails(form);
   const currentRole = selectedEmployee()?.role || form.elements.role.value || values.role || 'employee';
   const effectiveRole = canManageEmployeeRoles() ? values.role || currentRole : currentRole;
   values.officialEmployment = form.elements.officialEmployment.checked;

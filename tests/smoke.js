@@ -41,6 +41,7 @@ delete process.env.TENCENTDB_MEMORY_SERVICE_ID;
 async function main() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smart-schedule-smoke-'));
   const store = new Store(dataDir);
+  store.saveCompanies([{ id: 'smoke-company', name: 'Smoke Company', shortName: 'SMOKE' }]);
   store.createUser({
     fullName: 'Тестовый Владелец',
     phone: '+79990000009',
@@ -207,6 +208,7 @@ async function main() {
       body: {
         pointId: 'moscow_6231',
         expenseDate: '2026-07-09',
+        expenseType: 'household',
         amount: '321,50',
         paymentMethod: 'corp_card',
         receipt: {
@@ -278,8 +280,9 @@ async function main() {
         amount: '100',
         pointId: 'moscow_6231',
         claimNumber: 'SMOKE-CLAIM-1',
-        company: 'Smoke Company',
+        company: store.loadJson('companies.json', [])[0].shortName,
         status: 'withheld',
+        resolutionDate: '2026-06-15',
         guiltyEmployeeId: createdEmployee.user.id,
         comment: 'Smoke claim',
       },

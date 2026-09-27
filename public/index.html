@@ -107,6 +107,7 @@
           <button class="tab" type="button" data-view="constantsView">Константы</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="reportsView">Отчеты</button>
+          <button class="tab is-hidden" type="button" data-view="printFormsView">Печатные формы</button>
           <button class="tab" type="button" data-view="tasksView">Задачи</button>
           <button class="tab" type="button" data-view="requestsView">Заявки</button>
           <button class="tab" type="button" data-view="developmentView">Разработка</button>
@@ -380,6 +381,10 @@
               <button class="secondary" type="button" id="addPremiumRow">Добавить премию</button>
             </fieldset>
             <fieldset class="access-fieldset employee-card-wide">
+              <legend>Реквизиты для кадровых документов</legend>
+              <div class="print-employee-fields" id="employeeEmploymentDetails"></div>
+            </fieldset>
+            <fieldset class="access-fieldset employee-card-wide">
               <legend>Документы сотрудника</legend>
               <div class="employee-document-upload">
                 <label>
@@ -441,6 +446,48 @@
         </section>
 
         <div class="notice" id="employeesNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="printFormsView" aria-labelledby="printFormsTitle">
+        <div class="section-head">
+          <h2 id="printFormsTitle">Печатные формы</h2>
+          <button class="secondary" type="button" id="refreshPrintForms">Обновить данные</button>
+        </div>
+        <div id="printWorkspace">
+          <div class="print-context">
+            <label>Сотрудник<select id="printEmployee"></select></label>
+            <label>Компания<select id="printCompany"></select></label>
+            <label>Торговая точка<select id="printPoint"></select></label>
+          </div>
+          <p id="printContextSummary" class="print-context-summary"></p>
+          <button class="secondary" type="button" id="printOpenEmployee" hidden>Карточка сотрудника</button>
+          <div class="print-workspace">
+            <div class="print-catalog">
+              <h3>Документы</h3>
+              <div id="printFormList"></div>
+              <details class="print-legal">
+                <summary>Основания и оформление</summary>
+                <p>Редакция шаблонов: 27.09.2026. Базовый комплект для работника ПВЗ по основному месту работы. Условия договора должны соответствовать реальному режиму, СОУТ и локальным актам работодателя.</p>
+                <p>До допуска к работе проводятся обязательные инструктажи и обучение по охране труда и пожарной безопасности с отдельной регистрацией. Медосмотр проводится при наличии установленных законом оснований. Подписание этих форм не заменяет указанные процедуры.</p>
+                <p>Индивидуальная материальная ответственность допустима при разграничении вверенных ценностей. При совместном доступе без разграничения индивидуальный договор не заменяет надлежащее оформление коллективной ответственности.</p>
+                <p>Заявление на увольнение оформляется только при добровольном решении сотрудника. Общий срок предупреждения по статье 80 ТК РФ составляет две недели со дня, следующего за получением заявления; исключения и более ранняя дата требуют предусмотренного законом основания или соглашения.</p>
+                <div id="printLegalSources"></div>
+              </details>
+            </div>
+            <form id="printSettingsForm">
+              <h3>Условия документа</h3>
+              <div id="printSettings"></div>
+              <p id="printSavedStatus" class="print-saved-status"></p>
+              <div class="print-actions">
+                <button class="secondary" id="savePrintSettings" type="button">Сохранить условия</button>
+                <button class="secondary" id="previewPrintForms" type="button">Предпросмотр</button>
+                <button class="primary" id="printDocuments" type="button">Печать / PDF</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div class="notice" id="printFormsNotice" role="status" aria-live="polite"></div>
+        <div id="printPreview" aria-label="Предпросмотр документов"></div>
       </section>
 
       <section class="view" id="retailPointsView" aria-labelledby="retailPointsTitle">
@@ -1277,6 +1324,9 @@
       </section>
     </main>
 
+    <div id="printOutput"></div>
+    <script src="/print-forms-model.js" defer></script>
     <script src="/app.js" defer></script>
+    <script src="/print-forms.js" defer></script>
   </body>
 </html>
