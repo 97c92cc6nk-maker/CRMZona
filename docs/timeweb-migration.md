@@ -1,8 +1,8 @@
 # Timeweb deployment
 
-This is a staged migration away from the Vercel delivery network. Do not change
-production DNS until the new test domain has been verified without a VPN on the
-affected ISP. Vercel remains the rollback target. No database import is needed.
+Production delivery moved from Vercel to Timeweb after the user verified the
+temporary domain without a VPN on the affected ISP. Vercel remains the rollback
+target. The application continues using the existing Supabase database.
 
 ## Application
 
@@ -57,26 +57,32 @@ readiness/liveness separation and the existing business logic tests.
 Build the image on Timeweb when Docker is unavailable on the workstation; a
 passing local Node test does not itself verify the Linux image build.
 
-## Staging status (2026-09-27)
+## Production status (2026-09-27)
 
 - Timeweb application: `260923`, CRMZona, Moscow MSK-1, approved 810 RUB/month.
 - Test host: `97c92cc6nk-maker-crmzona-c6c2.twc1.net`.
-- Deployment `afc51ba` became healthy at 16:08 Moscow time.
-- Public HTTPS `/health/ready` returned 200 with database available.
-- Login page rendered without browser warnings/errors. All eight primary assets
-  downloaded completely with gzip (0.26-0.65 seconds each from the test client).
+- Initial staging deployment `afc51ba` became healthy at 16:08 Moscow time.
+- Production deployment `00d0e65` started at 17:13 and became healthy at about
+  17:14 Moscow time. Its Linux image built successfully on Timeweb.
+- HTTPS certificate validation passed for both `crmzona.net` and `www.crmzona.net`.
+  Their `/health/ready` endpoints returned 200 with database available.
+- The main-domain login page rendered without browser warnings/errors. All eight
+  primary assets downloaded completely with gzip via normal public DNS, without
+  the fragment loader (0.22-6.49 seconds each from the test client).
+- The complete automated test suite passed: 104 tests, zero failures.
 - User confirmed the temporary site opens without VPN. Authenticated business
   data verification is still pending.
 - Apex and `www` A records now point to `147.45.185.13` (TTL 60 seconds).
   Both were verified against the authoritative Vercel DNS server. Neither name
   has an AAAA record; public `www` HTTPS lookup returns no old Vercel route.
-- Both names are attached to Timeweb alongside the technical host. Saving the
-  domain list triggered a redeploy at 16:29 Moscow time. That attempt failed after
-  approximately 30 minutes, with multi-minute gaps between short Docker steps.
-  Support was notified; the Docker build has been simplified for the retry.
-  TLS verification is still pending.
+- Both names are attached to Timeweb alongside the technical host. The automatic
+  domain redeploy at 16:29 failed after approximately 30 minutes, with multi-minute
+  gaps between short Docker steps. After simplifying the Docker build, the
+  deployment of `00d0e65` succeeded and both public domains passed HTTPS checks.
 - SMTP request `12728715` is pending: only outgoing smtp.gmail.com TCP 465 was
   authorized. Do not approve a broader unblock without user confirmation.
+- Email delivery and other server-side integrations still require live
+  verification; database readiness alone does not confirm those services.
 
 ### DNS before cutover
 
