@@ -123,7 +123,7 @@ const MANAGEMENT_REPORT_COLUMNS = [
 
 const els = {};
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeApplication() {
   try {
     if (!window.PrintFormsModel || typeof printFormsUI !== 'object' || typeof surveillanceUI !== 'object') {
       throw new Error('Required application script is unavailable');
@@ -138,7 +138,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.crmStartup?.fail('APP_INIT', 'Ошибка запуска приложения.');
     console.error('[CRM startup] APP_INIT', error);
   }
-});
+}
+
+document.addEventListener(window.crmResilientLoading ? 'crm:loaded' : 'DOMContentLoaded', initializeApplication, { once: true });
 
 function bindElements() {
   Object.assign(els, {
@@ -7302,7 +7304,25 @@ async function api(path, options = {}) {
   let text;
   try {
     response = await fetch(path, init);
-    text = await response.text();
+    if (window.crmResilientLoading && response.body && response.headers.get('Content-Type')?.includes('application/json')) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      text = '';
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) { text += decoder.decode(); break; }
+        text += decoder.decode(chunk.value, { stream: true });
+        // API responses are JSON objects: validate the entire object before ignoring a stalled EOF.
+        if (text.trimEnd().endsWith('}')) {
+          try {
+            const complete = JSON.parse(text);
+            if (complete && typeof complete === 'object' && !Array.isArray(complete)) { controller.abort(); break; }
+          } catch { /* More bytes may be needed to finish the JSON object. */ }
+        }
+      }
+    } else {
+      text = await response.text();
+    }
   } catch {
     if (controller.signal.aborted) {
       const hint = init.method === 'GET'

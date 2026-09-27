@@ -117,9 +117,9 @@ test('ready event alone does not unlock the UI while styles are still missing', 
   assert.equal(nodes.appRoot.hidden, true);
 });
 
-function apiFixture(fetch) {
+function apiFixture(fetch, resilient = false) {
   const context = vm.createContext({
-    document: { addEventListener() {} }, fetch, AbortController, setTimeout, clearTimeout,
+    document: { addEventListener() {} }, window: { crmResilientLoading: resilient }, fetch, AbortController, TextDecoder, setTimeout, clearTimeout,
   });
   vm.runInContext(app, context);
   return context;
@@ -147,4 +147,19 @@ test('API preserves unauthorized status and valid payloads', async () => {
   await assert.rejects(vm.runInContext("api('/api/me')", denied), (error) => error.status === 401);
   const success = apiFixture(async () => ({ ok: true, text: async () => '{"ok":true}' }));
   assert.equal((await vm.runInContext("api('/api/me')", success)).ok, true);
+});
+
+test('resilient API reads a complete JSON object without waiting for EOF or retrying writes', async () => {
+  let calls = 0;
+  const context = apiFixture(async () => {
+    calls++;
+    return new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"user":{"id":1}'));
+      controller.enqueue(new TextEncoder().encode(',"ok":true}'));
+    } }), { headers: { 'Content-Type': 'application/json' } });
+  }, true);
+  const result = await vm.runInContext("api('/api/example', { method: 'POST', body: {}, timeoutMs: 100 })", context);
+  assert.equal(result.ok, true);
+  assert.equal(result.user.id, 1);
+  assert.equal(calls, 1);
 });
