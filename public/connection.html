@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CRMZona App | Проверка соединения</title>
+  <style>body{max-width:800px;margin:32px auto;padding:0 16px;font:16px/1.5 "Segoe UI",Arial,sans-serif;color:#1d2927;background:#f4f7f6}h1{font-size:24px}table{width:100%;border-collapse:collapse;background:#fff}th,td{text-align:left;padding:10px;border:1px solid #d8e3df;overflow-wrap:anywhere}td:last-child{font-variant-numeric:tabular-nums}a{color:#235b55}button{font:inherit;padding:8px 16px;cursor:pointer}.failed{color:#a32828}.passed{color:#235b55}#context{overflow-wrap:anywhere}@media(max-width:540px){th,td{padding:6px;font-size:13px}}</style>
+</head>
+<body>
+  <h1>Проверка соединения</h1>
+  <p id="context">CRMZona App</p>
+  <p id="status" role="status">Проверка запускается… Если этот текст не меняется, выполнение JavaScript недоступно.</p>
+  <table>
+    <thead><tr><th>Ресурс</th><th>Результат</th><th>Получено</th></tr></thead>
+    <tbody id="checks"></tbody>
+  </table>
+  <p><button id="retry" type="button" disabled>Проверить снова</button> · <a href="/">Вернуться в CRM</a></p>
+  <p>При ошибке отправьте снимок этой страницы с названием провайдера. Проверка не отправляет пароли и данные сотрудников.</p>
+  <noscript><p>Включите JavaScript для проверки соединения.</p></noscript>
+  <script>
+  'use strict';
+  (() => {
+    const byId = (id) => document.getElementById(id);
+    const resources = ['/api/health', '/startup.js', '/styles.css', '/app.js', '/print-forms-model.js', '/print-forms.js', '/surveillance.js', '/surveillance.css', '/'];
+    async function run() {
+      byId('retry').disabled = true;
+      byId('checks').replaceChildren();
+      byId('context').textContent = location.host + ' · ' + new Date().toLocaleString('ru-RU');
+      byId('status').textContent = 'Проверяем получение файлов целиком…';
+      let failures = 0;
+      for (const path of resources) {
+        const row = document.createElement('tr');
+        const cells = [path, 'Проверяем…', '0 байт'].map((text) => {
+          const cell = document.createElement('td'); cell.textContent = text; row.append(cell); return cell;
+        });
+        byId('checks').append(row);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        const start = performance.now();
+        let bytes = 0;
+        let http = '';
+        try {
+          const response = await fetch(path + '?connection_check=' + Date.now(), { cache: 'no-store', credentials: 'omit', signal: controller.signal });
+          http = 'HTTP ' + response.status;
+          if (!response.ok) throw new Error(http);
+          const reader = response.body.getReader();
+          while (true) {
+            const result = await reader.read();
+            if (result.done) break;
+            bytes += result.value.byteLength;
+            cells[2].textContent = bytes.toLocaleString('ru-RU') + ' байт';
+          }
+          if (!bytes) throw new Error('Пустой ответ');
+          cells[1].textContent = http + ', полностью, ' + ((performance.now() - start) / 1000).toFixed(1) + ' с';
+          cells[1].className = 'passed';
+        } catch (error) {
+          failures++;
+          cells[1].className = 'failed';
+          cells[1].textContent = controller.signal.aborted ? (http ? http + ', ' : '') + 'ответ не получен полностью за 15 с' : 'Ошибка соединения: ' + error.message;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+      byId('status').textContent = failures
+        ? 'Есть ошибки загрузки: ' + failures + '. Приложение может не открываться на этом подключении.'
+        : 'Все файлы получены целиком на этом подключении. Доступ к базе и вход в учетную запись проверяются отдельно.';
+      byId('retry').disabled = false;
+    }
+    byId('retry').addEventListener('click', run);
+    run();
+  })();
+  </script>
+</body>
+</html>

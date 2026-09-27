@@ -6,7 +6,7 @@
   "main": "lib/app.js",
   "scripts": {
     "start": "node lib/app.js",
-    "test": "node --test tests/run-tests.js tests/print-forms.test.js tests/surveillance.test.js",
+    "test": "node --test tests/run-tests.js tests/print-forms.test.js tests/surveillance.test.js tests/startup.test.js",
     "smoke": "node tests/smoke.js",
     "migrate:supabase": "node scripts/migrate-to-supabase.js"
   },

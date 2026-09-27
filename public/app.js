@@ -124,9 +124,20 @@ const MANAGEMENT_REPORT_COLUMNS = [
 const els = {};
 
 document.addEventListener('DOMContentLoaded', () => {
-  bindElements();
-  bindEvents();
-  bootstrap();
+  try {
+    if (!window.PrintFormsModel || typeof printFormsUI !== 'object' || typeof surveillanceUI !== 'object') {
+      throw new Error('Required application script is unavailable');
+    }
+    bindElements();
+    bindEvents();
+    document.documentElement.dataset.appReady = 'true';
+    document.dispatchEvent(new Event('crm:ready'));
+    bootstrap();
+  } catch (error) {
+    document.documentElement.dataset.appFailed = 'true';
+    window.crmStartup?.fail('APP_INIT', 'Ошибка запуска приложения.');
+    console.error('[CRM startup] APP_INIT', error);
+  }
 });
 
 function bindElements() {
@@ -460,13 +471,17 @@ async function bootstrap() {
     await loadSession();
     await loadAppData();
     showApp();
-  } catch {
+  } catch (error) {
     showAuth();
+    if (error.status !== 401) {
+      showNotice(els.authNotice, error.message, 'error');
+      console.warn('[CRM startup] SESSION_LOAD_FAILED', error.status || 'network');
+    }
   }
 }
 
 async function loadSession() {
-  const data = await api('/api/me');
+  const data = await api('/api/me', { timeoutMs: 15000 });
   state.user = data.user;
   state.permissions = data.permissions;
   state.roles = data.roles;
@@ -7268,11 +7283,14 @@ async function saveSchedule() {
 }
 
 async function api(path, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs || 65000);
   const init = {
     method: options.method || 'GET',
     credentials: 'same-origin',
     cache: 'no-store',
     headers: {},
+    signal: controller.signal,
   };
 
   if (options.body !== undefined) {
@@ -7281,12 +7299,21 @@ async function api(path, options = {}) {
   }
 
   let response;
+  let text;
   try {
     response = await fetch(path, init);
+    text = await response.text();
   } catch {
+    if (controller.signal.aborted) {
+      const hint = init.method === 'GET'
+        ? 'Проверьте соединение и повторите загрузку.'
+        : 'Результат операции неизвестен. Перед повторной отправкой проверьте, сохранились ли данные.';
+      throw new Error(`Сервер CRM не передал полный ответ вовремя. ${hint}`);
+    }
     throw new Error('Не удалось связаться с сервером CRM. Обновите страницу и повторите запрос; если ошибка останется, проверьте интернет и статус Vercel.');
+  } finally {
+    clearTimeout(timer);
   }
-  const text = await response.text();
   let payload = {};
   try {
     payload = text ? JSON.parse(text) : {};
@@ -7296,7 +7323,9 @@ async function api(path, options = {}) {
 
   if (!response.ok) {
     const details = Array.isArray(payload.details) ? ` ${payload.details.join(' ')}` : '';
-    throw new Error(`${payload.error || 'Ошибка запроса.'}${details}`);
+    const error = new Error(`${payload.error || 'Ошибка запроса.'}${details}`);
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
