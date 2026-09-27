@@ -11,6 +11,26 @@ const root = path.resolve(__dirname, '..');
 const loader = fs.readFileSync(path.join(root, 'client/reliable-loader.js'), 'utf8');
 const generated = build();
 
+test('production entry routes use small-part delivery, preserving API and diagnostic routes', () => {
+  const { routes } = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'));
+  const resolve = (url) => {
+    const route = routes.find(({ src }) => new RegExp('^(?:' + src + ')$').test(url));
+    return url.replace(new RegExp('^(?:' + route.src + ')$'), route.dest);
+  };
+  for (const entry of ['/', '/index.html', '/stable.html']) {
+    assert.equal(resolve(entry), '/public/stable.html');
+  }
+  assert.equal(resolve('/api/health'), '/api/health.js');
+  assert.equal(resolve('/api/me'), '/api/index.js');
+  assert.equal(resolve('/connection.html'), '/public/connection.html');
+  for (const [name] of generated.manifest.parts) {
+    assert.equal(resolve('/client-parts/' + name), '/public/client-parts/' + name);
+  }
+  const shell = generated.files.get('public/stable.html').toString();
+  assert.match(shell, /id="clientManifest"/);
+  assert.doesNotMatch(shell, /(?:href|src)="\/(?:styles\.css|app\.js|startup\.js)"/);
+});
+
 function setup({ missing = false, corrupt = false, retry = false, hang = false, initError = false } = {}) {
   const nodes = {
     clientManifest: { textContent: JSON.stringify(generated.manifest) },

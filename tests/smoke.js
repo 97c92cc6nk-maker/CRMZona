@@ -54,6 +54,15 @@ async function main() {
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   try {
+    const entryHtml = fs.readFileSync(path.join(__dirname, '../public/stable.html'), 'utf8');
+    for (const entry of ['/', '/index.html', '/stable.html']) {
+      const response = await fetch(baseUrl + entry);
+      assert.equal(response.status, 200);
+      assert.match(response.headers.get('content-type'), /text\/html/);
+      assert.equal(await response.text(), entryHtml);
+    }
+    await assert.rejects(() => jsonFetch(`${baseUrl}/api/me`), /401/);
+
     const captcha = await jsonFetch(`${baseUrl}/api/captcha`);
     const registration = await jsonFetch(`${baseUrl}/api/register`, {
       method: 'POST',

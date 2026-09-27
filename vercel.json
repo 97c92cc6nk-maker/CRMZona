@@ -41,7 +41,11 @@
     },
     {
       "src": "/",
-      "dest": "/public/index.html"
+      "dest": "/public/stable.html"
+    },
+    {
+      "src": "/index\\.html",
+      "dest": "/public/stable.html"
     },
     {
       "src": "/(.*)",

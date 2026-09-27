@@ -7,7 +7,7 @@ alone is not a successful check: a stalled/truncated body is reported as a failu
 It does not test database access or authenticated business operations. Results
 remain in the browser; no telemetry or employee information is uploaded.
 
-The entry page renders a small fallback before application assets load. Styles
+The legacy source page (`public/index.html`) renders a small fallback before application assets load. Styles
 are fetched with non-blocking media and enabled after loading. The application
 stays hidden and inert until its handlers and styles are ready, preventing native
 form submission during a failed script load. A slow asset reports its path after
@@ -32,9 +32,13 @@ failed JavaScript, a stalled API response body, and a normal authenticated sessi
 
 ## Resilient Entry Point
 
-`/stable.html` is an alternative entry point on the same origin, using the same
-authentication, API and database. Normal `/` remains available. Links to this mode
-are present in the normal loading fallback and the connection diagnostic page.
+`/`, `/index.html` and `/stable.html` all serve the resilient entry point, using
+the same authentication, API and database. Both Vercel routes and the local Node
+server map these addresses to `public/stable.html`. The main address no longer
+requests `/styles.css` or the other large assets individually. `public/index.html`
+remains the build's markup source; do not replace it with the generated shell.
+The connection diagnostic still tests direct transfer of the original assets,
+which can fail even when small-part delivery succeeds.
 
 The entry contains a small inline loader. It downloads a gzip-compressed bundle
 of the existing markup, styles and scripts in sequential parts of at most 6 KiB.
