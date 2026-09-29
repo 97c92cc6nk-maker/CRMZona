@@ -1,14 +1,26 @@
-# Print forms (2026-09-29)
+# Print forms (2026-09-29.2)
 
 - Contract date comes from the employee's hire date, not editable print settings.
 - `contractCity` is stored in the company card. Existing companies need this field
   completed once; the application does not guess a city from a postal address.
 - The templates target individual entrepreneurs signing in their own name.
-- Work/rest schedule, quarterly accounting and statutory guarantees are fixed in
-  the template. Actual working conditions remain required; no fictitious SOUT
-  class or report is assigned automatically.
-- The payroll clause refers to exact dates in the employer's internal work rules.
-  Those rules must actually set the dates before signing.
+- Work/rest schedule, monthly accounting and statutory guarantees are fixed in
+  the template. The contract has no editable per-generation settings.
+- The contract no longer selects or identifies an individual retail point.
+  `employmentDetails.workLocality` in the employee card supplies the required
+  work locality. It is not inferred from the employer's registration address or
+  `contractCity` (the place of signing). Other site-specific forms (job, hire,
+  handover, liability) still require their point; the selector is hidden otherwise.
+- Working conditions are no longer requested by the print form. No SOUT class,
+  absence of hazards or workplace characteristics are invented. The contract
+  refers to a written integral annex for actual conditions and exact pay dates.
+  This annex is NOT automatically generated. The visible legal warning explains
+  that the generic clauses alone do not satisfy articles 57 and 136: complete
+  the required conditions before signing. Removed legacy settings cannot override
+  the current template; previously generated snapshots remain unchanged.
+- Contract references to internal work rules, the consecutive-shift prohibition
+  and the explicit 42-hour rest clause are removed. Statutory obligations still
+  apply. Omitting references does not itself exempt an employer from local acts.
 - Employer identity-document information is omitted at the user's request.
   Article 57 of the Labor Code requires it for an individual employer. The UI
   therefore warns that these templates need legal review and completion, and

@@ -88,6 +88,7 @@ const printFormsUI = (() => {
     for (const label of document.querySelectorAll('[data-print-field]')) label.hidden = !keys.has(label.dataset.printField);
     for (const group of byId('printSettings').children) group.hidden = ![...group.querySelectorAll('label')].some((label) => !label.hidden);
     byId('printContractWarning').hidden = !selectedIds().includes('contract');
+    byId('printPointField').hidden = !model.needsPoint(selectedIds());
   }
   async function load(force = false) {
     init();
@@ -126,6 +127,7 @@ const printFormsUI = (() => {
     const u = employee(), c = company();
     const summary = byId('printContextSummary');
     summary.textContent = u ? `${u.fullName} · Должность: ${u.position || 'не заполнена в карточке'} · Оф. оклад: ${u.officialSalary || 'не заполнен'}` : '';
+    if (u) summary.textContent += ` · Место работы: ${u.employmentDetails?.workLocality || 'не заполнено в карточке'}`;
     if (c) summary.textContent += `\n${c.name} · ИНН: ${c.inn || 'не заполнен'} · Адрес: ${c.legalAddress || 'не заполнен'}`;
     byId('printOpenEmployee').hidden = !u || !state.permissions.canViewUsers;
   }
@@ -169,7 +171,7 @@ const printFormsUI = (() => {
     if (!contextReady) throw new Error('Данные для печати еще не загружены. Обновите данные и повторите попытку.');
     const form = byId('printSettingsForm');
     const settings = Object.fromEntries(model.settingsFields.map((field) => [field.key, field.type === 'checkbox' ? form.elements[field.key].checked : form.elements[field.key].value]));
-    settings.pointId = byId('printPoint').value;
+    settings.pointId = model.needsPoint(selectedIds()) ? byId('printPoint').value : '';
     return { employeeId: employee().id, companyId: company().id, settings, formIds: selectedIds(), recordRevision };
   }
   async function saveDraft() {

@@ -12,7 +12,7 @@ const { Store, SupabaseStore, createRequestHandler, permissionsFor } = require('
 function fixture() {
   return {
     employee: { id: 'worker', fullName: 'Тестов Иван Иванович', position: 'Оператор ПВЗ', hireDate: '2026-10-01', officialSalary: '50000', email: 'worker@example.com', phone: '+79990000002', employmentDetails: {
-      birthDate: '1990-01-01', passportNumber: '0000 000000', passportIssuedDate: '2010-01-01', passportIssuedBy: 'Тестовый орган', address: 'Тестовый адрес', bankName: 'Тестовый банк', bankBik: '044000000', bankAccount: '40817000000000000000',
+      workLocality: 'Истра', birthDate: '1990-01-01', passportNumber: '0000 000000', passportIssuedDate: '2010-01-01', passportIssuedBy: 'Тестовый орган', address: 'Тестовый адрес', bankName: 'Тестовый банк', bankBik: '044000000', bankAccount: '40817000000000000000',
     } },
     company: { id: 'company', name: 'ИП Тестов Тест Тестович', shortName: 'ТЕСТ', inn: '000000000000', ogrnip: '000000000000000', legalAddress: 'Тестовый адрес работодателя', contractCity: 'Москва', pointIds: [] },
     contractNumber: '1',
@@ -44,7 +44,7 @@ test('all ten templates render escaped authoritative data and require a card pos
 
 test('contracts reject missing legal terms; liability rejects minors and missing eligibility', () => {
   const context = fixture();
-  context.settings.workingConditions = '';
+  context.employee.employmentDetails.workLocality = '';
   context.employee.officialSalary = '';
   context.company.contractCity = '';
   assert.ok(model.validate(context, ['contract']).length >= 3);
@@ -87,7 +87,8 @@ test('print forms HTTP authorization, drafts, card updates, audit and unavailabl
   const payload = { employeeId: worker.id, companyId: f.company.id, settings: { ...f.settings, pointId: f.point.id }, formIds: ['contract', 'job'] };
   assert.equal((await request('/api/print-forms/draft', adminCookie, 'PUT', payload)).status, 200);
   const draft = await (await request(`/api/print-forms/draft?employeeId=${worker.id}&companyId=${f.company.id}`, ownerCookie)).json();
-  assert.equal(draft.draft.settings.workingConditions, f.settings.workingConditions);
+  assert.equal(draft.draft.settings.pointId, f.point.id);
+  assert.equal(draft.draft.settings.workingConditions, undefined);
   const render = await request('/api/print-forms/render', ownerCookie, 'POST', payload);
   assert.equal(render.status, 200, await render.clone().text());
   const generated = await render.json();
@@ -96,7 +97,7 @@ test('print forms HTTP authorization, drafts, card updates, audit and unavailabl
   assert.equal(generated.record.contractDate, worker.hireDate);
   assert.equal((await request('/api/print-forms/render', ownerCookie, 'POST', payload)).status, 409);
   const corrected = await (await request('/api/print-forms/render', ownerCookie, 'POST', {
-    ...payload, recordRevision: generated.record.revision, settings: { ...payload.settings, workingConditions: 'Класс 2, исправление' },
+    ...payload, recordRevision: generated.record.revision, settings: { ...payload.settings, additionalDuties: 'Учет расходных материалов' },
   })).json();
   assert.equal(corrected.record.contractNumber, '1');
   assert.notEqual(corrected.record.revision, generated.record.revision);
@@ -105,7 +106,7 @@ test('print forms HTTP authorization, drafts, card updates, audit and unavailabl
   assert.deepEqual(refreshed.records[0].formIds, ['contract', 'job']);
   assert.equal(refreshed.records[0].html, undefined);
   const savedRecord = await (await request(`/api/print-forms/record?companyId=${f.company.id}&recordId=${corrected.record.id}`, adminCookie)).json();
-  assert.match(savedRecord.html, /Класс 2, исправление/);
+  assert.match(savedRecord.html, /Учет расходных материалов/);
   const updatedCompany = await request(`/api/companies/${f.company.id}`, ownerCookie, 'PATCH', { ...f.company, contractCity: 'Истра' });
   assert.equal(updatedCompany.status, 200, await updatedCompany.clone().text());
   const updatedDirectory = await (await request('/api/print-forms', ownerCookie)).json();
@@ -119,6 +120,18 @@ test('print forms HTTP authorization, drafts, card updates, audit and unavailabl
   store.updateUser(owner, secondWorker.id, { employmentDetails: f.employee.employmentDetails });
   const secondWorkerRender = await (await request('/api/print-forms/render', ownerCookie, 'POST', { ...payload, employeeId: secondWorker.id })).json();
   assert.equal(secondWorkerRender.record.contractNumber, '2');
+  const noPoint = await request('/api/print-forms/render', ownerCookie, 'POST', {
+    ...payload, employeeId: secondWorker.id, formIds: ['contract'], recordRevision: secondWorkerRender.record.revision,
+    settings: { pointId: 'deleted-legacy-point', workingConditions: 'Forged safe class' },
+  });
+  assert.equal(noPoint.status, 200, await noPoint.clone().text());
+  const noPointContract = await noPoint.json();
+  assert.equal(noPointContract.record.contractNumber, '2');
+  assert.match(noPointContract.html, /населенный пункт: Истра/);
+  assert.doesNotMatch(noPointContract.html, /ТЕСТ_1|Тестовый адрес ПВЗ|Forged/);
+  assert.equal((await request('/api/print-forms/render', ownerCookie, 'POST', {
+    ...payload, formIds: ['handover'], settings: { ...payload.settings, pointId: '' },
+  })).status, 400);
   await request(`/api/users/${worker.id}`, adminCookie, 'PATCH', { position: '' });
   const invalid = await request('/api/print-forms/render', ownerCookie, 'POST', { ...payload, position: 'Invented client position' });
   assert.equal(invalid.status, 400);
@@ -139,12 +152,16 @@ test('contract dates and employer details are authoritative; removed inputs cann
   assert.match(html, /01\.10\.2026/);
   assert.doesNotMatch(html, /27\.09\.2026|Forged|EMPLOYER_SECRET|№ 999/);
   assert.match(html, /Трудовой договор № 1/);
-  assert.match(html, /календарный квартал/);
+  assert.match(html, /Учетный период — календарный месяц/);
+  assert.doesNotMatch(html, /квартал|ПВТР|внутреннего трудового распорядка|двух смен подряд|42 часа/);
   assert.match(html, /шесть перерывов по 15 минут/);
   assert.match(html, /два раза в месяц/);
-  assert.match(html, /правилами внутреннего трудового распорядка/);
+  assert.match(html, /Конкретные даты выплат закрепляются в письменном приложении/);
+  assert.match(html, /Сведения об условиях труда на рабочем месте/);
+  assert.match(html, /населенный пункт: Истра/);
+  assert.doesNotMatch(html, /ТЕСТ_1|Тестовый адрес ПВЗ/);
   assert.match(html, /на основании свидетельства/);
-  assert.deepEqual(model.relevantFields(['contract']).map((field) => field.key), ['workingConditions']);
+  assert.deepEqual(model.relevantFields(['contract']), []);
   assert.deepEqual(model.normalizeSettings(f.settings), fixture().settings);
   f.settings.documentDate = '';
   assert.deepEqual(model.validate(f, ['contract']), []);
@@ -152,6 +169,25 @@ test('contract dates and employer details are authoritative; removed inputs cann
   f.employee.hireDate = '';
   assert.ok(model.validate(f, ['contract']).some((message) => message.includes('начала работы')));
   assert.doesNotMatch(model.render(fixture(), model.forms.map((form) => form.id)), /удостоверяющий личность работодателя/);
+});
+
+test('contract uses employee locality, not a point or the signing city; other site-specific forms retain their point', () => {
+  const f = fixture();
+  delete f.point;
+  f.settings = model.normalizeSettings({ workingConditions: 'Invented SOUT class', accountingPeriod: 'Quarter' });
+  assert.equal(f.settings.workingConditions, undefined);
+  assert.equal(model.needsPoint(['contract']), false);
+  assert.deepEqual(model.validate(f, ['contract']), []);
+  assert.doesNotMatch(model.render(f, ['contract']), /Invented|Quarter|класс 2|СОУТ №/);
+  for (const id of ['hire', 'job', 'handover', 'liability']) {
+    assert.equal(model.needsPoint(['contract', id]), true);
+    assert.ok(model.validate(f, [id]).some((message) => message.includes('торговую точку')));
+  }
+  f.employee.employmentDetails.workLocality = '';
+  assert.ok(model.validate(f, ['contract']).some((message) => message.includes('населенный пункт')));
+  f.employee.employmentDetails.workLocality = '<script>bad()</script>';
+  assert.match(model.render(f, ['contract']), /&lt;script&gt;/);
+  assert.doesNotMatch(model.render(f, ['contract']), /<script>/);
 });
 
 test('registry conditional writes isolate companies and serialize concurrent cloud requests', async () => {

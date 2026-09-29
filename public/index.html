@@ -504,7 +504,7 @@
           <div class="print-context">
             <label>Сотрудник<select id="printEmployee"></select></label>
             <label>Компания<select id="printCompany"></select></label>
-            <label>Торговая точка<select id="printPoint"></select></label>
+            <label id="printPointField" hidden>Торговая точка<select id="printPoint"></select></label>
           </div>
           <p id="printContextSummary" class="print-context-summary"></p>
           <button class="secondary" type="button" id="printOpenEmployee" hidden>Карточка сотрудника</button>
@@ -534,7 +534,7 @@
           </div>
         </div>
         <div class="notice" id="printFormsNotice" role="status" aria-live="polite"></div>
-        <p class="print-legal-warning" id="printContractWarning" hidden>Перед подписанием: конкретные даты выплаты зарплаты должны быть закреплены в ПВТР. По статье 57 ТК РФ в договоре необходимы сведения об удостоверении личности работодателя-ИП; по выбранным настройкам они исключены. Шаблон требует юридической проверки и дополнения обязательных сведений. Дата договора берется из даты начала работы и должна соответствовать фактическому оформлению.</p>
+        <p class="print-legal-warning" id="printContractWarning" hidden>Проект договора требует проверки перед подписанием. Оформите письменное приложение с конкретными датами выплаты зарплаты (статья 136 ТК РФ) и фактическими условиями труда на рабочем месте (статья 57 ТК РФ): общая формулировка в шаблоне не заменяет эти обязательные условия. Сведения об удостоверении личности работодателя-ИП исключены по выбранным настройкам, хотя требуются статьей 57 ТК РФ. Проверьте населенный пункт работы в карточке сотрудника; дата договора берется из даты начала работы. Исключение из текста отдельных норм не отменяет требований ТК РФ и обязанности оформлять обязательные локальные акты, если закон не предусматривает исключение для работодателя.</p>
         <div id="printPreview" aria-label="Предпросмотр документов"></div>
         <section class="print-register" aria-labelledby="printRegisterTitle">
           <div class="section-head"><h3 id="printRegisterTitle">Сформированные документы</h3><button class="secondary" type="button" id="printSavedDocuments" hidden>Печать сохранённых</button></div>
