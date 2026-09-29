@@ -37,6 +37,14 @@
 #printLegalSources { display: grid; gap: 8px; margin-top: 12px; }
 .print-saved-status { font-size: 12px; color: var(--muted); margin-top: 14px; }
 #printFormsNotice { white-space: pre-line; }
+.print-legal-warning { padding: 12px; border-left: 3px solid #b45309; background: #fff7e5; color: #69401a; font-size: 13px; line-height: 1.5; }
+#printFormsView { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+#printFormsView > * { min-width: 0; }
+.print-register { min-width: 0; margin-top: 24px; border-top: 1px solid #d9e3e1; padding-top: 16px; }
+.print-register table { min-width: 900px; }
+.print-register-actions { min-width: 190px; }
+.print-register-actions button { margin: 3px; }
+.print-register .section-head { flex-wrap: wrap; }
 #printPreview { margin-top: 28px; scroll-margin-top: 150px; }
 #printOutput { display: none; }
 .print-document { max-width: 210mm; margin: 0 auto 24px; padding: 16mm; border: 1px solid var(--line); background: white; color: #111; font: 11pt/1.35 "Times New Roman", serif; overflow-wrap: anywhere; }

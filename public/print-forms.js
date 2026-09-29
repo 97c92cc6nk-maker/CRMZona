@@ -9,6 +9,8 @@ const printFormsUI = (() => {
   let revision = 0;
   let contextReady = false;
   let initialized = false;
+  let recordRevision = null;
+  let generating = false;
   const byId = (id) => document.getElementById(id);
   const notice = (message, type = 'error') => showNotice(byId('printFormsNotice'), message, type);
   const selectedIds = () => [...document.querySelectorAll('#printFormList input:checked')].map((input) => input.value);
@@ -18,6 +20,7 @@ const printFormsUI = (() => {
     ++revision;
     byId('printPreview').replaceChildren();
     byId('printOutput').replaceChildren();
+    byId('printSavedDocuments').hidden = true;
   }
   function selectOptions(select, rows, label) {
     select.replaceChildren(new Option('Выберите...', ''));
@@ -70,6 +73,9 @@ const printFormsUI = (() => {
     byId('previewPrintForms').addEventListener('click', () => generate(false));
     byId('printDocuments').addEventListener('click', () => generate(true));
     byId('savePrintSettings').addEventListener('click', saveDraft);
+    byId('printSavedDocuments').addEventListener('click', () => {
+      if (state.permissions.canViewPrintForms && byId('printOutput').children.length) window.print();
+    });
     byId('printOpenEmployee').addEventListener('click', async () => {
       const id = employee()?.id;
       if (!id || !state.permissions.canViewUsers) return;
@@ -81,6 +87,7 @@ const printFormsUI = (() => {
     const keys = new Set(model.relevantFields(selectedIds()).map((field) => field.key));
     for (const label of document.querySelectorAll('[data-print-field]')) label.hidden = !keys.has(label.dataset.printField);
     for (const group of byId('printSettings').children) group.hidden = ![...group.querySelectorAll('label')].some((label) => !label.hidden);
+    byId('printContractWarning').hidden = !selectedIds().includes('contract');
   }
   async function load(force = false) {
     init();
@@ -97,6 +104,7 @@ const printFormsUI = (() => {
       const data = await api('/api/print-forms');
       if (version !== loadVersion) return;
       directory = data;
+      renderRegister();
       selectOptions(byId('printEmployee'), data.employees, (u) => `${u.fullName}${u.archived ? ' (архив)' : ''}`);
       selectOptions(byId('printCompany'), data.companies, (c) => c.shortName ? `${c.shortName} — ${c.name}` : c.name);
       selectOptions(byId('printPoint'), data.points, (p) => p.name);
@@ -110,19 +118,21 @@ const printFormsUI = (() => {
       else await selectContext();
     } catch (error) {
       directory = null; clearPreview(); byId('printContextSummary').textContent = '';
+      byId('printRegisterRows').replaceChildren();
       notice(`Данные для печати не загружены. ${error.message}`);
     } finally { if (version === loadVersion) byId('printWorkspace').removeAttribute('aria-busy'); }
   }
   function renderSummary() {
     const u = employee(), c = company();
     const summary = byId('printContextSummary');
-    summary.textContent = u ? `${u.fullName} · Должность: ${u.position || 'не заполнена в карточке'} · Оф. оклад: ${u.officialSalary || 'не заполнен'} · Начало работы: ${u.hireDate || 'не заполнено'}` : '';
+    summary.textContent = u ? `${u.fullName} · Должность: ${u.position || 'не заполнена в карточке'} · Оф. оклад: ${u.officialSalary || 'не заполнен'}` : '';
     if (c) summary.textContent += `\n${c.name} · ИНН: ${c.inn || 'не заполнен'} · Адрес: ${c.legalAddress || 'не заполнен'}`;
     byId('printOpenEmployee').hidden = !u || !state.permissions.canViewUsers;
   }
   async function selectContext() {
     const version = ++selectionVersion;
     contextReady = false;
+    recordRevision = null;
     byId('printSettingsForm').inert = true;
     clearPreview(); dirty = false; renderSummary();
     byId('printSettingsForm').reset(); byId('printPoint').value = '';
@@ -131,11 +141,10 @@ const printFormsUI = (() => {
     const form = byId('printSettingsForm');
     const now = new Date();
     form.elements.documentDate.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    form.elements.representative.value = c.director || '';
-    if (model.isIp(c)) form.elements.authority.value = 'Индивидуальный предприниматель действует от своего имени';
     try {
-      const { draft } = await api(`/api/print-forms/draft?employeeId=${encodeURIComponent(u.id)}&companyId=${encodeURIComponent(c.id)}`);
+      const { draft, record } = await api(`/api/print-forms/draft?employeeId=${encodeURIComponent(u.id)}&companyId=${encodeURIComponent(c.id)}`);
       if (version !== selectionVersion) return;
+      recordRevision = record?.revision || null;
       if (draft) {
         for (const field of model.settingsFields) {
           if (field.type === 'checkbox') form.elements[field.key].checked = draft.settings[field.key] === true;
@@ -148,6 +157,8 @@ const printFormsUI = (() => {
         if (assigned.length === 1) byId('printPoint').value = assigned[0].id;
         byId('printSavedStatus').textContent = '';
       }
+      if (!form.elements.documentDate.value) form.elements.documentDate.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      if (record?.contractNumber) byId('printSavedStatus').textContent += ` · Договор № ${record.contractNumber}`;
       notice(u.position ? '' : 'Заполните должность в карточке сотрудника перед печатью.');
       contextReady = true;
       form.inert = false;
@@ -159,7 +170,7 @@ const printFormsUI = (() => {
     const form = byId('printSettingsForm');
     const settings = Object.fromEntries(model.settingsFields.map((field) => [field.key, field.type === 'checkbox' ? form.elements[field.key].checked : form.elements[field.key].value]));
     settings.pointId = byId('printPoint').value;
-    return { employeeId: employee().id, companyId: company().id, settings, formIds: selectedIds() };
+    return { employeeId: employee().id, companyId: company().id, settings, formIds: selectedIds(), recordRevision };
   }
   async function saveDraft() {
     await runWithButton(byId('savePrintSettings'), async () => {
@@ -172,24 +183,70 @@ const printFormsUI = (() => {
     }, byId('printFormsNotice'));
   }
   async function generate(print) {
+    if (generating) return;
+    generating = true;
     clearPreview();
     const generatedRevision = revision;
-    await runWithButton(byId(print ? 'printDocuments' : 'previewPrintForms'), async () => {
+    try { await runWithButton(byId(print ? 'printDocuments' : 'previewPrintForms'), async () => {
       const data = await api('/api/print-forms/render', { method: 'POST', body: { ...payload(), purpose: print ? 'print' : 'preview' } });
       if (generatedRevision !== revision || !state.permissions.canViewPrintForms) return;
+      recordRevision = data.record.revision;
+      dirty = false;
+      directory.records = [data.record, ...(directory.records || []).filter((record) => record.id !== data.record.id
+        && !(record.employeeId === data.record.employeeId && record.companyId === data.record.companyId))];
+      renderRegister();
+      byId('printSavedStatus').textContent = `Документы сохранены${data.record.contractNumber ? ` · Договор № ${data.record.contractNumber}` : ''} · ${data.record.updatedBy}, ${new Date(data.generatedAt).toLocaleString('ru-RU')}`;
       byId('printPreview').innerHTML = data.html;
       byId('printOutput').innerHTML = data.html;
       notice('');
       if (print) window.print();
       else byId('printPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, byId('printFormsNotice')); } finally { generating = false; }
+  }
+  function renderRegister() {
+    const body = byId('printRegisterRows'); body.replaceChildren();
+    const records = directory?.records || [];
+    if (!records.length) {
+      const row = body.insertRow(); const cell = row.insertCell(); cell.colSpan = 7; cell.textContent = 'Сформированных документов пока нет.';
+    }
+    for (const record of records) {
+      const row = body.insertRow();
+      for (const value of [record.employeeName, record.companyName, record.contractNumber || '—',
+        record.contractDate ? record.contractDate.split('-').reverse().join('.') : '—',
+        record.formIds.map((id) => model.forms.find((form) => form.id === id)?.title || id).join(', ') || 'Старые сохранённые условия',
+        `${record.updatedAt ? new Date(record.updatedAt).toLocaleString('ru-RU') : ''} · ${record.updatedBy || ''}`]) row.insertCell().textContent = value;
+      const actions = row.insertCell(); actions.className = 'print-register-actions';
+      const open = document.createElement('button'); open.type = 'button'; open.className = 'secondary'; open.textContent = 'Открыть'; open.disabled = !record.formIds.length;
+      open.addEventListener('click', () => openRecord(record, open));
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = 'Исправить';
+      edit.disabled = !directory.employees.some((item) => item.id === record.employeeId);
+      edit.addEventListener('click', async () => {
+        if (dirty && !window.confirm('Открыть сохраненные условия? Несохраненные изменения будут потеряны.')) return;
+        byId('printEmployee').value = record.employeeId; byId('printCompany').value = record.companyId;
+        for (const input of byId('printFormList').querySelectorAll('input')) input.checked = (record.formIds.length ? record.formIds : ['contract']).includes(input.value);
+        syncFields(); await selectContext(); window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      actions.append(open, edit);
+    }
+  }
+  async function openRecord(record, button) {
+    clearPreview(); const openingRevision = revision;
+    await runWithButton(button, async () => {
+      const data = await api(`/api/print-forms/record?companyId=${encodeURIComponent(record.companyId)}&recordId=${encodeURIComponent(record.id)}`);
+      if (openingRevision !== revision || !state.permissions.canViewPrintForms) return;
+      byId('printPreview').innerHTML = data.html; byId('printOutput').innerHTML = data.html;
+      byId('printContractWarning').hidden = !data.record.formIds.includes('contract');
+      byId('printSavedDocuments').hidden = !data.html;
+      notice(''); byId('printPreview').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, byId('printFormsNotice'));
   }
   function reset() {
-    ++loadVersion; ++selectionVersion; directory = null; dirty = false; contextReady = false;
+    ++loadVersion; ++selectionVersion; directory = null; dirty = false; contextReady = false; recordRevision = null;
     if (!initialized) return;
     clearPreview(); byId('printSettingsForm').reset();
     for (const id of ['printEmployee', 'printCompany', 'printPoint']) byId(id).replaceChildren();
     byId('printContextSummary').textContent = ''; byId('printSavedStatus').textContent = '';
+    byId('printRegisterRows').replaceChildren();
   }
   function renderEmployeeDetails(user) {
     const target = byId('employeeEmploymentDetails');

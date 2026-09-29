@@ -514,7 +514,7 @@
               <div id="printFormList"></div>
               <details class="print-legal">
                 <summary>Основания и оформление</summary>
-                <p>Редакция шаблонов: 27.09.2026. Базовый комплект для работника ПВЗ по основному месту работы. Условия договора должны соответствовать реальному режиму, СОУТ и локальным актам работодателя.</p>
+                <p>Редакция шаблонов: 29.09.2026. Базовый комплект для работника ПВЗ по основному месту работы у ИП. Условия договора должны соответствовать реальному режиму, СОУТ и локальным актам работодателя.</p>
                 <p>До допуска к работе проводятся обязательные инструктажи и обучение по охране труда и пожарной безопасности с отдельной регистрацией. Медосмотр проводится при наличии установленных законом оснований. Подписание этих форм не заменяет указанные процедуры.</p>
                 <p>Индивидуальная материальная ответственность допустима при разграничении вверенных ценностей. При совместном доступе без разграничения индивидуальный договор не заменяет надлежащее оформление коллективной ответственности.</p>
                 <p>Заявление на увольнение оформляется только при добровольном решении сотрудника. Общий срок предупреждения по статье 80 ТК РФ составляет две недели со дня, следующего за получением заявления; исключения и более ранняя дата требуют предусмотренного законом основания или соглашения.</p>
@@ -527,14 +527,19 @@
               <p id="printSavedStatus" class="print-saved-status"></p>
               <div class="print-actions">
                 <button class="secondary" id="savePrintSettings" type="button">Сохранить условия</button>
-                <button class="secondary" id="previewPrintForms" type="button">Предпросмотр</button>
+                <button class="secondary" id="previewPrintForms" type="button">Сформировать</button>
                 <button class="primary" id="printDocuments" type="button">Печать / PDF</button>
               </div>
             </form>
           </div>
         </div>
         <div class="notice" id="printFormsNotice" role="status" aria-live="polite"></div>
+        <p class="print-legal-warning" id="printContractWarning" hidden>Перед подписанием: конкретные даты выплаты зарплаты должны быть закреплены в ПВТР. По статье 57 ТК РФ в договоре необходимы сведения об удостоверении личности работодателя-ИП; по выбранным настройкам они исключены. Шаблон требует юридической проверки и дополнения обязательных сведений. Дата договора берется из даты начала работы и должна соответствовать фактическому оформлению.</p>
         <div id="printPreview" aria-label="Предпросмотр документов"></div>
+        <section class="print-register" aria-labelledby="printRegisterTitle">
+          <div class="section-head"><h3 id="printRegisterTitle">Сформированные документы</h3><button class="secondary" type="button" id="printSavedDocuments" hidden>Печать сохранённых</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Сотрудник</th><th>Компания</th><th>№ договора</th><th>Дата договора</th><th>Документы</th><th>Обновлено</th><th>Действия</th></tr></thead><tbody id="printRegisterRows"></tbody></table></div>
+        </section>
       </section>
 
       <section class="view" id="retailPointsView" aria-labelledby="retailPointsTitle">
@@ -679,6 +684,7 @@
             <label>Полное наименование<input name="name" type="text" required maxlength="240"></label>
             <label>Ставка налога, %<input name="taxRate" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?%?" maxlength="8" required></label>
             <label>Юридический адрес<input name="legalAddress" type="text" maxlength="300"></label>
+            <label>Место заключения (город)<input name="contractCity" type="text" maxlength="120"></label>
             <label>Фактический адрес<input name="actualAddress" type="text" maxlength="300"></label>
             <label>Почтовый адрес<input name="postalAddress" type="text" maxlength="300"></label>
             <label>Руководитель<input name="director" type="text" maxlength="160"></label>
