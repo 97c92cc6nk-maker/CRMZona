@@ -3,7 +3,7 @@ WORKDIR /app
 
 # .dockerignore is a strict allowlist; local secrets and data never enter the image.
 COPY . .
-RUN npm ci --omit=dev && npm run build:client && npm cache clean --force
+RUN npm ci --omit=dev && node scripts/check-ffmpeg.js && npm run build:client && npm cache clean --force
 
 ENV NODE_ENV=production \
     PORT=8080 \

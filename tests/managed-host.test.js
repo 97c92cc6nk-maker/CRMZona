@@ -17,6 +17,14 @@ test('managed image build context only includes application sources', () => {
   ]);
 });
 
+test('managed builds approve only the pinned video dependency and check its executable', () => {
+  const manifest = require('../package.json');
+  assert.deepEqual(manifest.allowScripts, { [`ffmpeg-static@${manifest.dependencies['ffmpeg-static']}`]: true });
+  const docker = fs.readFileSync(path.join(__dirname, '../Dockerfile'), 'utf8');
+  assert.match(docker, /npm ci --omit=dev && node scripts\/check-ffmpeg\.js/);
+  require('node:child_process').execFileSync(process.execPath, [path.join(__dirname, '../scripts/check-ffmpeg.js')], { stdio: 'pipe', windowsHide: true });
+});
+
 async function serve(t, store) {
   const server = http.createServer(createRequestHandler(store, { standardClient: true, healthchecks: true }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
