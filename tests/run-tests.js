@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const http = require('http');
 
 const {
   ApiError,
@@ -19,6 +20,7 @@ const {
   buildManagementReport,
   buildRunnerReport,
   createCaptchaChallenge,
+  createRequestHandler,
   permissionsFor,
   reportDirectoryForUser,
   retailPointCompanyOptions,
@@ -1166,6 +1168,59 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
   assert.equal(report.totals.additionalIncome, '300');
   assert.equal(report.totals.taxes, '3200');
   assert.equal(report.totals.profit, '-9075');
+});
+
+test('management revenue above ten million persists through API save, reload and store restart', async (t) => {
+  const store = createTempStore();
+  const owner = store.createUser({ fullName: 'Test Report Owner', phone: '+79990000001', email: 'report-owner@example.com', password: 'TestPass123!', role: 'owner' });
+  const pointId = 'krasnogorsk_266';
+  store.saveJson('retail_points.json', [{ id: pointId, name: 'КРАСНОГОРСК 266', address: 'Тестовый адрес' }]);
+  const previousMonth = { rows: { [pointId]: { revenue: '123' } }, updatedAt: '2026-08-31T12:00:00.000Z' };
+  store.saveJson('reports.json', { managementReport: { '2026-08': previousMonth } });
+  const server = http.createServer(createRequestHandler(store));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(store.dataDir, { recursive: true, force: true });
+  });
+  const base = `http://127.0.0.1:${server.address().port}/api/reports/management-report`;
+  const headers = { Cookie: `session=${store.createSession(owner.id)}`, 'Content-Type': 'application/json' };
+  const save = (revenue, otherFields = {}) => fetch(base, { method: 'POST', headers,
+    body: JSON.stringify({ month: '2026-09', rows: [{ pointId, revenue, ...otherFields }] }) });
+
+  for (const [input, expected] of [
+    ['10000000', '10000000'], ['10000000.01', '10000000.01'], ['12464119', '12464119'],
+    ['12464119,25', '12464119.25'], ['0', '0'], ['', ''], ['1000000000000', '1000000000000'],
+  ]) {
+    const response = await save(input);
+    assert.equal(response.status, 200, await response.clone().text());
+    const result = await response.json();
+    assert.equal(result.report.rows.find((row) => row.pointId === pointId).revenue, expected);
+    assert.equal(result.report.totals.revenue, expected || '0');
+    const reload = await fetch(`${base}?month=2026-09`, { headers });
+    assert.equal(reload.status, 200);
+    assert.equal((await reload.json()).report.rows.find((row) => row.pointId === pointId).revenue, expected);
+    const restarted = new Store(store.dataDir);
+    const reports = restarted.loadJson('reports.json', {});
+    assert.equal(reports.managementReport['2026-09'].rows[pointId].revenue, expected);
+    assert.equal(reports.managementReport['2026-08'].rows[pointId].revenue, '123');
+  }
+
+  const beforeInvalid = store.loadJson('reports.json', {});
+  for (const input of ['-1', 'abc', 'Infinity', 'NaN', '1e309']) {
+    const response = await save(input);
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /Выручка должна быть неотрицательным числом/);
+    assert.deepEqual(store.loadJson('reports.json', {}), beforeInvalid);
+  }
+  const excessive = await save('1000000000000.01');
+  assert.equal(excessive.status, 400);
+  assert.match((await excessive.json()).error.replace(/\s/g, ' '), /Выручка: значение не должно превышать 1 000 000 000 000/);
+  const unchangedOtherLimit = await save('12464119', { reward: '10000001' });
+  assert.equal(unchangedOtherLimit.status, 400);
+  assert.match((await unchangedOtherLimit.json()).error.replace(/\s/g, ' '), /Вознаграждение: значение не должно превышать 10 000 000/);
+  assert.deepEqual(store.loadJson('reports.json', {}), beforeInvalid);
+  assert.ok(store.readAudit().some((entry) => entry.action === 'reports.management_report_saved' && entry.details.month === '2026-09'));
 });
 
 test('management report is visible only to owners', () => {
