@@ -3,13 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>CRMZona App</title>
+    <title>CRMZona — рабочее пространство</title>
     <link rel="icon" href="/assets/mark.svg" type="image/svg+xml">
     <style id="startupStyle">[hidden]{display:none!important}#startupScreen{max-width:560px;margin:15vh auto;padding:24px;font:16px/1.5 "Segoe UI",Arial,sans-serif;color:#1d2927}#startupScreen h1{font-size:24px}#startupScreen a{color:#235b55}#startupScreen p{margin:16px 0}#startupDetail{overflow-wrap:anywhere}</style>
     <link rel="stylesheet" href="/styles.css" media="print" data-startup-asset>
     <link rel="stylesheet" href="/surveillance.css" media="print" data-startup-asset>
   </head>
   <body>
+    <a class="skip-link" href="#profileView">К содержимому</a>
     <section id="startupScreen" aria-labelledby="startupTitle">
       <h1 id="startupTitle">CRMZona App</h1>
       <p id="startupMessage" role="status">Загружаем приложение…</p>
@@ -21,12 +22,18 @@
     <script src="/startup.js" async></script>
     <div id="appRoot" hidden inert>
     <main class="auth-screen" id="authScreen">
+      <aside class="auth-story" aria-label="CRMZona">
+        <a class="story-brand" href="/"><img src="/assets/mark.svg" alt="" width="38" height="38">CRMZona<span>WORKSPACE</span></a>
+        <div class="story-copy"><span class="eyebrow">ПОРЯДОК В КАЖДОМ РАБОЧЕМ ДНЕ</span><h2>Команда, точки<br>и задачи.<br><em>В одном месте.</em></h2><p>Планируйте смены, следите за задачами и управляйте торговыми точками в едином рабочем пространстве.</p>
+        <div class="story-preview" aria-hidden="true"><div class="story-preview-head"><span>Рабочая неделя</span><span class="story-dot">● Всё по плану</span></div><div class="story-days"><span>ПН</span><span>ВТ</span><span>СР</span><span>ЧТ</span><span>ПТ</span></div><div class="story-shifts"><i>Команда 01</i><b></b><b></b><b></b><b></b></div><div class="story-shifts second"><i>Команда 02</i><b></b><b></b><b></b><b></b></div></div>
+        </div><span class="story-footer">Меньше рутины. Больше ясности.</span>
+      </aside>
       <section class="auth-panel" aria-labelledby="authTitle">
         <div class="brand">
           <img src="/assets/mark.svg" alt="" width="48" height="48">
           <div>
-            <h1 id="authTitle">CRMZona App</h1>
-            <p>Торговые точки и смены</p>
+            <h1 id="authTitle">С возвращением</h1>
+            <p>Войдите в рабочее пространство CRMZona</p>
           </div>
         </div>
 
@@ -38,11 +45,11 @@
         <form class="auth-form is-active" id="loginForm">
           <label>
             Email или телефон
-            <input name="login" type="text" autocomplete="username" required>
+            <input name="login" placeholder="Email или +7 (999) 000-00-00" type="text" autocomplete="username" required>
           </label>
           <label>
             Пароль
-            <input name="password" type="password" autocomplete="current-password" required>
+            <input name="password" placeholder="Введите пароль" type="password" autocomplete="current-password" required>
           </label>
           <div class="auth-actions">
             <button class="primary" type="submit">Войти</button>
@@ -102,14 +109,9 @@
     </main>
 
     <main class="app-shell is-hidden" id="appShell">
-      <header class="topbar">
-        <div class="brand compact">
-          <img src="/assets/mark.svg" alt="" width="38" height="38">
-          <div>
-            <h1>CRMZona App</h1>
-            <p id="currentUserLine"></p>
-          </div>
-        </div>
+      <aside class="topbar" id="workspaceSidebar" aria-label="Навигация">
+        <div class="sidebar-brand"><img src="/assets/mark.svg" alt="" width="36" height="36"><div><strong>CRMZona</strong><span>Рабочее пространство</span></div><button class="sidebar-close" type="button" aria-label="Закрыть меню">×</button></div>
+        <label class="nav-search"><span class="sr-only">Найти раздел</span><input id="navigationSearch" type="search" placeholder="Найти раздел…" autocomplete="off"></label>
         <nav class="tabs" aria-label="Разделы">
           <button class="tab is-active" type="button" data-view="profileView">Личный кабинет</button>
           <button class="tab" type="button" data-view="assistantView">AI-помощник</button>
@@ -128,15 +130,19 @@
           <button class="tab" type="button" data-view="repairsView">Заявки на ремонт</button>
           <button class="tab" type="button" data-view="expensesView">Хозрасходы</button>
         </nav>
-        <button class="ghost" type="button" id="logoutButton">Выйти</button>
-      </header>
+        <div class="sidebar-footer"><span class="workspace-avatar" id="sidebarAvatar" aria-hidden="true">CZ</span><div class="sidebar-user"><strong id="sidebarUserName"></strong><span id="sidebarUserRole"></span></div><button class="ghost" type="button" id="logoutButton" title="Выйти из аккаунта">Выйти</button></div>
+      </aside>
+      <dialog id="navigationDialog" aria-label="Разделы приложения"></dialog>
+      <header class="workspace-header"><span id="currentUserLine" hidden></span><div class="workspace-location"><button type="button" id="openNavigation" class="secondary menu-button" aria-label="Открыть меню" aria-controls="navigationDialog">☰</button><span class="workspace-breadcrumb">Рабочее пространство <span aria-hidden="true">/</span> <strong id="workspaceCurrentTitle">Обзор</strong></span></div><div class="workspace-meta"><span id="workspaceDate"></span><span class="workspace-status"><i></i> Новый дизайн</span></div></header>
 
       <section class="view is-active" id="profileView" aria-labelledby="profileTitle">
         <div class="section-head">
-          <h2 id="profileTitle">Личный кабинет</h2>
+          <div><span class="eyebrow">ВАШЕ РАБОЧЕЕ ПРОСТРАНСТВО</span><h2 id="profileTitle">Обзор</h2><p class="section-description" id="workspaceGreeting">Всё для спокойного рабочего дня.</p></div>
           <span class="pill" id="rolePill"></span>
         </div>
 
+        <div class="overview-metrics" id="overviewMetrics"></div>
+        <section class="workspace-quickstart"><div><span class="eyebrow">НАЧНИТЕ С ГЛАВНОГО</span><h3>Что сегодня в планах?</h3><p>Быстрый переход к ежедневной работе.</p></div><div id="workspaceQuickActions"></div></section>
         <div class="profile-grid">
           <section class="panel" aria-labelledby="accountTitle">
             <h3 id="accountTitle">Профиль</h3>
@@ -782,7 +788,8 @@
             </div>
           </div>
 
-          <div class="table-wrap schedule-wrap">
+          <p class="table-scroll-hint">Прокрутите таблицу вправо, чтобы увидеть все дни месяца.</p>
+          <div class="table-wrap schedule-wrap" tabindex="0" role="region" aria-label="График смен, прокрутка по горизонтали">
             <table class="schedule-table" id="scheduleTable"></table>
           </div>
 

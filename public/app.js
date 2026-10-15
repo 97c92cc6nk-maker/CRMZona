@@ -1,5 +1,136 @@
 'use strict';
 
+// Workspace presentation. Business permissions and API operations remain in the existing views.
+const WORKSPACE_NAV = [
+  ['Каждый день', [['profileView','Обзор','home'], ['scheduleView','Графики работ','calendar'], ['tasksView','Задачи','check'], ['requestsView','Заявки','inbox']]],
+  ['Команда и сеть', [['employeesView','Сотрудники','users'], ['retailPointsView','Торговые точки','pin'], ['companiesView','Компании','building']]],
+  ['Учёт и контроль', [['reportsView','Отчёты','chart'], ['expensesView','Хозрасходы','wallet'], ['claimsView','Претензии','flag'], ['repairsView','Заявки на ремонт','tool'], ['printFormsView','Печатные формы','file'], ['surveillanceView','Видеонаблюдение','video']]],
+  ['Инструменты', [['assistantView','AI-помощник','spark'], ['developmentView','Разработка','code'], ['constantsView','Константы','settings']]],
+];
+const WORKSPACE_ICONS = {
+  home:'M3 10 12 3l9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
+  calendar:'M7 3v4m10-4v4M3 10h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2ZM8 14h2m4 0h2m-8 3h2',
+  check:'m7 12 3 3 7-7M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h10',
+  inbox:'M4 4h16l2 13v3H2v-3ZM3 15h5l2 3h4l2-3h5',
+  users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.9M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm7 0a4 4 0 0 1 0 8',
+  pin:'M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0ZM12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z',
+  building:'M4 21V3h12v18M1 21h22M16 9h4v12M8 7h4M8 11h4M8 15h4M9 21v-3h3v3',
+  chart:'M3 3v18h18M7 16v-4m5 4V7m5 9V4',
+  wallet:'M3 6a2 2 0 0 1 2-2h13v4M3 6v13a2 2 0 0 0 2 2h16V8H5a2 2 0 0 1-2-2Zm18 6h-6v5h6m-3-2.5h.1',
+  flag:'M4 22V3m0 1c5-4 10 4 16 0v11c-6 4-11-4-16 0',
+  tool:'m14 6 4 4 4-4a7 7 0 0 1-9 9l-7 7-4-4 7-7a7 7 0 0 1 9-9Z',
+  file:'M14 2H5v20h14V7ZM14 2v6h5M8 12h8m-8 4h6',
+  video:'M3 6h12v12H3ZM15 10l6-4v12l-6-4Z',
+  spark:'m12 2 3 7 7 3-7 3-3 7-3-7-7-3 7-3ZM21 2v4m-2-2h4',
+  code:'m8 6-6 6 6 6m8-12 6 6-6 6m-3-15-2 18',
+  settings:'M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6m-6 0v6',
+};
+function workspaceIcon(name) {
+  return `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${WORKSPACE_ICONS[name] || WORKSPACE_ICONS.file}"/></svg>`;
+}
+function initializeWorkspaceUI() {
+  const nav = document.querySelector('.tabs');
+  for (const [label, items] of WORKSPACE_NAV) {
+    const group = document.createElement('div'); group.className = 'nav-group';
+    const title = document.createElement('span'); title.className = 'nav-group-title'; title.textContent = label; group.append(title);
+    for (const [id, text, icon] of items) {
+      const button = nav.querySelector(`[data-view="${id}"]`);
+      if (!button) continue;
+      button.innerHTML = workspaceIcon(icon) + `<span>${text}</span>`;
+      group.append(button);
+    }
+    nav.append(group);
+  }
+  const sidebar = document.getElementById('workspaceSidebar');
+  const dialog = document.getElementById('navigationDialog');
+  const opener = document.getElementById('openNavigation');
+  const media = matchMedia('(max-width: 1100px)');
+  const moveNavigation = () => {
+    if (dialog.open) dialog.close();
+    if (media.matches) dialog.append(sidebar); else els.appShell.insertBefore(sidebar, dialog);
+  };
+  moveNavigation(); media.addEventListener('change', moveNavigation);
+  opener.addEventListener('click', () => { dialog.showModal(); opener.setAttribute('aria-expanded','true'); });
+  sidebar.querySelector('.sidebar-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('close', () => opener.setAttribute('aria-expanded','false'));
+  dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });
+  nav.addEventListener('click', e => { if (e.target.closest('.tab') && dialog.open) dialog.close(); });
+  document.getElementById('navigationSearch').addEventListener('input', e => {
+    const query = e.target.value.trim().toLocaleLowerCase('ru');
+    for (const button of nav.querySelectorAll('.tab')) button.hidden = !button.textContent.toLocaleLowerCase('ru').includes(query);
+    updateWorkspaceNavGroups();
+  });
+  new MutationObserver(updateWorkspaceNavGroups).observe(nav, {subtree:true, attributes:true, attributeFilter:['class']});
+  document.getElementById('workspaceDate').textContent = new Intl.DateTimeFormat('ru', {day:'numeric',month:'long',weekday:'short'}).format(new Date());
+  // Creation forms stay accessible but no longer displace the lists on every visit.
+  for (const id of ['employeeForm','retailPointForm','companyForm','developmentForm','taskForm','requestForm','repairForm','expenseForm','claimForm']) {
+    const form = document.getElementById(id); const panel = form?.closest('.panel');
+    const heading = panel?.querySelector('h3');
+    if (!form || !heading) continue;
+    const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'secondary form-disclosure';
+    toggle.textContent = '+ Добавить'; toggle.setAttribute('aria-controls',form.id); toggle.setAttribute('aria-expanded','false');
+    heading.insertAdjacentElement('afterend',toggle); form.hidden = true; panel.classList.add('create-panel');
+    toggle.addEventListener('click', () => {
+      form.hidden = !form.hidden; toggle.setAttribute('aria-expanded', String(!form.hidden)); toggle.textContent = form.hidden ? '+ Добавить' : 'Свернуть';
+      if (!form.hidden) form.querySelector('input:not([type="hidden"]),select,textarea')?.focus();
+    });
+  }
+  for (const wrap of document.querySelectorAll('.table-wrap')) {
+    wrap.setAttribute('tabindex','0'); wrap.setAttribute('role','region');
+    if (!wrap.hasAttribute('aria-label')) wrap.setAttribute('aria-label', wrap.closest('section')?.querySelector('h3,h2')?.textContent || 'Таблица с горизонтальной прокруткой');
+  }
+  for (const view of document.querySelectorAll('.view')) view.setAttribute('tabindex','-1');
+  for (const table of document.querySelectorAll('.employees-table,.retail-points-table,.companies-table,.tasks-table,.requests-table,.repairs-table')) {
+    table.classList.add('mobile-cards');
+    const labels = Array.from(table.querySelectorAll('thead th')).map(th=>th.textContent.trim());
+    const labelRows=()=>table.querySelectorAll('tbody tr').forEach(row=>Array.from(row.cells).forEach((cell,i)=>{cell.dataset.label=labels[i] || '';}));
+    labelRows();
+    for (const body of table.tBodies) new MutationObserver(labelRows).observe(body,{childList:true,subtree:true});
+  }
+  refreshWorkspaceNavigation(document.querySelector('.view.is-active')?.id || 'profileView');
+}
+function updateWorkspaceNavGroups() {
+  document.querySelectorAll('.nav-group').forEach(group => {
+    group.hidden = !Array.from(group.querySelectorAll('.tab')).some(b => !b.hidden && !b.classList.contains('is-hidden'));
+  });
+}
+function refreshWorkspaceNavigation(viewId) {
+  if (viewId === 'profileView' && state.user) renderWorkspaceOverview();
+  const active = document.querySelector(`.tab[data-view="${viewId}"]`);
+  document.querySelectorAll('.tab').forEach(b => {
+    if (b === active) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
+  });
+  const title = document.getElementById('workspaceCurrentTitle'); if (title) title.textContent = active?.textContent || 'Обзор';
+  const skip = document.querySelector('.skip-link'); if (skip) skip.href = '#' + viewId;
+  updateWorkspaceNavGroups();
+}
+function renderWorkspaceOverview() {
+  if (!state.user) return;
+  const name = state.user.fullName || 'Пользователь';
+  document.getElementById('sidebarUserName').textContent = name;
+  document.getElementById('sidebarUserRole').textContent = state.user.roleLabel;
+  document.getElementById('sidebarAvatar').textContent = name.split(/\s+/).slice(0,2).map(p=>p[0]).join('');
+  document.getElementById('workspaceGreeting').textContent = 'Всё для спокойного рабочего дня, ' + (state.user.firstName || name.split(' ')[1] || name) + '.';
+  const metrics = [
+    ['canViewRetailPoints','Торговые точки',state.retailPoints.length,'В вашей сети','pin','retailPointsView'],
+    ['canViewUsers','Сотрудники',state.users.filter(u=>!isArchivedEmployee(u)).length,'В команде','users','employeesView'],
+    ['canViewTasks','Задачи',state.tasks.length,'Доступно вам','check','tasksView'],
+    ['canViewRequests','Заявки',state.requests.length,'В рабочем списке','inbox','requestsView'],
+  ].filter(m=>state.permissions[m[0]]);
+  const container = document.getElementById('overviewMetrics'); container.replaceChildren();
+  for (const [,label,value,caption,icon,target] of metrics) {
+    const card = document.createElement('button'); card.type='button'; card.className='metric-card';
+    card.innerHTML = `<span class="metric-top"><span>${label}</span>${workspaceIcon(icon)}</span><strong>${value}</strong><span class="metric-caption">${caption}<span aria-hidden="true">↗</span></span>`;
+    card.addEventListener('click',()=>activateView(target)); container.append(card);
+  }
+  const quick = document.getElementById('workspaceQuickActions'); quick.replaceChildren();
+  for (const [permission,label,id,icon] of [['canViewSchedule','Открыть график','scheduleView','calendar'],['canViewTasks','Перейти к задачам','tasksView','check'],['canViewReports','Посмотреть отчёты','reportsView','chart']]) {
+    if (!state.permissions[permission]) continue;
+    const button=document.createElement('button'); button.className=quick.children.length?'secondary':'primary'; button.type='button'; button.innerHTML=workspaceIcon(icon)+`<span>${label}</span>`; button.addEventListener('click',()=>activateView(id)); quick.append(button);
+  }
+  document.querySelector('.workspace-quickstart').hidden = !quick.children.length;
+}
+
 const state = {
   user: null,
   permissions: {},
@@ -130,6 +261,7 @@ function initializeApplication() {
     }
     bindElements();
     bindEvents();
+    initializeWorkspaceUI();
     document.documentElement.dataset.appReady = 'true';
     document.dispatchEvent(new Event('crm:ready'));
     bootstrap();
@@ -565,6 +697,7 @@ async function loadAppData() {
     renderUnavailableSchedule();
   }
   await Promise.all(loaders);
+  renderWorkspaceOverview();
 }
 
 function showAuth() {
@@ -577,6 +710,7 @@ function showAuth() {
 function showApp() {
   els.authScreen.classList.add('is-hidden');
   els.appShell.classList.remove('is-hidden');
+  renderWorkspaceOverview();
 }
 
 function switchAuthMode(mode) {
@@ -814,6 +948,7 @@ function activateView(viewId) {
   document.querySelectorAll('.view').forEach((view) => {
     view.classList.toggle('is-active', view.id === viewId);
   });
+  refreshWorkspaceNavigation(viewId);
   refreshViewData(viewId);
 }
 
@@ -870,6 +1005,7 @@ function renderProfile() {
   }
   els.auditPanel.classList.toggle('is-hidden', !state.permissions.canViewAudit);
   ensureActiveTabVisible();
+  renderWorkspaceOverview();
 }
 
 function renderAssistant() {
@@ -6588,16 +6724,40 @@ function renderAudit(events) {
     return;
   }
 
+  const labels = {
+    'auth.login_success': 'Вход в приложение',
+    'user.registered': 'Добавлен сотрудник',
+    'user.updated': 'Обновлены данные сотрудника',
+    'user.deleted': 'Удалён сотрудник',
+    'user.role_changed': 'Изменены права доступа',
+    'user.password_changed': 'Обновлён пароль',
+    'schedule.saved': 'График сохранён',
+    'task.created': 'Создана задача',
+    'request.created': 'Создана заявка',
+    'request.updated': 'Обновлена заявка',
+    'repair.created': 'Добавлена заявка на ремонт',
+    'repair.updated': 'Обновлена заявка на ремонт',
+    'expense.created': 'Добавлен расход',
+    'claim.created': 'Создана претензия',
+    'storage.read_failed': 'Не удалось прочитать данные',
+    'storage.direct_write_fallback': 'Использован резервный способ сохранения',
+    'storage.memory_write_fallback': 'Данные временно сохранены в памяти',
+    'server.started': 'Приложение запущено',
+  };
   for (const event of events) {
     const item = document.createElement('li');
     const at = document.createElement('span');
     at.className = 'audit-meta';
     at.textContent = formatDateTime(event.at);
     const action = document.createElement('strong');
-    action.textContent = event.action;
-    const details = document.createElement('span');
-    details.className = 'audit-meta';
-    details.textContent = JSON.stringify(event.details || {});
+    action.textContent = labels[event.action] || event.action;
+    const details = document.createElement('details');
+    details.className = 'audit-details';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Подробности';
+    const content = document.createElement('pre');
+    content.textContent = `${event.action}\n${JSON.stringify(event.details || {}, null, 2)}`;
+    details.append(summary, content);
     item.append(at, action, details);
     els.auditList.append(item);
   }
