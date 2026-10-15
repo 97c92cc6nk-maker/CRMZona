@@ -1840,3 +1840,22 @@ h2{font-size:28px;line-height:1.25;font-weight:800}h3{font-size:16px;line-height
 }
 @media screen {.preview-login-note{padding:12px 14px;margin:0 0 22px;background:#fff7e4;border:1px solid #eee1bf;border-radius:10px;color:#705923;font-size:11px;line-height:1.8}.preview-login-note strong{font-weight:700}.audit-list li{grid-template-columns:150px minmax(0,1fr) minmax(100px,1fr);align-items:start}.audit-details{min-width:0}.audit-details summary{color:var(--accent);cursor:pointer;font-size:11px;min-height:24px;padding:3px 0}.audit-details pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7f9;border-radius:8px;padding:12px;font-size:11px;line-height:1.6;margin:8px 0 0}@media(max-width:760px){.audit-list li{grid-template-columns:1fr}}}
 @media screen {html{min-width:280px}.schedule-area{grid-template-columns:minmax(0,1fr)}.schedule-area>*,.schedule-actions>div{min-width:0}#scheduleCaption{white-space:normal;overflow-wrap:anywhere}@media(max-width:760px){.schedule-actions .action-row{grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-actions button{white-space:normal;min-width:0}.schedule-actions select{min-width:0;width:100%}.section-head>.toolbar{grid-template-columns:minmax(0,1fr)}.toolbar input{min-width:0;max-width:100%}}}
+@media screen {
+  .schedule-table{width:max-content;min-width:100%;table-layout:auto}
+  .schedule-table .employee-col{width:210px;min-width:210px;z-index:3}
+  .schedule-table select[name="employeeId"]{width:200px;font-size:12px;min-height:44px}
+  .schedule-table td.metric-col,.schedule-table th.metric-col{width:90px;min-width:90px;left:210px;z-index:2;box-shadow:none}
+  .schedule-table .day-col{width:68px;min-width:68px}
+  .schedule-table input.day-input{width:60px;font-size:13px;min-height:44px;font-variant-numeric:tabular-nums}
+  @media(max-width:760px){
+    .schedule-table .employee-col{width:130px;min-width:130px}
+    .schedule-table select[name="employeeId"]{width:120px;font-size:11px}
+    .schedule-table td.metric-col,.schedule-table th.metric-col{position:static;left:auto;width:74px;min-width:74px}
+  }
+  @media(max-width:380px){
+    .schedule-area{padding:14px}
+    .schedule-table .employee-col{width:100px;min-width:100px}
+    .schedule-table select[name="employeeId"]{width:90px}
+    .schedule-table td.metric-col,.schedule-table th.metric-col{width:56px;min-width:56px;font-size:9px;white-space:normal}
+  }
+}
