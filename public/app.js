@@ -6724,16 +6724,40 @@ function renderAudit(events) {
     return;
   }
 
+  const labels = {
+    'auth.login_success': 'Вход в приложение',
+    'user.registered': 'Добавлен сотрудник',
+    'user.updated': 'Обновлены данные сотрудника',
+    'user.deleted': 'Удалён сотрудник',
+    'user.role_changed': 'Изменены права доступа',
+    'user.password_changed': 'Обновлён пароль',
+    'schedule.saved': 'График сохранён',
+    'task.created': 'Создана задача',
+    'request.created': 'Создана заявка',
+    'request.updated': 'Обновлена заявка',
+    'repair.created': 'Добавлена заявка на ремонт',
+    'repair.updated': 'Обновлена заявка на ремонт',
+    'expense.created': 'Добавлен расход',
+    'claim.created': 'Создана претензия',
+    'storage.read_failed': 'Не удалось прочитать данные',
+    'storage.direct_write_fallback': 'Использован резервный способ сохранения',
+    'storage.memory_write_fallback': 'Данные временно сохранены в памяти',
+    'server.started': 'Приложение запущено',
+  };
   for (const event of events) {
     const item = document.createElement('li');
     const at = document.createElement('span');
     at.className = 'audit-meta';
     at.textContent = formatDateTime(event.at);
     const action = document.createElement('strong');
-    action.textContent = event.action;
-    const details = document.createElement('span');
-    details.className = 'audit-meta';
-    details.textContent = JSON.stringify(event.details || {});
+    action.textContent = labels[event.action] || event.action;
+    const details = document.createElement('details');
+    details.className = 'audit-details';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Подробности';
+    const content = document.createElement('pre');
+    content.textContent = `${event.action}\n${JSON.stringify(event.details || {}, null, 2)}`;
+    details.append(summary, content);
     item.append(at, action, details);
     els.auditList.append(item);
   }
