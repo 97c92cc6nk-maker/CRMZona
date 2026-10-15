@@ -126,6 +126,28 @@ function apiFixture(fetch, resilient = false) {
   return context;
 }
 
+test('saved schedule employee stays selected even when absent from the active directory', () => {
+  const context = apiFixture(async () => {});
+  context.document.createElement = (tagName) => ({ tagName, dataset: {}, children: [], append(child) { this.children.push(child); } });
+  vm.runInContext(`state.canEditSchedule = true; state.canManageAllSchedule = true;
+    state.employeeOptions = [{ id: 'active', fullName: 'Active Test' }]; state.runnerOptions = [];`, context);
+  for (const rowType of ['employee', 'runner']) {
+    context.savedRow = { employeeId: 'archived', employeeName: 'Archived Test', rowType };
+    const cell = vm.runInContext('scheduleEmployeeCell(savedRow)', context);
+    const select = cell.children[0];
+    assert.equal(select.value, 'archived');
+    assert.equal(select.children.find((option) => option.value === 'archived').textContent, 'Archived Test (сохраненная строка)');
+    assert.equal(select.children.find((option) => option.value === 'archived').selected, true);
+    assert.equal(context.savedRow.employeeId, 'archived');
+    assert.equal(vm.runInContext('state.employeeOptions.length', context), 1);
+    assert.equal(vm.runInContext('state.runnerOptions.length', context), 0);
+  }
+  vm.runInContext("state.canManageAllSchedule = false; state.user = { id: 'active' };", context);
+  const readOnly = vm.runInContext('scheduleEmployeeCell(savedRow)', context);
+  assert.equal(readOnly.textContent, 'Archived Test');
+  assert.equal(readOnly.children.length, 0);
+});
+
 test('API timeout covers response body stalls, not only HTTP headers', async () => {
   const context = apiFixture(async (_, options) => ({
     text: () => new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('Aborted')))),

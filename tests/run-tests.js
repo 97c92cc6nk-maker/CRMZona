@@ -1895,6 +1895,59 @@ test('schedule substitutions use runner rows with hours only', () => {
   assert.equal(savedEmployeeRow.days['1'].rateRub, '1000');
 });
 
+for (const mode of ['local', 'supabase']) test(`${mode}: saved archived schedule rows do not block advances or become new employee options`, async (t) => {
+  const local = createTempStore();
+  t.after(() => fs.rmSync(local.dataDir, { recursive: true, force: true }));
+  const create = (name, role = 'employee') => local.createUser({ fullName: `${name} Test`, role,
+    phone: `+7999000${String(local.listUsers().length).padStart(4, '0')}`, email: `${name}@example.com`,
+    password: 'TestPass123!', allowedSections: ['schedule'],
+    allowedPoints: role === 'owner' ? [] : ['moscow_6231', 'krasnogorsk_466'], unofficialSalary: role === 'admin' ? '1' : '' });
+  const owner = create('Owner', 'owner'), admin = create('Admin', 'admin');
+  const active = create('Active'), archived = create('Archived'), runner = create('Runner', 'runner');
+  const neverScheduled = create('NeverScheduled');
+  const store = mode === 'local' ? local : Object.assign(Object.create(SupabaseStore.prototype), {
+    listUsers: async () => local.listUsers(), loadJson: async (...args) => local.loadJson(...args),
+    saveJson: async (...args) => local.saveJson(...args), audit: async (...args) => local.audit(...args),
+  });
+  const pointId = 'moscow_6231', month = '2026-10';
+  await store.saveSchedule(owner, pointId, month, [
+    { employeeId: active.id, days: { 1: { rateRub: '1000', issuedCount: '25' } } },
+    { employeeId: archived.id, advanceCard: '50', salaryCard: '100', days: { 2: { rateRub: '1200', issuedCount: '30' } } },
+    { employeeId: runner.id, rowType: 'runner', days: { 3: { runnerHours: '5' } } },
+  ], [neverScheduled.id]);
+  for (const user of [archived, runner, neverScheduled]) await archiveUserInStore(local, owner, user.id, true);
+
+  for (const actor of [owner, admin]) {
+    const before = await store.getSchedule(pointId, month, actor);
+    assert.equal(before.employeeOptions.some((u) => u.id === archived.id), false);
+    assert.equal(before.runnerOptions.some((u) => u.id === runner.id), false);
+    const retained = before.rows.filter((r) => [archived.id, runner.id].includes(r.employeeId));
+    const rows = before.rows.map((r) => r.employeeId === active.id ? { ...r, advanceCard: '15486' } : r);
+    await store.saveSchedule(actor, pointId, month, rows, before.removedEmployeeIds);
+    const reloaded = await store.getSchedule(pointId, month, actor);
+    assert.equal(reloaded.rows.find((r) => r.employeeId === active.id).advanceCard, '15486');
+    assert.deepEqual(reloaded.rows.filter((r) => [archived.id, runner.id].includes(r.employeeId)), retained);
+    assert.equal(Boolean(local.getUserById(archived.id).archivedAt), true);
+    assert.equal(reloaded.employeeOptions.some((u) => u.id === archived.id), false);
+    assert.equal(reloaded.runnerOptions.some((u) => u.id === runner.id), false);
+    assert.equal(new Store(local.dataDir).getSchedule(pointId, month, actor).rows.find((r) => r.employeeId === active.id).advanceCard, '15486');
+
+    for (const [point, period, employeeId] of [
+      [pointId, '2026-11', archived.id], ['krasnogorsk_466', month, archived.id],
+      [pointId, month, neverScheduled.id], [pointId, month, 'forged-employee'],
+    ]) {
+      await assert.rejects(async () => store.saveSchedule(actor, point, period, [{ employeeId, employeeName: 'Archived', days: {} }]),
+        (error) => error instanceof ApiError && error.status === 403);
+    }
+  }
+  await assert.rejects(async () => store.saveSchedule(active, pointId, month, [{ employeeId: archived.id, advanceCard: '999', days: {} }]),
+    (error) => error instanceof ApiError && error.status === 403);
+  const saved = await store.getSchedule(pointId, month, owner);
+  await store.saveSchedule(owner, pointId, month, saved.rows.filter((r) => r.employeeId !== archived.id), [archived.id]);
+  await assert.rejects(async () => store.saveSchedule(owner, pointId, month, [{ employeeId: archived.id, days: {} }]),
+    (error) => error instanceof ApiError && error.status === 403);
+});
+
 test('employee can save only own schedule row without overwriting others', () => {
   const store = createTempStore();
   const owner = store.createUser({

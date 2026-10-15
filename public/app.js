@@ -7065,6 +7065,13 @@ function scheduleEmployeeCell(scheduleRow, rowSpan = 2) {
   select.required = true;
 
   const options = isRunnerScheduleRow(scheduleRow) ? state.runnerOptions : state.employeeOptions;
+  if (scheduleRow.employeeId && !options.some((employee) => employee.id === scheduleRow.employeeId)) {
+    const current = document.createElement('option');
+    current.value = scheduleRow.employeeId;
+    current.textContent = `${scheduleRow.employeeName} (сохраненная строка)`;
+    current.selected = true;
+    select.append(current);
+  }
   for (const employee of options) {
     const option = document.createElement('option');
     option.value = employee.id;
@@ -7078,6 +7085,7 @@ function scheduleEmployeeCell(scheduleRow, rowSpan = 2) {
     scheduleRow.rowType = options[0].rowType || scheduleRow.rowType || 'employee';
     select.value = scheduleRow.employeeId;
   }
+  if (scheduleRow.employeeId) select.value = scheduleRow.employeeId;
   select.disabled = !state.canManageAllSchedule && options.length <= 1;
   cell.append(select);
   return cell;
