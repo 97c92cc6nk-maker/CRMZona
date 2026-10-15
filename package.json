@@ -6,9 +6,10 @@
   "main": "lib/app.js",
   "scripts": {
     "start": "node lib/app.js",
+    "preview:design": "node scripts/design-preview-server.js",
     "build:client": "node scripts/build-client.js",
     "pretest": "node scripts/build-client.js --check",
-    "test": "node --test tests/run-tests.js tests/print-forms.test.js tests/surveillance.test.js tests/startup.test.js tests/reliable-loading.test.js tests/client-delivery.test.js tests/managed-host.test.js tests/gmail-mailer.test.js",
+    "test": "node --test tests/run-tests.js tests/print-forms.test.js tests/surveillance.test.js tests/startup.test.js tests/reliable-loading.test.js tests/client-delivery.test.js tests/managed-host.test.js tests/gmail-mailer.test.js tests/design-preview.test.js",
     "smoke": "node tests/smoke.js",
     "migrate:supabase": "node scripts/migrate-to-supabase.js"
   },
