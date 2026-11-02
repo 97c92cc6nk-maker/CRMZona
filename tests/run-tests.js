@@ -2571,6 +2571,68 @@ test('employee premium is assigned to the point with the most worked days', () =
   assert.equal(krasnogorsk.rows.find((row) => row.employeeId === employee.id).bonusExtra, '5000');
 });
 
+for (const mode of ['local', 'supabase']) test(`${mode}: installers can read existing repairs and attachments only for assigned points`, async (t) => {
+  const local = createTempStore();
+  t.after(() => fs.rmSync(local.dataDir, { recursive: true, force: true }));
+  const create = (name, role, allowedPoints = ['moscow_6231']) => local.createUser({
+    fullName: `${name} Test`, role, allowedPoints, allowedSections: ['repairs'],
+    phone: `+7999000${String(local.listUsers().length).padStart(4, '0')}`,
+    email: `${name}@example.com`, password: 'TestPass123!', unofficialSalary: '1',
+  });
+  const owner = create('Owner', 'owner'), admin = create('Admin', 'admin');
+  const employee = create('Employee', 'employee');
+  const storedFile = { fileName: 'test.pdf', mimeType: 'application/pdf', size: 4, base64: Buffer.from('test').toString('base64') };
+  const rows = [
+    { id: 'old', pointId: 'moscow_6231', createdBy: owner.id, createdAt: '2026-08-01T10:00:00.000Z', status: 'done' },
+    { id: 'new', pointId: 'moscow_6231', createdBy: admin.id, createdAt: '2026-11-01T10:00:00.000Z', status: 'new' },
+    { id: 'employee', pointId: 'moscow_6231', createdBy: employee.id, createdAt: '2026-10-01T10:00:00.000Z', status: 'in_progress' },
+    { id: 'other-point', pointId: 'krasnogorsk_466', createdBy: owner.id, createdAt: '2026-09-01T10:00:00.000Z', status: 'new' },
+  ].map((row) => ({ ...row, title: 'Test repair', description: 'Test description', priority: 'normal',
+    attachments: [{ id: 'file', fileName: 'test.pdf', mimeType: 'application/pdf', storedFile }] }));
+  local.saveJson('repairs.json', rows);
+  // The installer is assigned after these repairs already exist.
+  const installer = create('Installer', 'installer');
+  const store = mode === 'local' ? local : Object.assign(Object.create(SupabaseStore.prototype), {
+    listUsers: async () => local.listUsers(), loadJson: async (...args) => local.loadJson(...args),
+  });
+  const ids = async (actor) => (await store.listRepairs(actor)).map((row) => row.id);
+  const denied = (action) => assert.rejects(action, (error) => error instanceof ApiError && error.status === 403);
+  assert.deepEqual(await ids(installer), ['new', 'employee', 'old']);
+  assert.equal((await store.getRepairAttachmentFile(installer, 'old', 'file')).buffer.toString(), 'test');
+  await denied(async () => store.getRepairAttachmentFile(installer, 'other-point', 'file'));
+  assert.deepEqual(await ids({ ...installer, allowedPoints: ['krasnogorsk_466'] }), ['other-point']);
+  assert.deepEqual(await ids({ ...installer, allowedPoints: [] }), []);
+  assert.equal(permissionsFor({ ...installer, allowedPoints: [] }).canCreateRepairs, false);
+  await denied(async () => store.getRepairAttachmentFile({ ...installer, allowedPoints: [] }, 'old', 'file'));
+  await denied(async () => store.listRepairs({ ...installer, allowedSections: [] }));
+  await denied(async () => store.getRepairAttachmentFile({ ...installer, allowedSections: [] }, 'old', 'file'));
+  assert.equal(permissionsFor(installer).canManageRepairs, false);
+  for (const role of ['employee', 'partner', 'runner']) {
+    assert.deepEqual(await ids({ ...employee, role }), ['employee']);
+    await denied(async () => store.getRepairAttachmentFile({ ...employee, role }, 'old', 'file'));
+  }
+  assert.equal((await ids(owner)).length, 4);
+  assert.equal((await ids(admin)).length, 4);
+  assert.deepEqual(local.loadJson('repairs.json', []), rows);
+
+  if (mode === 'local') {
+    const server = http.createServer(createRequestHandler(local));
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise((resolve) => server.close(resolve)));
+    const base = `http://127.0.0.1:${server.address().port}/api/repairs`;
+    const headers = { Cookie: `session=${local.createSession(installer.id)}`, 'Content-Type': 'application/json' };
+    const response = await fetch(base, { headers });
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).repairs.map((row) => row.id), ['new', 'employee', 'old']);
+    const file = await fetch(`${base}/old/attachments/file/file`, { headers });
+    assert.equal(file.status, 200);
+    assert.equal(await file.text(), 'test');
+    assert.equal((await fetch(`${base}/other-point/attachments/file/file`, { headers })).status, 403);
+    assert.equal((await fetch(`${base}/old`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'in_progress' }) })).status, 403);
+    assert.deepEqual(local.loadJson('repairs.json', []), rows);
+  }
+});
+
 test('employee with repair access can create repair requests with attachments', async () => {
   const store = createTempStore();
   store.createUser({
