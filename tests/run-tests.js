@@ -2571,7 +2571,7 @@ test('employee premium is assigned to the point with the most worked days', () =
   assert.equal(krasnogorsk.rows.find((row) => row.employeeId === employee.id).bonusExtra, '5000');
 });
 
-for (const mode of ['local', 'supabase']) test(`${mode}: installers can read existing repairs and attachments only for assigned points`, async (t) => {
+for (const mode of ['local', 'supabase']) test(`${mode}: installers can read repairs and update statuses only for assigned points`, async (t) => {
   const local = createTempStore();
   t.after(() => fs.rmSync(local.dataDir, { recursive: true, force: true }));
   const create = (name, role, allowedPoints = ['moscow_6231']) => local.createUser({
@@ -2594,6 +2594,7 @@ for (const mode of ['local', 'supabase']) test(`${mode}: installers can read exi
   const installer = create('Installer', 'installer');
   const store = mode === 'local' ? local : Object.assign(Object.create(SupabaseStore.prototype), {
     listUsers: async () => local.listUsers(), loadJson: async (...args) => local.loadJson(...args),
+    saveJson: async (...args) => local.saveJson(...args), audit: async (...args) => local.audit(...args),
   });
   const ids = async (actor) => (await store.listRepairs(actor)).map((row) => row.id);
   const denied = (action) => assert.rejects(action, (error) => error instanceof ApiError && error.status === 403);
@@ -2606,7 +2607,8 @@ for (const mode of ['local', 'supabase']) test(`${mode}: installers can read exi
   await denied(async () => store.getRepairAttachmentFile({ ...installer, allowedPoints: [] }, 'old', 'file'));
   await denied(async () => store.listRepairs({ ...installer, allowedSections: [] }));
   await denied(async () => store.getRepairAttachmentFile({ ...installer, allowedSections: [] }, 'old', 'file'));
-  assert.equal(permissionsFor(installer).canManageRepairs, false);
+  assert.equal(permissionsFor(installer).canManageRepairs, true);
+  assert.equal(permissionsFor({ ...installer, allowedSections: [] }).canManageRepairs, false);
   for (const role of ['employee', 'partner', 'runner']) {
     assert.deepEqual(await ids({ ...employee, role }), ['employee']);
     await denied(async () => store.getRepairAttachmentFile({ ...employee, role }, 'old', 'file'));
@@ -2614,6 +2616,27 @@ for (const mode of ['local', 'supabase']) test(`${mode}: installers can read exi
   assert.equal((await ids(owner)).length, 4);
   assert.equal((await ids(admin)).length, 4);
   assert.deepEqual(local.loadJson('repairs.json', []), rows);
+
+  for (const actor of [
+    { ...installer, allowedPoints: [] }, { ...installer, allowedSections: [] },
+    ...['employee', 'partner', 'runner'].map((role) => ({ ...employee, role })),
+  ]) {
+    await denied(async () => store.updateRepair(actor, 'employee', { status: 'done' }));
+  }
+  await denied(async () => store.updateRepair(installer, 'other-point', { status: 'done' }));
+  assert.deepEqual(local.loadJson('repairs.json', []), rows);
+  for (const status of ['in_progress', 'done', 'canceled', 'new']) {
+    const changed = await store.updateRepair(installer, 'old', { status, pointId: 'krasnogorsk_466', title: 'Ignored' });
+    assert.equal(changed.status, status);
+    assert.equal(changed.updatedBy, installer.id);
+    assert.ok(changed.updatedAt);
+    assert.equal(changed.pointId, 'moscow_6231');
+    assert.equal(changed.title, 'Test repair');
+    assert.equal((await store.listRepairs(installer)).find((row) => row.id === 'old').status, status);
+  }
+  assert.equal(new Store(local.dataDir).loadJson('repairs.json', []).find((row) => row.id === 'old').status, 'new');
+  const events = fs.readFileSync(local.path('audit.log'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(events.filter((event) => event.action === 'repair.updated' && event.actorId === installer.id).length, 4);
 
   if (mode === 'local') {
     const server = http.createServer(createRequestHandler(local));
@@ -2623,13 +2646,23 @@ for (const mode of ['local', 'supabase']) test(`${mode}: installers can read exi
     const headers = { Cookie: `session=${local.createSession(installer.id)}`, 'Content-Type': 'application/json' };
     const response = await fetch(base, { headers });
     assert.equal(response.status, 200);
-    assert.deepEqual((await response.json()).repairs.map((row) => row.id), ['new', 'employee', 'old']);
+    const payload = await response.json();
+    assert.equal(payload.canManage, true);
+    assert.deepEqual(payload.repairs.map((row) => row.id), ['new', 'employee', 'old']);
     const file = await fetch(`${base}/old/attachments/file/file`, { headers });
     assert.equal(file.status, 200);
     assert.equal(await file.text(), 'test');
     assert.equal((await fetch(`${base}/other-point/attachments/file/file`, { headers })).status, 403);
-    assert.equal((await fetch(`${base}/old`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'in_progress' }) })).status, 403);
-    assert.deepEqual(local.loadJson('repairs.json', []), rows);
+    const update = await fetch(`${base}/old`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'in_progress' }) });
+    assert.equal(update.status, 200);
+    assert.equal((await update.json()).repair.status, 'in_progress');
+    const saved = local.loadJson('repairs.json', []);
+    assert.equal(saved.find((row) => row.id === 'old').status, 'in_progress');
+    assert.equal((await fetch(`${base}/other-point`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'done' }) })).status, 403);
+    assert.equal((await fetch(`${base}/old`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'invalid' }) })).status, 400);
+    const employeeHeaders = { ...headers, Cookie: `session=${local.createSession(employee.id)}` };
+    assert.equal((await fetch(`${base}/employee`, { method: 'PATCH', headers: employeeHeaders, body: JSON.stringify({ status: 'done' }) })).status, 403);
+    assert.deepEqual(local.loadJson('repairs.json', []), saved);
   }
 });
 
