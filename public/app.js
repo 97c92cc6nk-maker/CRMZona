@@ -561,6 +561,7 @@ function bindEvents() {
   els.repairForm.addEventListener('submit', handleRepairCreate);
   els.refreshRepairs.addEventListener('click', loadRepairs);
   els.repairsBody.addEventListener('change', handleRepairStatusChange);
+  els.repairsBody.addEventListener('click', handleRepairTableClick);
   els.expenseForm.addEventListener('submit', handleExpenseCreate);
   els.expensePointFilter.addEventListener('change', () => updateExpenseFilter('point', els.expensePointFilter.value));
   els.expenseTypeFilter.addEventListener('change', () => updateExpenseFilter('type', els.expenseTypeFilter.value));
@@ -4298,6 +4299,7 @@ async function loadRepairs() {
     state.repairPriorities = data.priorities || [];
     state.permissions.canManageRepairs = data.canManage;
     state.permissions.canCreateRepairs = data.canCreate;
+    state.permissions.canDeleteRepairs = Boolean(data.canDelete);
     renderRepairs();
   }, els.repairsNotice);
 }
@@ -4312,7 +4314,7 @@ function renderRepairs() {
   if (!state.repairs.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 8;
+    cell.colSpan = 9;
     cell.className = 'empty-state';
     cell.textContent = 'Заявок на ремонт пока нет.';
     row.append(cell);
@@ -4336,7 +4338,41 @@ function buildRepairRow(repair) {
   appendCell(row, repair.createdByName || '');
   appendCell(row, repair.description);
   row.append(repairAttachmentsCell(repair));
+  row.append(repairActionsCell(repair));
   return row;
+}
+
+function repairActionsCell(repair) {
+  const cell = document.createElement('td');
+  if (!state.permissions.canDeleteRepairs) {
+    cell.textContent = '-';
+    return cell;
+  }
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'danger repair-delete-button';
+  button.dataset.action = 'delete-repair';
+  button.dataset.repairId = repair.id;
+  button.textContent = 'Удалить';
+  button.title = `Удалить заявку: ${repair.title}`;
+  cell.append(button);
+  return cell;
+}
+
+async function handleRepairTableClick(event) {
+  const button = event.target.closest('[data-action="delete-repair"]');
+  if (!button || button.disabled || !state.permissions.canDeleteRepairs) return;
+  const repair = state.repairs.find((item) => item.id === button.dataset.repairId);
+  if (!repair) return;
+  if (!window.confirm(`Удалить заявку на ремонт «${repair.title}» и все её файлы, включая Google Drive? Это действие нельзя отменить.`)) return;
+  await runWithButton(button, async () => {
+    const data = await api(`/api/repairs/${encodeURIComponent(repair.id)}`, { method: 'DELETE' });
+    state.repairs = state.repairs.filter((item) => item.id !== data.repair.id);
+    renderRepairs();
+    await loadAudit();
+    const warning = storageWarningText(data.storage);
+    showNotice(els.repairsNotice, ['Заявка на ремонт удалена.', warning].filter(Boolean).join(' '), warning ? 'warning' : 'success');
+  }, els.repairsNotice);
 }
 
 function repairAttachmentsCell(repair) {
@@ -6737,6 +6773,8 @@ function renderAudit(events) {
     'request.updated': 'Обновлена заявка',
     'repair.created': 'Добавлена заявка на ремонт',
     'repair.updated': 'Обновлена заявка на ремонт',
+    'repair.deleted': 'Удалена заявка на ремонт',
+    'repair.delete_failed': 'Не удалось удалить заявку на ремонт',
     'expense.created': 'Добавлен расход',
     'claim.created': 'Создана претензия',
     'storage.read_failed': 'Не удалось прочитать данные',

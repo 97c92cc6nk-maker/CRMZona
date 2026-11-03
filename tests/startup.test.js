@@ -148,6 +148,40 @@ test('saved schedule employee stays selected even when absent from the active di
   assert.equal(readOnly.children.length, 0);
 });
 
+test('repair deletion requires its own permission and confirmation; failed deletes preserve the row', async () => {
+  const requests = [];
+  let fail = false, confirmed = false, prompts = 0;
+  const context = apiFixture(async (url, options) => {
+    requests.push({ url, method: options.method });
+    return { ok: !fail, status: fail ? 503 : 200, text: async () => JSON.stringify(fail ? { error: 'Drive unavailable' } : { repair: { id: 'test' } }) };
+  });
+  context.window.confirm = () => { prompts++; return confirmed; };
+  context.document.createElement = (tagName) => ({ tagName, dataset: {}, children: [], append(child) { this.children.push(child); } });
+  vm.runInContext(`state.repairs = [{ id: 'test', title: 'Test repair' }]; state.permissions.canManageRepairs = true;
+    els.repairsNotice = {}; renderRepairs = () => {}; loadAudit = async () => {};`, context);
+  assert.equal(vm.runInContext('repairActionsCell(state.repairs[0]).children.length', context), 0);
+  vm.runInContext('state.permissions.canDeleteRepairs = true;', context);
+  const button = vm.runInContext('repairActionsCell(state.repairs[0]).children[0]', context);
+  assert.equal(button.textContent, 'Удалить');
+  context.event = { target: { closest: () => button } };
+  await vm.runInContext('handleRepairTableClick(event)', context);
+  assert.equal(prompts, 1);
+  assert.equal(requests.length, 0);
+  confirmed = true;
+  fail = true;
+  await vm.runInContext('handleRepairTableClick(event)', context);
+  assert.equal(vm.runInContext('state.repairs.length', context), 1);
+  assert.equal(vm.runInContext('els.repairsNotice.textContent', context), 'Drive unavailable');
+  assert.equal(button.disabled, false);
+  fail = false;
+  await vm.runInContext('handleRepairTableClick(event)', context);
+  assert.equal(vm.runInContext('state.repairs.length', context), 0);
+  assert.deepEqual(requests, [{ url: '/api/repairs/test', method: 'DELETE' }, { url: '/api/repairs/test', method: 'DELETE' }]);
+  vm.runInContext('state.permissions.canDeleteRepairs = false;', context);
+  await vm.runInContext('handleRepairTableClick(event)', context);
+  assert.equal(prompts, 3);
+});
+
 test('API timeout covers response body stalls, not only HTTP headers', async () => {
   const context = apiFixture(async (_, options) => ({
     text: () => new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('Aborted')))),

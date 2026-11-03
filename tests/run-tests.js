@@ -2571,6 +2571,85 @@ test('employee premium is assigned to the point with the most worked days', () =
   assert.equal(krasnogorsk.rows.find((row) => row.employeeId === employee.id).bonusExtra, '5000');
 });
 
+for (const mode of ['local', 'supabase']) test(`${mode}: only repair managers can delete repairs and clean up attachments`, async (t) => {
+  const local = createTempStore();
+  const create = (name, role, sections = ['repairs']) => local.createUser({ fullName: `${name} Test`, role,
+    phone: `+7999000${String(local.listUsers().length).padStart(4, '0')}`, email: `${name}@example.com`, password: 'TestPass123!',
+    allowedSections: sections, allowedPoints: sections.length ? ['moscow_6231'] : [], unofficialSalary: '1' });
+  const owner = create('Owner', 'owner'), admin = create('Admin', 'admin');
+  const deniedActors = ['installer', 'employee', 'runner', 'partner'].map((role) => create(role, role));
+  deniedActors.push(create('NoAccess', 'admin', []));
+  const attachments = ['first', 'second'].map((id) => ({ id, fileName: `${id}.pdf`, googleDrive: { status: 'uploaded', fileId: id } }));
+  attachments.push({ id: 'local', fileName: 'test.jpg', storedFile: { fileName: 'test.jpg', mimeType: 'image/jpeg', base64: Buffer.from('test').toString('base64') } });
+  const rows = [
+    { id: 'target', pointId: 'krasnogorsk_466', title: 'Old repair', status: 'done', createdAt: '2026-08-01T10:00:00.000Z', createdBy: deniedActors[0].id, attachments },
+    { id: 'keep', pointId: 'moscow_6231', title: 'Keep repair', status: 'new', attachments: [] },
+  ];
+  local.saveJson('repairs.json', rows);
+  const store = mode === 'local' ? local : Object.assign(Object.create(SupabaseStore.prototype), {
+    listUsers: async () => local.listUsers(), loadJson: async (...args) => local.loadJson(...args),
+    saveJson: async (...args) => local.saveJson(...args), audit: async (...args) => local.audit(...args),
+  });
+  const realFetch = global.fetch, previousToken = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+  const calls = [];
+  let fail = true;
+  process.env.GOOGLE_DRIVE_ACCESS_TOKEN = 'test-delete-repairs';
+  global.fetch = async (url, options) => {
+    if (String(url).startsWith('http://127.0.0.1:')) return realFetch(url, options);
+    assert.match(String(url), /^https:\/\/www\.googleapis\.com\/drive\/v3\/files\/(first|second)\?supportsAllDrives=true$/);
+    assert.equal(options.method, 'DELETE');
+    assert.equal(options.headers.Authorization, 'Bearer test-delete-repairs');
+    calls.push(String(url));
+    const status = fail ? (String(url).includes('/second?') ? 503 : 204) : (String(url).includes('/first?') ? 404 : 204);
+    return { ok: status === 204, status, json: async () => ({ error: { message: 'Drive unavailable' } }) };
+  };
+  t.after(() => {
+    global.fetch = realFetch;
+    if (previousToken === undefined) delete process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
+    else process.env.GOOGLE_DRIVE_ACCESS_TOKEN = previousToken;
+    fs.rmSync(local.dataDir, { recursive: true, force: true });
+  });
+  for (const actor of deniedActors) {
+    assert.equal(permissionsFor(actor).canDeleteRepairs, false);
+    await assert.rejects(() => store.deleteRepair(actor, 'target'), (error) => error.status === 403);
+  }
+  assert.equal(calls.length, 0);
+  assert.equal(permissionsFor(owner).canDeleteRepairs, true);
+  assert.equal(permissionsFor(admin).canDeleteRepairs, true);
+  await assert.rejects(() => store.deleteRepair(admin, 'target'), (error) => error.status === 503 && error.message.includes('Заявка сохранена'));
+  assert.deepEqual(local.loadJson('repairs.json', []), rows);
+  fail = false;
+  const result = await store.deleteRepair(admin, 'target');
+  assert.equal(result.repair.id, 'target');
+  assert.deepEqual(result.googleDriveCleanup.map((item) => item.status), ['deleted', 'deleted', 'skipped']);
+  assert.deepEqual(new Store(local.dataDir).loadJson('repairs.json', []), [rows[1]]);
+  await assert.rejects(() => store.deleteRepair(admin, 'target'), (error) => error.status === 404);
+  await assert.rejects(async () => store.getRepairAttachmentFile(admin, 'target', 'local'), (error) => error.status === 404);
+  assert.equal(calls.length, 4);
+
+  if (mode === 'local') {
+    const server = http.createServer(createRequestHandler(local));
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise((resolve) => server.close(resolve)));
+    const base = `http://127.0.0.1:${server.address().port}/api/repairs`;
+    const headersFor = (actor) => ({ Cookie: `session=${local.createSession(actor.id)}` });
+    for (const actor of deniedActors) {
+      assert.equal((await fetch(`${base}/keep`, { method: 'DELETE', headers: headersFor(actor) })).status, 403);
+    }
+    assert.equal((await fetch(`${base}/keep`, { method: 'DELETE' })).status, 401);
+    const headers = headersFor(owner);
+    assert.equal((await (await fetch(base, { headers })).json()).canDelete, true);
+    assert.equal((await fetch(`${base}/keep`, { method: 'DELETE', headers })).status, 200);
+    assert.equal((await (await fetch(base, { headers })).json()).repairs.length, 0);
+  } else {
+    assert.equal((await store.deleteRepair(owner, 'keep')).repair.id, 'keep');
+  }
+  assert.deepEqual(local.loadJson('repairs.json', []), []);
+  const events = fs.readFileSync(local.path('audit.log'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  assert.equal(events.filter((event) => event.action === 'repair.delete_failed' && event.actorId === admin.id).length, 1);
+  assert.equal(events.filter((event) => event.action === 'repair.deleted' && [admin.id, owner.id].includes(event.actorId)).length, 2);
+});
+
 for (const mode of ['local', 'supabase']) test(`${mode}: installers can read repairs and update statuses only for assigned points`, async (t) => {
   const local = createTempStore();
   t.after(() => fs.rmSync(local.dataDir, { recursive: true, force: true }));
