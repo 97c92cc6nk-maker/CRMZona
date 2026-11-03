@@ -2571,6 +2571,51 @@ test('employee premium is assigned to the point with the most worked days', () =
   assert.equal(krasnogorsk.rows.find((row) => row.employeeId === employee.id).bonusExtra, '5000');
 });
 
+for (const mode of ['local', 'supabase']) test(`${mode}: repair addresses come from current point cards without exposing other card data`, async (t) => {
+  const local = createTempStore();
+  t.after(() => fs.rmSync(local.dataDir, { recursive: true, force: true }));
+  const owner = local.createUser({ fullName: 'Owner Test', role: 'owner', phone: '+79990000201', email: 'owner-address@example.com', password: 'TestPass123!' });
+  const installer = local.createUser({ fullName: 'Installer Test', role: 'installer', phone: '+79990000202', email: 'installer-address@example.com', password: 'TestPass123!',
+    allowedSections: ['repairs'], allowedPoints: ['moscow_6231'], unofficialSalary: '1' });
+  const point = { id: 'moscow_6231', name: 'МОСКВА_6231', address: 'Москва, улица Тестовая, дом 10',
+    internet: { password: 'private-secret' }, video: { password: 'private-secret' }, landlord: 'private-secret' };
+  local.saveJson('retail_points.json', [point]);
+  const old = { id: 'old', pointId: point.id, title: 'Existing repair', status: 'new', createdBy: owner.id, createdAt: '2026-08-01T10:00:00.000Z' };
+  local.saveJson('repairs.json', [old]);
+  const store = mode === 'local' ? local : Object.assign(Object.create(SupabaseStore.prototype), {
+    listUsers: async () => local.listUsers(), loadJson: async (...args) => local.loadJson(...args),
+    saveJson: async (...args) => local.saveJson(...args), audit: async (...args) => local.audit(...args),
+  });
+  assert.equal(permissionsFor(installer).canViewRetailPoints, false);
+  const list = await store.listRepairs(installer);
+  assert.equal(list[0].pointAddress, point.address);
+  assert.equal(JSON.stringify(list).includes('private-secret'), false);
+  assert.deepEqual(local.loadJson('repairs.json', []), [old]);
+  const created = await store.createRepair(installer, { pointId: point.id, title: 'New repair', description: 'Test', pointAddress: 'forged' });
+  assert.equal(created.pointAddress, point.address);
+  assert.equal(Object.hasOwn(local.loadJson('repairs.json', [])[1], 'pointAddress'), false);
+  point.address = 'Москва, новый адрес, дом 20';
+  local.saveJson('retail_points.json', [point]);
+  assert.equal((await store.listRepairs(installer)).find((row) => row.id === 'old').pointAddress, point.address);
+  const updated = await store.updateRepair(installer, 'old', { status: 'in_progress', pointAddress: 'forged' });
+  assert.equal(updated.pointAddress, point.address);
+  assert.equal(Object.hasOwn(local.loadJson('repairs.json', [])[0], 'pointAddress'), false);
+  for (const points of [[{ ...point, address: ' ' }], []]) {
+    local.saveJson('retail_points.json', points);
+    assert.equal((await store.listRepairs(installer))[0].pointAddress, '');
+  }
+  const saved = local.loadJson('repairs.json', []);
+  const load = store.loadJson.bind(store);
+  store.loadJson = (key, fallback) => {
+    if (key === 'retail_points.json') throw new ApiError(503, 'Point source unavailable');
+    return load(key, fallback);
+  };
+  await assert.rejects(async () => store.listRepairs(installer), (error) => error.status === 503);
+  await assert.rejects(async () => store.updateRepair(installer, 'old', { status: 'done' }), (error) => error.status === 503);
+  store.loadJson = load;
+  assert.deepEqual(local.loadJson('repairs.json', []), saved);
+});
+
 for (const mode of ['local', 'supabase']) test(`${mode}: only repair managers can delete repairs and clean up attachments`, async (t) => {
   const local = createTempStore();
   const create = (name, role, sections = ['repairs']) => local.createUser({ fullName: `${name} Test`, role,

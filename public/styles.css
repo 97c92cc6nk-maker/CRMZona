@@ -959,6 +959,28 @@ tbody tr:last-child td {
   min-width: 1120px;
 }
 
+.repairs-table .repair-address-cell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 761px) {
+  .repairs-table .repair-address-cell {
+    min-width: 200px;
+    max-width: 280px;
+  }
+
+  .repairs-table select[name="repairStatus"] {
+    min-width: 128px;
+  }
+}
+
+@media (max-width: 760px) {
+  .repairs-table.mobile-cards tbody td.repair-address-cell {
+    grid-column: 1 / -1;
+  }
+}
+
 .tasks-table {
   min-width: 1160px;
 }

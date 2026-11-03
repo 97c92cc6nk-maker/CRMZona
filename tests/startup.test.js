@@ -148,6 +148,20 @@ test('saved schedule employee stays selected even when absent from the active di
   assert.equal(readOnly.children.length, 0);
 });
 
+test('repair rows show a plain-text point address after the point and a missing-address notice', () => {
+  const context = apiFixture(async () => {});
+  context.document.createElement = (tagName) => ({ tagName, dataset: {}, children: [], append(child) { this.children.push(child); } });
+  context.repair = { id: 'test', pointName: 'Test point', pointAddress: '<img src=x onerror=alert(1)> Test street', title: 'Test repair', createdAt: '2026-11-03T10:00:00.000Z', statusLabel: 'New' };
+  const row = vm.runInContext('buildRepairRow(repair)', context);
+  assert.equal(row.children.length, 10);
+  assert.equal(row.children[1].textContent, 'Test point');
+  assert.equal(row.children[2].textContent, context.repair.pointAddress);
+  assert.equal(row.children[2].className, 'repair-address-cell');
+  assert.equal(row.children[2].innerHTML, undefined);
+  context.repair.pointAddress = '';
+  assert.equal(vm.runInContext('buildRepairRow(repair).children[2].textContent', context), 'Адрес не указан');
+});
+
 test('repair deletion requires its own permission and confirmation; failed deletes preserve the row', async () => {
   const requests = [];
   let fail = false, confirmed = false, prompts = 0;

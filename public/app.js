@@ -4314,7 +4314,7 @@ function renderRepairs() {
   if (!state.repairs.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 9;
+    cell.colSpan = 10;
     cell.className = 'empty-state';
     cell.textContent = 'Заявок на ремонт пока нет.';
     row.append(cell);
@@ -4332,6 +4332,7 @@ function buildRepairRow(repair) {
   row.dataset.repairId = repair.id;
   appendCell(row, formatDateTime(repair.createdAt));
   appendCell(row, repair.pointName);
+  appendCell(row, repair.pointAddress || 'Адрес не указан', 'repair-address-cell');
   appendCell(row, repair.title);
   appendCell(row, repair.priorityLabel);
   row.append(repairStatusCell(repair));
