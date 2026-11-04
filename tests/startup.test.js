@@ -148,6 +148,20 @@ test('saved schedule employee stays selected even when absent from the active di
   assert.equal(readOnly.children.length, 0);
 });
 
+test('point cost forms submit only new dated entries and preserve zero', () => {
+  const context = apiFixture(async () => {});
+  const payload = (input) => {
+    context.costValues = input;
+    return JSON.parse(JSON.stringify(vm.runInContext('retailPointCostPayload(costValues)', context)));
+  };
+  assert.deepEqual(payload({ rentCost: '', rentCostEffectiveDate: '', managerCost: '' }), {});
+  assert.deepEqual(payload({ managerCost: '0', managerCostEffectiveDate: '2026-07-01' }), { managerCost: '0', managerCostEffectiveDate: '2026-07-01' });
+  assert.throws(() => payload({ rentCost: '500' }), /дату применения/);
+  assert.throws(() => payload({ rentCostEffectiveDate: '2026-10-01' }), /укажите сумму/);
+  assert.match(index, /data-point-cost-history="rentCost"/);
+  assert.match(index, /data-point-cost-history="managerCost"/);
+});
+
 test('repair rows show a plain-text point address after the point and a missing-address notice', () => {
   const context = apiFixture(async () => {});
   context.document.createElement = (tagName) => ({ tagName, dataset: {}, children: [], append(child) { this.children.push(child); } });

@@ -964,6 +964,18 @@ tbody tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.point-cost-history table {
+  width: 100%;
+  table-layout: fixed;
+  margin-bottom: 16px;
+}
+
+.point-cost-history th,
+.point-cost-history td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 @media (min-width: 761px) {
   .repairs-table .repair-address-cell {
     min-width: 200px;

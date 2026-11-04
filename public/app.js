@@ -1277,7 +1277,6 @@ function renderRetailPointCard() {
     'address',
     'landlord',
     'legalEntity',
-    'rentCost',
     'profitDistributionRate',
     'ownerName',
     'phone',
@@ -1287,6 +1286,7 @@ function renderRetailPointCard() {
   for (const field of fields) {
     setRetailPointFormValue(field, point[field]);
   }
+  renderRetailPointCostHistory(point);
   const internet = point.internet || {};
   setRetailPointFormValue('internet.provider', internet.provider);
   setRetailPointFormValue('internet.payment', internet.payment);
@@ -1327,6 +1327,44 @@ function fillRetailPointPaymentOptions() {
     option.textContent = method.label;
     return option;
   }));
+}
+
+function renderRetailPointCostHistory(point) {
+  for (const field of ['rentCost', 'managerCost']) {
+    const body = els.retailPointCardForm.querySelector(`[data-point-cost-history="${field}"]`);
+    body.replaceChildren();
+    const history = [...(point[`${field}History`] || [])].sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
+    if (!history.length) {
+      const row = document.createElement('tr');
+      const cell = document.createElement('td');
+      cell.colSpan = 2;
+      cell.textContent = 'Не назначена';
+      row.append(cell);
+      body.append(row);
+    }
+    for (const entry of history) {
+      const row = document.createElement('tr');
+      appendCell(row, formatDate(entry.effectiveDate));
+      appendCell(row, formatMoney(entry.value));
+      body.append(row);
+    }
+    setRetailPointFormValue(field, '');
+    setRetailPointFormValue(`${field}EffectiveDate`, '');
+  }
+}
+
+function retailPointCostPayload(values) {
+  const payload = {};
+  for (const [field, label] of [['rentCost', 'Стоимость аренды'], ['managerCost', 'Стоимость услуг управляющего']]) {
+    const value = String(values[field] || '').trim();
+    const date = values[`${field}EffectiveDate`] || '';
+    if (!value && !date) continue;
+    if (!value) throw new Error(`${label}: укажите сумму.`);
+    if (!date) throw new Error(`${label}: укажите дату применения.`);
+    payload[field] = value;
+    payload[`${field}EffectiveDate`] = date;
+  }
+  return payload;
 }
 
 function fillRetailPointAdminOptions(point = selectedRetailPoint()) {
@@ -1536,7 +1574,7 @@ function retailPointPayloadFromBasicForm(form) {
     address: values.address,
     landlord: values.landlord,
     legalEntity: values.legalEntity,
-    rentCost: values.rentCost,
+    ...retailPointCostPayload(values),
     profitDistributionRate: values.profitDistributionRate,
     ownerName: values.ownerName,
     phone: values.phone,
@@ -1552,7 +1590,7 @@ function retailPointPayloadFromCard(form) {
     address: values.address,
     landlord: values.landlord,
     legalEntity: values.legalEntity,
-    rentCost: values.rentCost,
+    ...retailPointCostPayload(values),
     profitDistributionRate: values.profitDistributionRate,
     ownerName: values.ownerName,
     phone: values.phone,

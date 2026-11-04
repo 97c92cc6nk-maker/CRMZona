@@ -562,6 +562,7 @@
             <label>Арендодатель<input name="landlord" type="text" maxlength="160"></label>
             <label>Юр.лицо<select name="legalEntity" id="retailPointLegalEntity"></select></label>
             <label>Стоимость аренды<input name="rentCost" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16"></label>
+            <label>Аренда: дата применения<input name="rentCostEffectiveDate" type="date"></label>
             <label>Коэф. распределения прибыли, %<input name="profitDistributionRate" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?%?" maxlength="8" required value="100"></label>
             <label>Имя собственника<input name="ownerName" type="text" maxlength="160"></label>
             <label>Телефон<input name="phone" type="tel" maxlength="32"></label>
@@ -581,13 +582,36 @@
             <label>Адрес помещения<input name="address" type="text" maxlength="240"></label>
             <label>Арендодатель<input name="landlord" type="text" maxlength="160"></label>
             <label>Юр.лицо<select name="legalEntity" id="retailPointCardLegalEntity"></select></label>
-            <label>Стоимость аренды<input name="rentCost" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?" maxlength="16"></label>
             <label>Коэф. распределения прибыли, %<input name="profitDistributionRate" type="text" inputmode="decimal" pattern="\d*([,.]\d+)?%?" maxlength="8" required></label>
             <label>Имя собственника<input name="ownerName" type="text" maxlength="160"></label>
             <label>Телефон<input name="phone" type="tel" maxlength="32"></label>
             <label>Email<input name="email" type="email" maxlength="180"></label>
             <label>Курирующий администратор<input id="retailPointCuratorAdmin" type="text" readonly></label>
             <label class="retail-point-wide">Комментарий<textarea name="comment" maxlength="1000"></textarea></label>
+
+            <fieldset class="access-fieldset retail-point-wide point-cost-history">
+              <legend>Стоимость аренды</legend>
+              <table aria-label="История стоимости аренды">
+                <thead><tr><th>Дата применения</th><th>Сумма, руб.</th></tr></thead>
+                <tbody data-point-cost-history="rentCost"></tbody>
+              </table>
+              <div class="retail-point-grid">
+                <label>Новая стоимость аренды, руб.<input name="rentCost" type="text" inputmode="decimal" pattern="\d+([,.]\d+)?" maxlength="16"></label>
+                <label>Дата применения аренды<input name="rentCostEffectiveDate" type="date"></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="access-fieldset retail-point-wide point-cost-history">
+              <legend>Стоимость услуг управляющего</legend>
+              <table aria-label="История стоимости услуг управляющего">
+                <thead><tr><th>Дата применения</th><th>Сумма, руб.</th></tr></thead>
+                <tbody data-point-cost-history="managerCost"></tbody>
+              </table>
+              <div class="retail-point-grid">
+                <label>Новая стоимость услуг управляющего, руб.<input name="managerCost" type="text" inputmode="decimal" pattern="\d+([,.]\d+)?" maxlength="16"></label>
+                <label>Дата применения услуг управляющего<input name="managerCostEffectiveDate" type="date"></label>
+              </div>
+            </fieldset>
 
             <fieldset class="access-fieldset retail-point-wide">
               <legend>Интернет</legend>

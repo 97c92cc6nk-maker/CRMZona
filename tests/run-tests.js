@@ -21,6 +21,7 @@ const {
   buildRunnerReport,
   createCaptchaChallenge,
   createRequestHandler,
+  initializeRetailPointCostHistories,
   permissionsFor,
   reportDirectoryForUser,
   retailPointCompanyOptions,
@@ -1168,6 +1169,120 @@ test('management report combines payroll, rent, expenses, tax, and manual fields
   assert.equal(report.totals.additionalIncome, '300');
   assert.equal(report.totals.taxes, '3200');
   assert.equal(report.totals.profit, '-9075');
+});
+
+for (const mode of ['local', 'supabase']) test(`${mode}: dated point costs preserve monthly management reports and migrate once`, async (t) => {
+  const local = createTempStore();
+  t.after(() => fs.rmSync(local.dataDir, { recursive: true, force: true }));
+  const owner = local.createUser({ fullName: 'Cost Owner', phone: '+79990000801', email: 'cost-owner@example.com', password: 'TestPass123!' });
+  const admin = local.createUser({ fullName: 'Cost Admin', phone: '+79990000802', email: 'cost-admin@example.com', password: 'TestPass123!', role: 'admin', unofficialSalary: '1', allowedSections: ['points'] });
+  const employee = { id: 'employee', role: 'employee', allowedSections: ['points'] };
+  local.saveJson('retail_points.json', [
+    { id: 'dated', name: 'Тестовая точка', rentCost: '10000' },
+    { id: 'water', name: 'Лайково Водомат', rentCost: '2000' },
+  ]);
+  const store = mode === 'local' ? local : Object.assign(Object.create(SupabaseStore.prototype), {
+    listUsers: async () => local.listUsers(), loadJson: async (...args) => local.loadJson(...args),
+    saveJson: async (...args) => local.saveJson(...args), audit: async (...args) => local.audit(...args),
+  });
+  const migrated = await store.listRetailPoints(owner);
+  const history = migrated.find((point) => point.id === 'dated').rentCostHistory;
+  assert.deepEqual(history.map(({ value, effectiveDate }) => ({ value, effectiveDate })), [{ value: '10000', effectiveDate: '2026-01-01' }]);
+  const savedMigration = local.loadJson('retail_points.json', []);
+  await store.listRetailPoints(owner);
+  assert.deepEqual(local.loadJson('retail_points.json', []), savedMigration);
+  assert.equal(local.readAudit().filter((event) => event.action === 'retail_point.cost_history_initialized').length, 1);
+  const report = (month, points = local.loadJson('retail_points.json', [])) => buildManagementReport([], {}, [], [], points, [], {}, month,
+    [{ id: 'manager', name: 'Управляющий', entries: [{ value: '99999', effectiveDate: '2026-01-01' }] }]);
+  for (let month = 1; month <= 12; month += 1) {
+    const row = report(`2026-${String(month).padStart(2, '0')}`).rows.find((point) => point.pointId === 'water');
+    assert.equal(row.manager, month < 7 ? '14000' : '0');
+    assert.equal(row.totalExpenses, month < 7 ? '16000' : '2000');
+  }
+  const oldSeptember = report('2026-09').rows.find((point) => point.pointId === 'dated');
+  const updated = await store.updateRetailPoint(admin, 'dated', {
+    managerCost: '15000', managerCostEffectiveDate: '2026-10-01',
+    rentCost: '12000,50', rentCostEffectiveDate: '2026-10-15',
+  });
+  assert.equal(updated.managerCostHistory[0].createdBy, admin.id);
+  assert.ok(updated.managerCostHistory[0].createdAt);
+  for (let month = 1; month <= 12; month += 1) {
+    const result = report(`2026-${String(month).padStart(2, '0')}`);
+    const row = result.rows.find((point) => point.pointId === 'dated');
+    assert.equal(row.manager, month < 10 ? '14000' : '15000');
+    assert.equal(row.rent, month < 10 ? '10000' : '12000.5');
+    assert.equal(row.totalExpenses, month < 10 ? '24000' : '27000.5');
+    assert.equal(Number(result.totals.manager), result.rows.reduce((sum, item) => sum + Number(item.manager), 0));
+  }
+  await store.updateRetailPoint(owner, 'dated', { rentCost: '0', rentCostEffectiveDate: '2027-01-01' });
+  assert.equal(report('2027-01').rows.find((point) => point.pointId === 'dated').rent, '0');
+  assert.deepEqual(report('2026-09').rows.find((point) => point.pointId === 'dated'), oldSeptember);
+  // Stale forms and point renames cannot erase or reapply defaults.
+  await store.updateRetailPoint(owner, 'dated', { comment: 'Updated', rentCostHistory: [] });
+  await store.updateRetailPoint(owner, 'water', { name: 'Переименованный водомат', managerCostHistory: [] });
+  assert.equal(report('2026-08').rows.find((point) => point.pointId === 'water').manager, '0');
+  const snapshot = local.loadJson('retail_points.json', []);
+  for (const patch of [
+    { managerCost: '-1', managerCostEffectiveDate: '2026-11-01' },
+    { managerCost: '15001' },
+    { managerCostEffectiveDate: '2026-11-01' },
+    { managerCost: '1', managerCostEffectiveDate: '2026-02-30' },
+    { rentCost: '1', rentCostEffectiveDate: '2026-10-15' },
+    { managerCost: '1', managerCostEffectiveDate: '2026-10-01' },
+  ]) await assert.rejects(async () => store.updateRetailPoint(owner, 'dated', patch), (error) => [400, 409].includes(error.status));
+  await assert.rejects(async () => store.updateRetailPoint(employee, 'dated', { rentCost: '1', rentCostEffectiveDate: '2026-12-01' }), (error) => error.status === 403);
+  assert.deepEqual(local.loadJson('retail_points.json', []), snapshot);
+  const restarted = new Store(local.dataDir);
+  assert.equal(report('2026-10', restarted.listRetailPoints(owner)).rows.find((point) => point.pointId === 'dated').rent, '12000.5');
+  assert.equal(report('2025-12').rows.find((point) => point.pointId === 'dated').manager, '0');
+  assert.ok(local.readAudit().some((event) => event.action === 'retail_point.updated' && event.details.costChanges?.length === 2));
+  const created = await store.createRetailPoint(owner, { name: 'Future rent', rentCost: '3333', rentCostEffectiveDate: '2027-03-01' });
+  assert.equal(report('2027-02').rows.find((point) => point.pointId === created.id).rent, '0');
+  assert.equal(report('2027-03').rows.find((point) => point.pointId === created.id).rent, '3333');
+});
+
+test('point cost migration preserves all other card data and is idempotent', () => {
+  const source = [{ id: 'migration', name: 'ЛАЙКОВО_Водомат', rentCost: '1234', extraLegacyField: { keep: true }, internet: { password: 'secret' } }];
+  const migrated = initializeRetailPointCostHistories(source);
+  assert.equal(source[0].managerCostHistory, undefined);
+  const { managerCostHistory, rentCostHistory, ...untouched } = migrated[0];
+  assert.deepEqual(untouched, source[0]);
+  assert.deepEqual(managerCostHistory.map((entry) => entry.value), ['0', '14000']);
+  assert.equal(rentCostHistory[0].value, '1234');
+  assert.deepEqual(initializeRetailPointCostHistories(migrated), migrated);
+  assert.throws(() => initializeRetailPointCostHistories(null), /недоступен/);
+  assert.throws(() => initializeRetailPointCostHistories([{ ...source[0], rentCostHistory: 'bad' }]), /повреждена/);
+});
+
+test('dated point costs save via HTTP and feed historical reports without editable report overrides', async (t) => {
+  const store = createTempStore();
+  const owner = store.createUser({ fullName: 'Cost API Owner', phone: '+79990000803', email: 'cost-api@example.com', password: 'TestPass123!' });
+  const employee = store.createUser({ fullName: 'Cost Employee', phone: '+79990000804', email: 'cost-employee@example.com', password: 'TestPass123!' });
+  store.saveJson('retail_points.json', [{ id: 'cost-api', name: 'Cost API', rentCost: '10000' }]);
+  const server = http.createServer(createRequestHandler(store));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { await new Promise((resolve) => server.close(resolve)); fs.rmSync(store.dataDir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  const headers = { Cookie: `session=${store.createSession(owner.id)}`, 'Content-Type': 'application/json' };
+  const patch = { rentCost: '11000', rentCostEffectiveDate: '2026-10-10', managerCost: '0', managerCostEffectiveDate: '2026-10-01' };
+  const denied = await fetch(`${base}/retail-points/cost-api`, { method: 'PATCH', headers: { ...headers, Cookie: `session=${store.createSession(employee.id)}` }, body: JSON.stringify(patch) });
+  assert.equal(denied.status, 403);
+  const saved = await fetch(`${base}/retail-points/cost-api`, { method: 'PATCH', headers, body: JSON.stringify(patch) });
+  assert.equal(saved.status, 200, await saved.clone().text());
+  assert.equal((await saved.json()).point.managerCostHistory[0].value, '0');
+  for (const [month, rent, manager] of [['2026-09', '10000', '14000'], ['2026-10', '11000', '0']]) {
+    const response = await fetch(`${base}/reports/management-report?month=${month}`, { headers });
+    assert.equal(response.status, 200);
+    const row = (await response.json()).report.rows.find((item) => item.pointId === 'cost-api');
+    assert.equal(row.rent, rent);
+    assert.equal(row.manager, manager);
+  }
+  const response = await fetch(`${base}/reports/management-report`, { method: 'POST', headers,
+    body: JSON.stringify({ month: '2026-10', rows: [{ pointId: 'cost-api', rent: '999', manager: '999', revenue: '500' }] }) });
+  assert.equal(response.status, 200);
+  const row = (await response.json()).report.rows.find((item) => item.pointId === 'cost-api');
+  assert.equal(row.rent, '11000');
+  assert.equal(row.manager, '0');
 });
 
 test('management revenue above ten million persists through API save, reload and store restart', async (t) => {
