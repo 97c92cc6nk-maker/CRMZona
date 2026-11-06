@@ -1049,6 +1049,181 @@ test('runner report summarizes monthly substitution hours by employee and point'
   assert.deepEqual(report.totals, { hoursTotal: '11.5' });
 });
 
+function partnerReportFixture() {
+  const month = '2026-11';
+  const pointIds = ['moscow_6231', 'krasnogorsk_466'];
+  const reportIds = ['employee-payroll', 'admin-payroll', 'expense-report', 'runner-report'];
+  const partner = {
+    id: 'report-partner', role: 'partner', fullName: 'Report Partner',
+    allowedSections: ['reports'], allowedReports: reportIds,
+    reportAccessDefaultsVersion: 1, allowedPoints: [pointIds[0]],
+  };
+  const users = [
+    { id: 'report-owner', role: 'owner', fullName: 'Report Owner' },
+    partner,
+    ...pointIds.map((pointId, index) => ({
+      id: `admin-${index}`, role: 'admin', fullName: `Admin ${index}`,
+      allowedPoints: [pointId], allowedSections: ['reports'], allowedReports: reportIds,
+      unofficialSalary: '10000',
+    })),
+    { id: 'shared-worker', role: 'employee', fullName: 'Shared Worker', allowedPoints: pointIds,
+      premiumHistory: [{ active: true, amount: '500', startDate: '2026-01-01' }] },
+    { id: 'hidden-worker', role: 'employee', fullName: 'Hidden Worker', allowedPoints: [pointIds[1]] },
+    { id: 'shared-runner', role: 'runner', fullName: 'Shared Runner' },
+    { id: 'hidden-runner', role: 'runner', fullName: 'Hidden Runner' },
+  ];
+  const schedules = Object.fromEntries(pointIds.map((pointId, index) => [`${pointId}:${month}`, {
+    pointId, month, rows: [
+      { employeeId: 'shared-worker', days: index === 0
+        ? { 1: { rateRub: '100', issuedCount: '2' } }
+        : { 1: { rateRub: '200', issuedCount: '4' }, 2: { rateRub: '200', issuedCount: '4' } } },
+      { employeeId: 'shared-runner', rowType: 'runner', days: { 1: { runnerHours: index === 0 ? '5.5' : '8' } } },
+      ...(index === 1 ? [{ employeeId: 'hidden-runner', rowType: 'runner', days: { 1: { runnerHours: '3' } } }] : []),
+    ],
+  } ]));
+  const expenses = pointIds.flatMap((pointId, index) => ['cash', 'corp_card', 'card', 'bank_account'].map((paymentMethod, n) => ({
+    id: `expense-${index}-${n}`, pointId, expenseDate: `${month}-02`, amount: index === 0 ? '100' : '900',
+    paymentMethod, createdBy: `admin-${index}`, comment: index === 0 ? 'Visible comment' : 'Hidden comment',
+    receipt: { id: `receipt-${index}-${n}`, fileName: `receipt-${index}-${n}.pdf`, mimeType: 'application/pdf' },
+  })));
+  const claims = [{ id: 'shared-claim', pointId: pointIds[1], guiltyEmployeeId: 'shared-worker',
+    status: 'withheld', amount: '30', date: `${month}-02`, resolutionDate: `${month}-03` }];
+  return { month, pointIds, reportIds, partner, users, schedules, expenses, claims };
+}
+
+test('partner payroll scopes rows, totals and filter metadata without reallocating premiums or claims', () => {
+  const { users, schedules, claims, month, partner, pointIds } = partnerReportFixture();
+  const globalReport = buildEmployeePayrollReport(users, schedules, claims, month);
+  const report = buildEmployeePayrollReport(users, schedules, claims, month, partner);
+  assert.deepEqual(report.rows, globalReport.rows.filter((row) => row.pointId === pointIds[0]));
+  assert.equal(report.rows.length, 1);
+  assert.equal(report.rows[0].premium, '0');
+  assert.equal(report.rows[0].claims, '0');
+  assert.equal(globalReport.rows.find((row) => row.pointId === pointIds[1] && row.employeeId === 'shared-worker').premium, '500');
+  assert.equal(report.totals.payrollFund, '110');
+  assert.deepEqual(report.adminOptions.map((admin) => [admin.id, admin.pointIds]), [['admin-0', [pointIds[0]]]]);
+  assert.equal(JSON.stringify(report).includes(pointIds[1]), false);
+  for (const allowedPoints of [[], undefined, ['unknown-point']]) {
+    const empty = buildEmployeePayrollReport(users, schedules, claims, month, { ...partner, allowedPoints });
+    assert.deepEqual(empty.rows, []);
+    assert.deepEqual(empty.adminOptions, []);
+    assert.ok(Object.values(empty.totals).every((value) => value === '0'));
+  }
+  for (const role of ['owner', 'admin', 'employee']) {
+    assert.deepEqual(buildEmployeePayrollReport(users, schedules, claims, month, { ...partner, role }).rows, globalReport.rows);
+  }
+});
+
+test('partner expenses hide foreign details, receipts and authors and recalculate payment totals', () => {
+  const { users, expenses, month, partner, pointIds } = partnerReportFixture();
+  const report = buildExpenseReport(users, expenses, month, partner);
+  assert.deepEqual(report.points.map((point) => point.pointId), [pointIds[0]]);
+  assert.equal(report.expenses.length, 4);
+  assert.deepEqual(report.totals, { cashTotal: '100', cardTotal: '200', total: '400', count: 4 });
+  assert.deepEqual(report.authorOptions.map((author) => author.id), ['admin-0']);
+  for (const hidden of [pointIds[1], 'receipt-1-', 'Hidden comment', 'admin-1']) {
+    assert.equal(JSON.stringify(report).includes(hidden), false);
+  }
+  const empty = buildExpenseReport(users, expenses, month, { ...partner, allowedPoints: [] });
+  assert.deepEqual(empty.points, []);
+  assert.deepEqual(empty.expenses, []);
+  assert.deepEqual(empty.authorOptions, []);
+  assert.deepEqual(empty.totals, { cashTotal: '0', cardTotal: '0', total: '0', count: 0 });
+  assert.equal(buildExpenseReport(users, expenses, month, { ...partner, role: 'admin' }).totals.total, '4000');
+});
+
+test('partner runner hours include only assigned points and no foreign-only runners', () => {
+  const { users, schedules, month, partner, pointIds } = partnerReportFixture();
+  const report = buildRunnerReport(users, schedules, month, partner);
+  assert.equal(report.rows.length, 1);
+  assert.equal(report.rows[0].employeeId, 'shared-runner');
+  assert.equal(report.rows[0].hoursTotal, '5.5');
+  assert.deepEqual(report.rows[0].points.map((point) => point.pointId), [pointIds[0]]);
+  assert.deepEqual(report.totals, { hoursTotal: '5.5' });
+  assert.equal(buildRunnerReport(users, schedules, month, { ...partner, role: 'admin' }).totals.hoursTotal, '16.5');
+  const empty = buildRunnerReport(users, schedules, month, { ...partner, allowedPoints: [] });
+  assert.deepEqual(empty.rows, []);
+  assert.deepEqual(empty.totals, { hoursTotal: '0' });
+});
+
+test('partner admin payroll requires all administrator points, not just an overlap', () => {
+  const { users, month, partner, pointIds } = partnerReportFixture();
+  users.push(
+    { id: 'shared-admin', role: 'admin', fullName: 'Shared Admin', allowedPoints: pointIds, unofficialSalary: '20000' },
+    { id: 'unassigned-admin', role: 'admin', fullName: 'Unassigned Admin', allowedPoints: [], unofficialSalary: '30000' },
+  );
+  const reports = { adminPayroll: { [month]: { rows: {
+    'admin-0': { advanceCard: '100', comment: 'Visible admin comment' },
+    'shared-admin': { comment: 'Hidden admin comment' },
+  } } } };
+  const all = buildAdminPayrollReport(users, reports, month);
+  const report = buildAdminPayrollReport(users, reports, month, [], partner);
+  assert.deepEqual(report.rows, all.rows.filter((row) => row.employeeId === 'admin-0'));
+  assert.equal(report.rows[0].payable, '12900');
+  assert.equal(JSON.stringify(report).includes('Hidden admin comment'), false);
+  assert.deepEqual(buildAdminPayrollReport(users, reports, month, [], { ...partner, allowedPoints: [] }).rows, []);
+  assert.deepEqual(buildAdminPayrollReport(users, reports, month, [], { ...partner, allowedPoints: pointIds }).rows,
+    all.rows.filter((row) => row.employeeId !== 'unassigned-admin'));
+  assert.deepEqual(buildAdminPayrollReport(users, reports, month, [], { ...partner, role: 'admin' }).rows, all.rows);
+  const employeeReport = buildEmployeePayrollReport(users, {}, [], month, partner);
+  assert.deepEqual(employeeReport.adminOptions.find((admin) => admin.id === 'shared-admin').pointIds, [pointIds[0]]);
+});
+
+test('report HTTP APIs enforce current partner point and report permissions on every request', async (t) => {
+  const store = createTempStore();
+  const { users, schedules, expenses, claims, month, pointIds, partner, reportIds } = partnerReportFixture();
+  store.saveJson('users.json', users);
+  store.saveJson('schedules.json', schedules);
+  store.saveJson('expenses.json', expenses);
+  store.saveJson('claims.json', claims);
+  const server = http.createServer(createRequestHandler(store));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { await new Promise((resolve) => server.close(resolve)); fs.rmSync(store.dataDir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${server.address().port}/api/reports`;
+  const headers = { Cookie: `session=${store.createSession(partner.id)}`, 'Content-Type': 'application/json' };
+  const getReport = (id, extra = '') => fetch(`${base}/${id}?month=${month}${extra}`, { headers });
+  const ownerHeaders = { Cookie: `session=${store.createSession('report-owner')}` };
+  const adminHeaders = { Cookie: `session=${store.createSession('admin-0')}` };
+  for (const id of reportIds) {
+    const response = await getReport(id, `&pointId=${pointIds[1]}&allowedPoints=${pointIds[1]}&role=owner`);
+    assert.equal(response.status, 200, id);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const payload = await response.json();
+    assert.equal(payload.canManage, false);
+    assert.equal(JSON.stringify(payload).includes(pointIds[1]), false, id);
+    assert.equal(JSON.stringify(payload).includes('hidden-worker'), false, id);
+    if (id === 'admin-payroll') assert.deepEqual(payload.report.rows.map((row) => row.employeeId), ['admin-0']);
+    for (const otherHeaders of [ownerHeaders, adminHeaders]) {
+      const unrestricted = await fetch(`${base}/${id}?month=${month}`, { headers: otherHeaders });
+      assert.equal(unrestricted.status, 200);
+      const full = await unrestricted.json();
+      assert.ok(JSON.stringify(full).includes(id === 'admin-payroll' ? 'admin-1' : pointIds[1]), id);
+    }
+  }
+  assert.equal((await getReport('management-report')).status, 403);
+  assert.equal((await fetch(`${base}/admin-payroll`, { method: 'POST', headers, body: JSON.stringify({ month, rows: [] }) })).status, 403);
+
+  const changePartner = (patch) => store.saveJson('users.json', users.map((user) => user.id === partner.id ? { ...user, ...patch } : user));
+  changePartner({ allowedPoints: [] });
+  for (const id of reportIds) {
+    const { report } = await (await getReport(id)).json();
+    assert.deepEqual(report.rows || report.points, [], id);
+    if (report.totals) assert.ok(Object.values(report.totals).every((value) => Number(value) === 0), id);
+  }
+  changePartner({ allowedPoints: [pointIds[1]] });
+  for (const id of reportIds) {
+    const { report } = await (await getReport(id)).json();
+    assert.equal(JSON.stringify(report).includes(pointIds[0]), false, id);
+    assert.ok((report.rows || report.points).length > 0, id);
+    if (id === 'admin-payroll') assert.deepEqual(report.rows.map((row) => row.employeeId), ['admin-1']);
+  }
+  changePartner({ allowedReports: ['expense-report'] });
+  assert.equal((await getReport('expense-report')).status, 200);
+  assert.equal((await getReport('employee-payroll')).status, 403);
+  changePartner({ allowedSections: [] });
+  assert.equal((await getReport('expense-report')).status, 403);
+});
+
 test('management report combines payroll, rent, expenses, tax, and manual fields', () => {
   const users = [
     {
