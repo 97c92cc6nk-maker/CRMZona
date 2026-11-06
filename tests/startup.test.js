@@ -198,6 +198,21 @@ test('management report keeps aligned column metadata, accessible inputs, full a
   assert.equal(context.reportContent.children[0].children[0].children[2].children[0].children[0].colSpan, 22);
 });
 
+test('employee report checkboxes offer management only for partner and owner roles', () => {
+  const context = apiFixture(async () => {});
+  vm.runInContext(`state.reportOptions = [
+    { id: 'expense-report', title: 'Expenses' },
+    { id: 'management-report', title: 'Management', allowedRoles: ['owner', 'partner'] }
+  ];`, context);
+  for (const role of ['owner', 'partner', 'admin', 'employee', 'runner', 'installer']) {
+    context.targetRole = role;
+    const ids = JSON.parse(JSON.stringify(vm.runInContext('reportAccessOptions(targetRole).map((report) => report.id)', context)));
+    assert.deepEqual(ids, ['owner', 'partner'].includes(role) ? ['expense-report', 'management-report'] : ['expense-report']);
+  }
+  assert.match(app, /reportAccessOptions\(role\), new Set\(user\?\.allowedReports/);
+  assert.match(app, /buildAccessCheckboxes\('allowedReports', reportAccessOptions\(role\)\)/);
+});
+
 test('point cost forms submit only new dated entries and preserve zero', () => {
   const context = apiFixture(async () => {});
   const payload = (input) => {

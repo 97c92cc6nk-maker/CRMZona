@@ -5988,7 +5988,7 @@ function renderEmployeeCardAccess(user, editable) {
   }
   if (reportTarget) {
     const canEditReports = editable && canManageEmployeeSections();
-    reportTarget.replaceChildren(buildAccessCheckboxes('allowedReports', reportAccessOptions(), new Set(user?.allowedReports || [])));
+    reportTarget.replaceChildren(buildAccessCheckboxes('allowedReports', reportAccessOptions(role), new Set(user?.allowedReports || [])));
     syncEmployeeCardReportAccess();
     setInputsDisabled(reportTarget, !canEditReports || !employeeCardReportsSectionChecked());
   }
@@ -6398,7 +6398,7 @@ function renderEmployeeFormAccessControls() {
     setInputsDisabled(sectionTarget, !canManageEmployeeSections());
   }
   if (reportTarget) {
-    reportTarget.replaceChildren(buildAccessCheckboxes('allowedReports', reportAccessOptions()));
+    reportTarget.replaceChildren(buildAccessCheckboxes('allowedReports', reportAccessOptions(role)));
     syncEmployeeFormReportAccess();
     setInputsDisabled(reportTarget, !canManageEmployeeSections() || !employeeFormReportsSectionChecked());
   }
@@ -6412,11 +6412,13 @@ function renderEmployeeFormAccessControls() {
   syncUnofficialSalaryField(els.employeeForm, { editable: true });
 }
 
-function reportAccessOptions() {
-  return (state.reportOptions || []).map((report) => ({
-    id: report.id,
-    label: report.title || report.label || report.id,
-  }));
+function reportAccessOptions(role) {
+  return (state.reportOptions || [])
+    .filter((report) => !report.allowedRoles || report.allowedRoles.includes(role))
+    .map((report) => ({
+      id: report.id,
+      label: report.title || report.label || report.id,
+    }));
 }
 
 function defaultReportIdsForRole(role) {

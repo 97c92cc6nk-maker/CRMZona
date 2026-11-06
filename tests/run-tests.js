@@ -1513,7 +1513,7 @@ test('management revenue above ten million persists through API save, reload and
   assert.ok(store.readAudit().some((entry) => entry.action === 'reports.management_report_saved' && entry.details.month === '2026-09'));
 });
 
-test('management report is visible only to owners', () => {
+test('management report stays unavailable to administrators', () => {
   const store = createTempStore();
   const owner = store.createUser({
     fullName: 'Owner Management Report',
@@ -1554,6 +1554,138 @@ test('management report is visible only to owners', () => {
     updatedAt: '1970-01-01T00:00:00.000Z',
     updatedBy: 'system',
   });
+});
+
+function partnerManagementFixture() {
+  const fixture = partnerReportFixture();
+  const { pointIds, month } = fixture;
+  const retailPoints = pointIds.map((id, index) => ({
+    id, name: `Point ${index}`, address: `Address ${index}`, rentCost: String((index + 1) * 1000),
+    profitDistributionRate: index === 0 ? '50' : '100', internet: { password: 'private-camera-password' },
+  }));
+  const companies = pointIds.map((pointId, index) => ({
+    id: `company-${index}`, name: `Company ${index}`, shortName: `C${index}`,
+    pointIds: [pointId], taxRate: index === 0 ? '6' : '8', bankAccount: 'private-bank-account',
+  }));
+  const reports = { managementReport: { [month]: { rows: Object.fromEntries(pointIds.map((id, index) => [id, {
+    utilities: '50', revenue: index === 0 ? '2000' : '9000', reward: index === 0 ? '20000' : '30000',
+    additionalIncome: '100', notes: { revenue: {
+      text: index === 0 ? 'Visible note' : 'Hidden note', createdByName: 'Owner Test',
+      createdBy: 'report-owner', createdAt: '2026-11-01T10:00:00Z',
+    } },
+  }])) } } };
+  return { ...fixture, retailPoints, companies, reports };
+}
+
+test('partner management report scopes all data, notes and totals without changing calculations', () => {
+  const f = partnerManagementFixture();
+  const build = (actor) => buildManagementReport(f.users, f.schedules, f.claims, f.expenses, f.retailPoints, f.companies, f.reports, f.month, actor);
+  const all = build({ role: 'owner' });
+  const scoped = build(f.partner);
+  assert.deepEqual(scoped.rows, all.rows.filter((row) => row.pointId === f.pointIds[0]));
+  assert.equal(scoped.rows.length, 1);
+  const row = scoped.rows[0];
+  assert.equal(row.salary, '110');
+  assert.equal(row.taxes, '1200');
+  assert.equal(row.profitDistributionRate, '50');
+  assert.equal(row.notes.revenue.text, 'Visible note');
+  for (const [key, value] of Object.entries(scoped.totals)) assert.equal(value, row[key] || '0', key);
+  for (const hidden of [f.pointIds[1], 'Address 1', 'company-1', 'Hidden note', 'private-camera-password', 'private-bank-account']) {
+    assert.equal(JSON.stringify(scoped).includes(hidden), false, hidden);
+  }
+  for (const allowedPoints of [[], undefined, ['nonexistent']]) {
+    const empty = build({ ...f.partner, allowedPoints });
+    assert.deepEqual(empty.rows, []);
+    assert.ok(Object.values(empty.totals).every((value) => value === '0'));
+  }
+  const second = build({ ...f.partner, allowedPoints: [f.pointIds[1]] });
+  assert.equal(second.rows[0].number, 1);
+  assert.equal(second.rows[0].salary, all.rows.find((entry) => entry.pointId === f.pointIds[1]).salary);
+});
+
+for (const mode of ['local', 'supabase']) test(`${mode}: owner can explicitly grant and revoke partner management report access`, async (t) => {
+  const local = createTempStore();
+  t.after(() => fs.rmSync(local.dataDir, { recursive: true, force: true }));
+  const create = (name, role) => local.createUser({ fullName: `${name} Test`, role, allowedSections: ['reports'],
+    email: `${name}@example.com`, phone: `+7999000${String(local.listUsers().length).padStart(4, '0')}`,
+    password: 'TestPass123!', unofficialSalary: '1', allowedPoints: ['moscow_6231'] });
+  const owner = create('Owner', 'owner'), partner = create('Partner', 'partner'), admin = create('Admin', 'admin');
+  const store = mode === 'local' ? local : Object.assign(Object.create(SupabaseStore.prototype), {
+    listUsers: async () => local.listUsers(), loadJson: async (...args) => local.loadJson(...args),
+    saveJson: async (...args) => local.saveJson(...args), audit: async (...args) => local.audit(...args),
+  });
+  const canView = (user) => reportDirectoryForUser(user).some((report) => report.id === 'management-report');
+  assert.equal(canView(partner), false);
+  assert.equal(canView({ ...partner, allowedReports: undefined }), false);
+  assert.equal(canView({ ...partner, allowedReports: undefined, reportAccessDefaultsVersion: 0 }), false);
+  const unauthorized = await store.updateUser(admin, partner.id, { allowedReports: ['management-report'] });
+  assert.equal(canView(unauthorized), false);
+  const granted = await store.updateUser(owner, partner.id, { allowedReports: ['management-report'] });
+  assert.equal(canView(granted), true);
+  assert.equal(permissionsFor(granted).canManageReports, false);
+  assert.equal(canView(new Store(local.dataDir).getUserById(partner.id)), true);
+  const revoked = await store.updateUser(owner, partner.id, { allowedReports: [] });
+  assert.equal(canView(revoked), false);
+  for (const role of ['employee', 'runner', 'installer', 'admin']) {
+    assert.equal(canView({ ...granted, role }), false, role);
+  }
+});
+
+test('management HTTP report requires explicit partner permission and enforces point scope and read-only access', async (t) => {
+  const store = createTempStore();
+  const f = partnerManagementFixture();
+  Object.assign(f.partner, { email: 'partner@example.com', phone: '+79990000901' });
+  for (const [file, data] of Object.entries({ users: f.users, schedules: f.schedules, claims: f.claims,
+    expenses: f.expenses, retail_points: f.retailPoints, companies: f.companies, reports: f.reports })) {
+    store.saveJson(`${file}.json`, data);
+  }
+  const server = http.createServer(createRequestHandler(store));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => { await new Promise((resolve) => server.close(resolve)); fs.rmSync(store.dataDir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${server.address().port}/api`;
+  const headers = { Cookie: `session=${store.createSession(f.partner.id)}`, 'Content-Type': 'application/json' };
+  const ownerHeaders = { Cookie: `session=${store.createSession('report-owner')}`, 'Content-Type': 'application/json' };
+  const url = `${base}/reports/management-report?month=${f.month}`;
+  const patch = async (body) => {
+    const response = await fetch(`${base}/users/${f.partner.id}`, { method: 'PATCH', headers: ownerHeaders, body: JSON.stringify(body) });
+    assert.equal(response.status, 200, await response.clone().text());
+    return (await response.json()).user;
+  };
+  const directory = await (await fetch(`${base}/users`, { headers: ownerHeaders })).json();
+  assert.deepEqual(directory.reports.find((report) => report.id === 'management-report').allowedRoles, ['owner', 'partner']);
+  assert.equal((await fetch(url, { headers })).status, 403);
+  const granted = await patch({ allowedReports: ['management-report'] });
+  assert.deepEqual(granted.allowedReports, ['management-report']);
+  assert.ok(granted.allowedSections.includes('reports'));
+  assert.equal(granted.allowedSections.includes('points'), false);
+  assert.equal(granted.allowedSections.includes('companies'), false);
+  const list = await (await fetch(`${base}/reports`, { headers })).json();
+  assert.deepEqual(list.reports.map((report) => report.id), ['management-report']);
+  for (const allowedPoints of [[f.pointIds[0]], [], [f.pointIds[1]]]) {
+    await patch({ allowedPoints });
+    const response = await fetch(`${url}&pointId=${f.pointIds[1]}&role=owner`, { headers });
+    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    const { report, canManage } = await response.json();
+    assert.equal(canManage, false);
+    assert.deepEqual(report.rows.map((row) => row.pointId), allowedPoints);
+    for (const key of Object.keys(report.totals)) {
+      assert.equal(report.totals[key], report.rows[0]?.[key] || '0', key);
+    }
+  }
+  for (const path of ['companies', 'retail-points']) assert.equal((await fetch(`${base}/${path}`, { headers })).status, 403);
+  const before = store.loadJson('reports.json', {});
+  const deniedWrite = await fetch(`${base}/reports/management-report`, { method: 'POST', headers,
+    body: JSON.stringify({ month: f.month, rows: [{ pointId: f.pointIds[1], revenue: '999999' }] }) });
+  assert.equal(deniedWrite.status, 403);
+  assert.deepEqual(store.loadJson('reports.json', {}), before);
+  const ownerReport = await (await fetch(url, { headers: ownerHeaders })).json();
+  assert.equal(ownerReport.canManage, true);
+  for (const id of f.pointIds) assert.ok(ownerReport.report.rows.some((row) => row.pointId === id));
+  await patch({ allowedReports: [] });
+  assert.equal((await fetch(url, { headers })).status, 403);
+  await patch({ allowedReports: ['management-report'], allowedSections: [] });
+  assert.equal((await fetch(url, { headers })).status, 403);
 });
 
 test('development proposals are scoped by access and reviewed by owner', async () => {
