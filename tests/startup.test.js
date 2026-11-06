@@ -148,6 +148,56 @@ test('saved schedule employee stays selected even when absent from the active di
   assert.equal(readOnly.children.length, 0);
 });
 
+test('management report keeps aligned column metadata, accessible inputs, full addresses and totals', () => {
+  const context = apiFixture(async () => {});
+  function node(tagName) {
+    const el = { tagName, dataset: {}, attributes: {}, children: [], className: '',
+      append(...children) { this.children.push(...children); },
+      replaceChildren(...children) { this.children = children; },
+      setAttribute(key, value) { this.attributes[key] = value; },
+      removeAttribute(key) { delete this.attributes[key]; },
+      querySelector() { return null; },
+    };
+    el.classList = { add(name) { el.className += ` ${name}`; }, remove() {}, toggle() {} };
+    return el;
+  }
+  context.document.createElement = node;
+  context.reportContent = node('div');
+  context.heading = node('h3');
+  context.saveButton = node('button');
+  context.rowData = { pointId: 'point', pointName: 'Тестовая точка', address: 'Полный длинный адрес с номером дома и помещения',
+    number: 1, salary: '100', rent: '20', manager: '14', utilities: '5', reward: '200', taxRate: '8', profitDistributionRate: '100',
+    notes: { pointName: { text: 'Примечание', createdByName: 'Автор' } } };
+  vm.runInContext(`els.reportContent = reportContent; els.reportDetailsTitle = heading; els.saveAdminPayrollReport = saveButton;
+    state.permissions.canManageReports = true;
+    state.managementReport = { title: 'Управленческий отчет', month: '2026-11', rows: [rowData] };
+    renderManagementReport();`, context);
+  const wrap = context.reportContent.children[0];
+  assert.match(wrap.className, /management-report-wrap/);
+  assert.equal(wrap.tabIndex, 0);
+  assert.equal(wrap.attributes.role, 'region');
+  const [columns, head, body, foot] = wrap.children[0].children;
+  const keys = columns.children.map((col) => col.dataset.managementColumn);
+  assert.equal(keys.length, 22);
+  for (const section of [head, body, foot]) assert.deepEqual(section.children[0].children.map((cell) => cell.dataset.managementColumn), keys);
+  assert.ok(head.children[0].children.every((cell) => cell.scope === 'col'));
+  const cells = body.children[0].children;
+  assert.equal(cells[2].children[0].textContent, context.rowData.address);
+  assert.equal(cells[2].children[0].title, context.rowData.address);
+  assert.equal(cells[5].children[0].attributes['aria-label'], 'Коммуналка: Тестовая точка');
+  assert.equal(cells[5].children[0].disabled, false);
+  assert.equal(cells[1].children[0].children[0].textContent, 'Примечание');
+  const footer = foot.children[0].children;
+  assert.equal(footer[0].textContent, '');
+  assert.equal(footer[1].textContent, 'Итого');
+  assert.equal(footer[14].textContent, '139');
+  assert.equal(footer[21].textContent, '45');
+  vm.runInContext('state.permissions.canManageReports = false; renderManagementReport();', context);
+  assert.equal(context.reportContent.children[0].children[0].children[2].children[0].children[5].children[0].disabled, true);
+  vm.runInContext('state.managementReport.rows = []; renderManagementReport();', context);
+  assert.equal(context.reportContent.children[0].children[0].children[2].children[0].children[0].colSpan, 22);
+});
+
 test('point cost forms submit only new dated entries and preserve zero', () => {
   const context = apiFixture(async () => {});
   const payload = (input) => {

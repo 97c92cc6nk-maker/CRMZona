@@ -3296,14 +3296,26 @@ function renderManagementReport() {
   els.reportContent.replaceChildren();
 
   const wrap = document.createElement('div');
-  wrap.className = 'table-wrap report-table-wrap';
+  wrap.className = 'table-wrap report-table-wrap management-report-wrap';
+  wrap.tabIndex = 0;
+  wrap.setAttribute('role', 'region');
+  wrap.setAttribute('aria-label', report.title);
   const table = document.createElement('table');
   table.className = 'reports-table management-report-table';
+  const columns = document.createElement('colgroup');
+  for (const column of MANAGEMENT_REPORT_COLUMNS) {
+    const col = document.createElement('col');
+    col.dataset.managementColumn = column.key;
+    columns.append(col);
+  }
+  table.append(columns);
   const thead = document.createElement('thead');
   const header = document.createElement('tr');
   for (const column of MANAGEMENT_REPORT_COLUMNS) {
     const th = document.createElement('th');
     th.textContent = column.label;
+    th.scope = 'col';
+    th.dataset.managementColumn = column.key;
     if (column.numeric) th.className = 'numeric-cell';
     header.append(th);
   }
@@ -3365,6 +3377,13 @@ function buildManagementReportRow(rowData, canManage) {
       column.key === 'profit' ? 'report-payable-cell' : '',
     ].filter(Boolean).join(' ');
     const cell = appendCell(row, value, classNames);
+    if (column.key === 'address') {
+      const address = document.createElement('span');
+      address.className = 'management-address-text';
+      address.textContent = value;
+      address.title = value;
+      cell.replaceChildren(address);
+    }
     if (column.calculated) {
       cell.dataset.managementCalculated = column.key;
     }
@@ -3376,6 +3395,7 @@ function buildManagementReportRow(rowData, canManage) {
 
 function decorateManagementReportCell(cell, rowData, field, canManage) {
   cell.classList.add('management-note-cell');
+  cell.dataset.managementColumn = field;
   cell.dataset.managementPointId = rowData.pointId;
   cell.dataset.managementNoteField = field;
   cell.classList.remove('has-note');
@@ -3446,6 +3466,8 @@ function managementReportNumberInput(rowData, field, canManage) {
   input.value = rowData[field] || '';
   input.disabled = !canManage;
   input.className = 'report-number-input management-report-input';
+  const label = MANAGEMENT_REPORT_COLUMNS.find((column) => column.key === field)?.label || field;
+  input.setAttribute('aria-label', `${label}: ${rowData.pointName || rowData.pointId}`);
   input.dataset.managementPointId = rowData.pointId;
   input.dataset.reportField = field;
   return input;
@@ -3505,17 +3527,19 @@ function buildManagementReportFooter(totals) {
   const tfoot = document.createElement('tfoot');
   const row = document.createElement('tr');
   for (const column of MANAGEMENT_REPORT_COLUMNS) {
-    if (column.key === 'number') {
-      appendCell(row, 'Итого', 'summary-total-label');
-    } else if (column.numeric) {
+    let cell;
+    if (column.key === 'pointName') {
+      cell = appendCell(row, 'Итого', 'summary-total-label');
+    } else if (column.numeric && column.key !== 'number') {
       const value = column.integer
         ? formatMoney(Math.round(toNumber(totals[column.key])))
         : formatMoney(toNumber(totals[column.key]));
-      const cell = appendCell(row, value, 'numeric-cell');
+      cell = appendCell(row, value, 'numeric-cell');
       cell.dataset.managementTotal = column.key;
     } else {
-      appendCell(row, '');
+      cell = appendCell(row, '');
     }
+    cell.dataset.managementColumn = column.key;
   }
   tfoot.append(row);
   return tfoot;

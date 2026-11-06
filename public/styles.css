@@ -1100,10 +1100,6 @@ tbody tr:last-child td {
   min-width: 780px;
 }
 
-.management-report-table {
-  min-width: 2860px;
-}
-
 .reports-table th,
 .reports-table td {
   padding: 8px;
@@ -1210,13 +1206,139 @@ tbody tr:last-child td {
   min-width: 340px;
 }
 
-.management-address-cell {
-  min-width: 260px;
-}
-
 .constant-name-cell {
   font-weight: 800;
   min-width: 180px;
+}
+
+.table-wrap.management-report-wrap {
+  --management-number-width: 40px;
+  --management-point-width: 160px;
+  --management-address-width: 176px;
+  --management-amount-width: 96px;
+  max-height: clamp(240px, calc(100dvh - 390px), 780px);
+  overflow: auto;
+  isolation: isolate;
+  scroll-padding-block: 64px 44px;
+  scroll-padding-inline-start: calc(var(--management-number-width) + var(--management-point-width) + var(--management-address-width));
+}
+
+.management-report-table {
+  width: calc(var(--management-number-width) + var(--management-point-width) + var(--management-address-width) + 19 * var(--management-amount-width) + 48px);
+  min-width: 0;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.management-report-table col { width: var(--management-amount-width); }
+.management-report-table col[data-management-column="number"] { width: var(--management-number-width); }
+.management-report-table col[data-management-column="pointName"] { width: var(--management-point-width); }
+.management-report-table col[data-management-column="address"] { width: var(--management-address-width); }
+.management-report-table col:is([data-management-column="revenue"], [data-management-column="reward"]) { width: calc(var(--management-amount-width) + 24px); }
+
+.management-report-table th,
+.management-report-table td {
+  padding: 7px 6px;
+  border-right: 1px solid #dfe7eb;
+  border-bottom: 1px solid #e4ebee;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.management-report-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: #edf3f5;
+  box-shadow: inset 0 -1px #b9cbcd;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: 10px;
+}
+
+.management-report-table tbody tr { --management-row-background: #fff; }
+.management-report-table tbody tr:nth-child(even) { --management-row-background: #f7f9fa; }
+.management-report-table tbody tr:hover { --management-row-background: #eef6f3; }
+.management-report-table tbody td { background: var(--management-row-background); font-size: 12px; }
+.management-report-table .numeric-cell { text-align: right; white-space: nowrap; }
+.management-report-table thead th.numeric-cell { text-align: center; white-space: normal; }
+.management-report-table .report-name-cell,
+.management-report-table .management-address-cell {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.management-report-table .management-address-cell { color: #526775; }
+.management-address-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.management-report-table :is(th, td)[data-management-column="number"],
+.management-report-table :is(th, td)[data-management-column="pointName"],
+.management-report-table :is(th, td)[data-management-column="address"] {
+  position: sticky;
+  z-index: 10;
+}
+.management-report-table [data-management-column="number"] { left: 0; text-align: center; }
+.management-report-table [data-management-column="pointName"] { left: var(--management-number-width); }
+.management-report-table [data-management-column="address"] {
+  left: calc(var(--management-number-width) + var(--management-point-width));
+  box-shadow: 2px 0 0 #bccdce;
+}
+.management-report-table thead th:is([data-management-column="number"], [data-management-column="pointName"], [data-management-column="address"]) { z-index: 40; }
+
+.management-report-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  height: 42px;
+  background: #e6f1ec;
+  border-top: 1px solid #95b8ac;
+  font-size: 12px;
+  box-shadow: 0 -1px 0 #b9cbcd;
+}
+.management-report-table tfoot td:is([data-management-column="number"], [data-management-column="pointName"], [data-management-column="address"]) { z-index: 40; }
+.management-report-table tbody td:is([data-management-column="totalExpenses"], [data-management-column="profit"]) {
+  background: #edf5f1;
+  font-weight: 750;
+  border-left: 1px solid #c4d8cf;
+}
+
+.management-report-table .management-report-input {
+  max-width: none;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px;
+  border-radius: 4px;
+  border-color: #d7e2df;
+  background: #fff;
+  text-align: right;
+  font: inherit;
+}
+.management-report-table .management-report-input:focus { border-color: var(--accent); }
+.management-report-table tbody td.has-note:is(:hover, :focus-within) { z-index: 20; }
+
+@media (max-width: 760px) {
+  .table-wrap.management-report-wrap {
+    --management-number-width: 30px;
+    --management-point-width: 100px;
+    --management-address-width: 110px;
+    max-height: clamp(220px, calc(100dvh - 420px), 560px);
+    scroll-padding-inline-start: calc(var(--management-number-width) + var(--management-point-width));
+  }
+  .management-report-table .report-name-cell,
+  .management-report-table .management-address-cell { font-size: 11px; }
+  .management-report-table :is(th, td)[data-management-column="address"] { left: auto; z-index: 0; box-shadow: none; }
+  .management-report-table thead th[data-management-column="address"],
+  .management-report-table tfoot td[data-management-column="address"] { z-index: 30; }
+  .management-report-table [data-management-column="pointName"] { box-shadow: 2px 0 0 #bccdce; }
+  .management-report-table thead th[data-management-column="number"] { padding-inline: 2px; }
 }
 
 .constant-history-cell {
