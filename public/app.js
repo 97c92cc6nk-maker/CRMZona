@@ -3187,7 +3187,7 @@ function renderFinancialForecast(root, forecast, scenarios) {
     section.append(financeElement('p', forecast.error, 'notice warning')); root.append(section); return;
   }
   section.append(financeElement('p', 'Вознаграждение: январь–октябрь 2026, ноябрь–декабрь 2025. Рост расходов к базе: 2027 — 5%; 2028 — 10,25%. Все варианты — оценочный прогноз.', 'finance-model-caveat'));
-  const headers = ['Период', 'Вариант', 'Вознаграждение', 'ЗП на руки', 'Расходы всего', 'НДФЛ в расходах', 'Взносы в расходах', 'Налоги с дохода', 'Прибыль до стоимости денег', 'Стоимость денег', 'Прибыль после стоимости денег', 'Доходность, %'];
+  const headers = ['Год', 'Вариант', 'Вознаграждение', 'ЗП на руки', 'Расходы всего', 'НДФЛ в расходах', 'Взносы в расходах', 'Налоги с дохода', 'Прибыль до стоимости денег', 'Стоимость денег', 'Прибыль после стоимости денег', 'Доходность, %'];
   const keys = ['reward', 'payroll', 'expenses', 'ndfl', 'contributions', 'taxes', 'profit', 'capitalCost', 'netProfit', 'roi'];
   const annual = financeTable(headers, 'Годовой прогноз финансовой модели', 'finance-summary finance-forecast-table');
   for (const year of forecast.years) {
@@ -3207,31 +3207,10 @@ function renderFinancialForecast(root, forecast, scenarios) {
     for (const warning of forecast.warnings) list.append(financeElement('li', warning));
     warningDetails.append(list); section.append(warningDetails);
   }
-  const monthlyDetails = document.createElement('details'); monthlyDetails.append(financeElement('summary', 'Помесячный прогноз'));
-  const monthly = financeTable(headers, 'Помесячный прогноз финансовой модели', 'finance-summary finance-forecast-table');
-  for (const month of forecast.months) {
-    for (const { id, title } of scenarios) {
-      const row = document.createElement('tr'); row.className = `finance-${id}`;
-      const period = financeElement('td', formatMonth(month.month));
-      period.append(financeElement('small', `База: ${formatMonth(month.baseMonth)}`));
-      if (!month[id]) period.append(financeElement('small', 'Нет расчета'));
-      row.append(period, financeElement('td', title));
-      for (const key of keys) financeNumberCell(row, month[id]?.[key], key === 'roi' ? '%' : 'руб.');
-      monthly.body.append(row);
-    }
-  }
-  monthlyDetails.append(monthly.wrap); section.append(monthlyDetails);
   const assumptions = document.createElement('details'); assumptions.append(financeElement('summary', 'Формулы и база прогноза'));
   const list = document.createElement('ul');
-  forecast.assumptions.forEach((text) => list.append(financeElement('li', text))); assumptions.append(list);
-  const base = financeTable(['Месяц прогноза', 'Вознаграждение: источник', 'Расходы: источник', 'Вознаграждение базы', 'ЗП базы', 'Расходы базы'], 'Базовые месяцы прогноза');
-  for (const source of forecast.base) {
-    const row = document.createElement('tr');
-    row.append(financeElement('td', String(source.calendarMonth)), financeElement('td', `${formatMonth(source.month)} · ${source.source}`), financeElement('td', formatMonth(source.expenseMonth)));
-    for (const key of ['reward', 'payroll', 'expenses']) financeNumberCell(row, source[key]);
-    base.body.append(row);
-  }
-  assumptions.append(base.wrap); section.append(assumptions); root.append(section);
+  forecast.assumptions.forEach((text) => list.append(financeElement('li', text)));
+  assumptions.append(list); section.append(assumptions); root.append(section);
 }
 
 function financeFormula(metric, month, scenarioId) {

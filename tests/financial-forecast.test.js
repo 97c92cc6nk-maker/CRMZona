@@ -135,7 +135,7 @@ test('missing sources or stale rates are explicit, never fabricated zero months 
   assert.equal(forecast(invalid).months[0].status, 'missing');
 });
 
-test('forecast UI appends yearly and monthly totals and exposes source periods and formulas', () => {
+test('forecast UI shows only annual totals for both years and preserves formulas', () => {
   class Element {
     constructor(tag) { this.tagName = tag; this.children = []; this.classList = { add() {} }; }
     append(...nodes) { this.children.push(...nodes); }
@@ -151,12 +151,14 @@ test('forecast UI appends yearly and monthly totals and exposes source periods a
   context.renderFinancialForecast(root, f, ['current', 'usn', 'usn15', 'ausn'].map((id) => ({ id, title: id })));
   const all = (el) => [el, ...el.children.flatMap(all)];
   const text = all(root).map((el) => el.textContent || '').join(' ');
-  assert.match(text, /Прогноз на 2027–2028/); assert.match(text, /Помесячный прогноз/);
-  assert.match(text, /2025-11/); assert.match(text, /66 150/);
+  assert.match(text, /Прогноз на 2027–2028/); assert.doesNotMatch(text, /Помесячный прогноз/);
+  assert.match(text, /ноябрь–декабрь 2025/); assert.match(text, /66 150/);
   const tables = all(root).filter((el) => el.tagName === 'table');
+  assert.equal(tables.length, 1);
+  assert.equal(tables[0].children[0].children[0].children[0].textContent, 'Год');
   assert.equal(tables[0].children[1].children.length, 8);
-  assert.equal(tables[1].children[1].children.length, 96);
-  assert.equal(tables[2].children[1].children.length, 12);
+  assert.deepEqual(tables[0].children[1].children.map((row) => row.children[0].textContent),
+    ['2027', '2027', '2027', '2027', '2028', '2028', '2028', '2028']);
   assert.ok(app.indexOf('renderFinancialForecast(root, model.forecast') > app.indexOf('assumptions.append(sources); root.append(assumptions)'));
 });
 
