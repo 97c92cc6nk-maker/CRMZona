@@ -150,6 +150,7 @@ const state = {
   constants: [],
   financialModel: null,
   financialDetailMonth: '',
+  financialDetailScenario: 'usn15',
   repairs: [],
   tasks: [],
   requests: [],
@@ -879,6 +880,7 @@ async function handleLogout() {
     state.constants = [];
     state.financialModel = null;
     state.financialDetailMonth = '';
+    state.financialDetailScenario = 'usn15';
     els.financialContent?.replaceChildren();
     state.reports = [];
     state.reportOptions = [];
@@ -3045,6 +3047,7 @@ function financeNumberCell(row, value, unit) {
 function renderFinancialModel() {
   const model = state.financialModel;
   if (!model || !els.financialContent) return;
+  const scenarios = model.scenarios || [{ id: 'current', title: 'Текущий' }, { id: 'usn', title: 'УСН 6+5%' }];
   const root = els.financialContent; root.replaceChildren();
   const context = financeElement('dl', '', 'finance-context');
   for (const [label, value] of [['Инвестировано', `${formatMoney(model.capital)} руб.`], ['Период', `С сентября 2026 по ${formatMonth(model.months.at(-1)?.month)}`],
@@ -3056,18 +3059,18 @@ function renderFinancialModel() {
   const keys = ['reward', 'expenses', 'taxes', 'profit', 'capitalCost', 'netProfit', 'roi', 'payback'];
   const summary = financeTable(['Месяц', 'Вариант', 'Вознаграждение', 'Расходы', 'Налоги с дохода', 'Прибыль до стоимости денег', 'Стоимость денег', 'Прибыль после стоимости денег', 'Доходность, %', 'Окупаемость, мес.'], 'Сравнение финансовых вариантов', 'finance-summary');
   for (const month of model.months) {
-    for (const [id, title] of [['current', 'Текущий'], ['usn', 'УСН 6+5%']]) {
+    for (const { id, title } of scenarios) {
       const row = document.createElement('tr');
       row.className = `finance-${id}`;
       const monthCell = financeElement('td', formatMonth(month.month));
-      if (month.status !== 'ready') monthCell.append(financeElement('small', month.current ? 'Предварительно' : 'Нет расчета'));
+      if (month.status !== 'ready' || !month[id]) monthCell.append(financeElement('small', month[id] ? 'Предварительно' : 'Нет расчета'));
       row.append(monthCell, financeElement('td', title));
       for (const key of keys) financeNumberCell(row, month[id]?.[key], key === 'roi' ? '%' : 'руб.');
       summary.body.append(row);
     }
   }
   const foot = document.createElement('tfoot');
-  for (const [id, title] of [['current', 'Текущий'], ['usn', 'УСН 6+5%']]) {
+  for (const { id, title } of scenarios) {
     const included = model.months.filter((month) => month[id]);
     const row = document.createElement('tr'); row.append(financeElement('td', `Итого: ${included.length} мес.`), financeElement('td', title));
     for (const key of keys) {
@@ -3081,6 +3084,7 @@ function renderFinancialModel() {
     foot.append(row);
   }
   summary.table.append(foot); root.append(summary.wrap);
+  root.append(financeElement('p', 'УСН 15%: минимум 1% показан помесячно для сравнения, фактически определяется за год. АУСН: взносы приняты 0 по условиям сценария, фиксированный взнос на травматизм не включен. Право на режим не проверено.', 'finance-model-caveat'));
   const warnings = model.months.flatMap((month) => month.warnings.map((warning) => `${formatMonth(month.month)}: ${warning}`));
   if (warnings.length) {
     const list = financeElement('ul', '', 'finance-warnings');
@@ -3095,32 +3099,52 @@ function renderFinancialModel() {
   for (const month of model.months) { const option = financeElement('option', formatMonth(month.month)); option.value = month.month; select.append(option); }
   select.value = state.financialDetailMonth;
   select.addEventListener('change', () => { state.financialDetailMonth = select.value; renderFinancialModel(); });
-  label.append(select); toolbar.append(label); root.append(toolbar);
+  label.append(select); toolbar.append(label);
+  const scenarioLabel = financeElement('label', 'Формулы варианта');
+  const scenarioSelect = document.createElement('select'); scenarioSelect.setAttribute('aria-label', 'Формулы варианта');
+  for (const { id, title } of scenarios.filter((scenario) => scenario.id !== 'current')) {
+    const option = financeElement('option', title); option.value = id; scenarioSelect.append(option);
+  }
+  scenarioSelect.value = state.financialDetailScenario;
+  if (!scenarioSelect.value) scenarioSelect.value = 'usn';
+  const scenarioId = scenarioSelect.value;
+  scenarioSelect.addEventListener('change', () => { state.financialDetailScenario = scenarioSelect.value; renderFinancialModel(); });
+  scenarioLabel.append(scenarioSelect); toolbar.append(scenarioLabel); root.append(toolbar);
   const selected = model.months.find((month) => month.month === state.financialDetailMonth);
   if (selected?.current) {
-    const details = financeTable(['Показатель', 'Текущий', 'УСН 6+5%', 'Формула / источник'], 'Формулы финансовой модели', 'finance-formulas');
+    const details = financeTable(['Показатель', ...scenarios.map((scenario) => scenario.title), 'Формула / источник'], 'Формулы финансовой модели', 'finance-formulas');
     for (const metric of model.metrics) {
       const row = document.createElement('tr'); row.append(financeElement('th', `${metric.label}, ${metric.unit}`)); row.children[0].scope = 'row';
-      financeNumberCell(row, selected.current[metric.key], metric.unit); financeNumberCell(row, selected.usn[metric.key], metric.unit);
-      const formula = financeElement('td', metric.formula, 'finance-formula');
-      const substitution = financeSubstitution(metric.key, selected);
+      for (const { id } of scenarios) financeNumberCell(row, selected[id]?.[metric.key], metric.unit);
+      const formula = financeElement('td', metric.formulas?.[scenarioId] || metric.formula, 'finance-formula');
+      const substitution = financeSubstitution(metric.key, selected, scenarioId);
       if (substitution) formula.append(financeElement('code', substitution));
       row.append(formula); details.body.append(row);
     }
     root.append(details.wrap);
     const rates = selected.financing.segments.map((part) => `70 000 000 × (${financeValue(part.rate)} + 2)% × ${part.days} / ${part.daysInYear}`).join(' + ');
     root.append(financeElement('p', rates ? `Стоимость денег: ${rates} = ${financeValue(selected.financing.amount)} руб.` : 'Стоимость денег не рассчитана: ставка недоступна.', 'finance-rate-formula'));
-    const companyDetails = document.createElement('details'); companyDetails.append(financeElement('summary', 'УСН по компаниям'));
-    const companyTable = financeTable(['Компания', 'База без НДС', 'Взносы', 'УСН 6%', 'Вычет ≤ 50%', 'УСН к уплате'], 'Вычет УСН по компаниям');
-    for (const company of selected.companies) {
+    const scenarioTitle = scenarios.find((scenario) => scenario.id === scenarioId)?.title || '';
+    const companyDetails = document.createElement('details'); companyDetails.append(financeElement('summary', `Налог по компаниям: ${scenarioTitle}`));
+    const incomeOnly = scenarioId === 'usn';
+    const companyHeaders = incomeOnly ? ['Компания', 'База без НДС', 'Взносы', 'УСН 6%', 'Вычет ≤ 50%', 'УСН к уплате']
+      : ['Компания', 'Налоговый доход', 'Офиц. ЗП на руки', 'Начислено ЗП', 'НДФЛ', 'Взносы', 'Налоговые расходы', 'Доходы − расходы', 'Налог по ставке', 'Минимум', 'К уплате'];
+    const companyTable = financeTable(companyHeaders, 'Расчет налога по компаниям');
+    const companyRows = incomeOnly ? selected.companies : selected[`${scenarioId}Companies`];
+    const companyKeys = incomeOnly ? ['netReward', 'contributions', 'usnBefore', 'deduction', 'usn']
+      : ['taxIncome', 'officialNet', 'officialGross', 'ndfl', 'contributions', 'deductibleExpenses', 'taxBase', 'calculatedTax', 'minimumTax', 'businessTax'];
+    for (const company of companyRows || []) {
       const row = document.createElement('tr'); row.append(financeElement('td', company.name));
-      for (const key of ['netReward', 'contributions', 'usnBefore', 'deduction', 'usn']) financeNumberCell(row, company[key]);
+      for (const key of companyKeys) financeNumberCell(row, company[key]);
       companyTable.body.append(row);
     }
-    companyDetails.append(companyTable.wrap); root.append(companyDetails);
-    const pointDetails = document.createElement('details'); pointDetails.append(financeElement('summary', 'Прибыль варианта УСН по точкам'));
-    const pointTable = financeTable(['Точка', 'Вознаграждение', 'Доп. доход', 'Новые расходы', 'НДС + УСН', 'Коэффициент', 'Прибыль'], 'Расчет прибыли по точкам');
-    for (const point of selected.points) {
+    if (!selected[scenarioId]) companyDetails.append(financeElement('p', 'Этот вариант не рассчитан. Причина указана в предупреждениях выше.', 'notice warning'));
+    else companyDetails.append(companyTable.wrap);
+    root.append(companyDetails);
+    const pointDetails = document.createElement('details'); pointDetails.append(financeElement('summary', `Прибыль по точкам: ${scenarioTitle}`));
+    const pointTable = financeTable(['Точка', 'Вознаграждение', 'Доп. доход', 'Факт. расходы', 'Налоги', 'Коэффициент', 'Прибыль'], 'Расчет прибыли по точкам');
+    const pointRows = incomeOnly ? selected.points : selected[`${scenarioId}Points`];
+    for (const point of pointRows || []) {
       const row = document.createElement('tr'); row.append(financeElement('td', point.pointName));
       for (const key of ['reward', 'additionalIncome', 'expenses', 'taxes']) financeNumberCell(row, point[key]);
       financeNumberCell(row, point.coefficient * 100, '%'); financeNumberCell(row, point.profit); pointTable.body.append(row);
@@ -3135,13 +3159,19 @@ function renderFinancialModel() {
   assumptions.append(sources); root.append(assumptions);
 }
 
-function financeSubstitution(key, month) {
-  const v = month.usn, n = (field) => financeValue(v[field]);
+function financeSubstitution(key, month, scenarioId = 'usn') {
+  const v = month[scenarioId];
+  if (!v || v[key] === undefined || v[key] === null) return '';
+  const n = (field) => financeValue(v[field]), ausn = scenarioId === 'ausn';
   const expressions = {
-    officialNet: `${n('payroll')} × 60%`, officialGross: `${n('officialNet')} / 0,87`, ndfl: `${n('officialGross')} × 13%`,
-    contributions: `${n('officialGross')} × 30,2%`, expenses: `${financeValue(month.current.expenses)} − ${n('replacedExpenses')} + ${n('ndfl')} + ${n('contributions')}`,
-    netReward: `${n('reward')} / 1,05`, vat: `${n('reward')} × 5 / 105`, usnBefore: `${n('netReward')} × 6%`,
-    usn: `${n('usnBefore')} − ${n('deduction')}`, taxes: `${n('vat')} + ${n('usn')}`,
+    officialNet: ausn ? `${n('companyCount')} × 5 × 60 000` : `${n('payroll')} × 60%`, officialGross: `${n('officialNet')} / 0,87`, ndfl: `${n('officialGross')} × 13%`,
+    contributions: ausn ? '0' : `${n('officialGross')} × 30,2%`,
+    expenses: `${financeValue(month.current.expenses)} − ${n('replacedExpenses')} + ${n('ndfl')} + ${n('contributions')}${ausn ? ` + ${n('payrollTopUp')}` : ''}`,
+    netReward: ausn ? n('reward') : `${n('reward')} / 1,05`, vat: ausn ? '0' : `${n('reward')} × 5 / 105`, usnBefore: `${n('netReward')} × 6%`,
+    usn: `${n('usnBefore')} − ${n('deduction')}`, taxes: `${n('vat')} + ${n(scenarioId === 'usn' ? 'usn' : 'businessTax')}`,
+    deductibleExpenses: `${n('expenses')} − ${n('excludedPayroll')}`, taxIncome: ausn ? n('reward') : `${n('reward')} / 1,05`,
+    taxBase: `${n('taxIncome')} − ${n('deductibleExpenses')}`, minimumTax: `${n('taxIncome')} × ${ausn ? '3' : '1'}%`,
+    excludedPayroll: ausn ? '' : `${n('payroll')} × 40%`,
     netProfit: v.capitalCost === null ? '' : `${n('profit')} − ${n('capitalCost')}`,
     roi: v.netProfit === null ? '' : `${n('netProfit')} / 70 000 000 × 100%`,
     margin: v.margin === null ? '' : `${n('netProfit')} / (${n('reward')} + ${n('additionalIncome')}) × 100%`,
