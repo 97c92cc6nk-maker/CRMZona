@@ -121,6 +121,7 @@
           <button class="tab" type="button" data-view="constantsView">Константы</button>
           <button class="tab" type="button" data-view="scheduleView">Графики работ</button>
           <button class="tab" type="button" data-view="reportsView">Отчеты</button>
+          <button class="tab is-hidden" type="button" data-view="financialModelView">Фин.модель</button>
           <button class="tab is-hidden" type="button" data-view="printFormsView">Печатные формы</button>
           <button class="tab is-hidden" type="button" data-view="surveillanceView">Видеонаблюдение</button>
           <button class="tab" type="button" data-view="tasksView">Задачи</button>
@@ -889,6 +890,18 @@
         </section>
 
         <div class="notice" id="reportsNotice" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="view" id="financialModelView" aria-labelledby="financialModelTitle">
+        <div class="section-head">
+          <h2 id="financialModelTitle">Фин.модель</h2>
+          <div class="toolbar">
+            <label>По месяц включительно<input id="financialToMonth" type="month" min="2026-09" required></label>
+            <button class="secondary" type="button" id="refreshFinancialModel" title="Пересчитать финансовую модель">Пересчитать</button>
+          </div>
+        </div>
+        <div id="financialNotice" class="notice" role="status" aria-live="polite"></div>
+        <div id="financialContent" aria-busy="false"></div>
       </section>
 
       <section class="view" id="constantsView" aria-labelledby="constantsTitle">

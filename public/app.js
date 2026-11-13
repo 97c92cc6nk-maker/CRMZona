@@ -4,7 +4,7 @@
 const WORKSPACE_NAV = [
   ['Каждый день', [['profileView','Обзор','home'], ['scheduleView','Графики работ','calendar'], ['tasksView','Задачи','check'], ['requestsView','Заявки','inbox']]],
   ['Команда и сеть', [['employeesView','Сотрудники','users'], ['retailPointsView','Торговые точки','pin'], ['companiesView','Компании','building']]],
-  ['Учёт и контроль', [['reportsView','Отчёты','chart'], ['expensesView','Хозрасходы','wallet'], ['claimsView','Претензии','flag'], ['repairsView','Заявки на ремонт','tool'], ['printFormsView','Печатные формы','file'], ['surveillanceView','Видеонаблюдение','video']]],
+  ['Учёт и контроль', [['reportsView','Отчёты','chart'], ['financialModelView','Фин.модель','chart'], ['expensesView','Хозрасходы','wallet'], ['claimsView','Претензии','flag'], ['repairsView','Заявки на ремонт','tool'], ['printFormsView','Печатные формы','file'], ['surveillanceView','Видеонаблюдение','video']]],
   ['Инструменты', [['assistantView','AI-помощник','spark'], ['developmentView','Разработка','code'], ['constantsView','Константы','settings']]],
 ];
 const WORKSPACE_ICONS = {
@@ -148,6 +148,8 @@ const state = {
   companies: [],
   companyPoints: [],
   constants: [],
+  financialModel: null,
+  financialDetailMonth: '',
   repairs: [],
   tasks: [],
   requests: [],
@@ -367,6 +369,10 @@ function bindElements() {
     refreshConstants: document.getElementById('refreshConstants'),
     constantsBody: document.getElementById('constantsBody'),
     constantsNotice: document.getElementById('constantsNotice'),
+    financialToMonth: document.getElementById('financialToMonth'),
+    refreshFinancialModel: document.getElementById('refreshFinancialModel'),
+    financialNotice: document.getElementById('financialNotice'),
+    financialContent: document.getElementById('financialContent'),
     reportsListPanel: document.getElementById('reportsListPanel'),
     reportsList: document.getElementById('reportsList'),
     reportsNotice: document.getElementById('reportsNotice'),
@@ -522,6 +528,7 @@ function bindEvents() {
   els.companyDocumentsList.addEventListener('click', handleCompanyDocumentClick);
   els.refreshCompanies.addEventListener('click', loadCompanies);
   els.refreshConstants?.addEventListener('click', loadConstants);
+  els.refreshFinancialModel?.addEventListener('click', loadFinancialModel);
   els.constantsBody?.addEventListener('click', handleConstantsTableClick);
   els.refreshReports.addEventListener('click', loadReports);
   els.reportsList.addEventListener('click', handleReportsListClick);
@@ -870,6 +877,9 @@ async function handleLogout() {
     state.developmentProposals = [];
     state.developmentStatuses = [];
     state.constants = [];
+    state.financialModel = null;
+    state.financialDetailMonth = '';
+    els.financialContent?.replaceChildren();
     state.reports = [];
     state.reportOptions = [];
     state.adminPayrollReport = null;
@@ -954,6 +964,7 @@ function activateView(viewId) {
 }
 
 function refreshViewData(viewId) {
+  if (viewId === 'financialModelView') loadFinancialModel();
   if (viewId === 'printFormsView') printFormsUI.load();
   if (viewId === 'surveillanceView') surveillanceUI.load();
   if (viewId === 'retailPointsView') {
@@ -989,6 +1000,7 @@ function renderProfile() {
   setTabVisibility('constantsView', Boolean(state.permissions.canViewConstants));
   setTabVisibility('scheduleView', Boolean(state.permissions.canViewSchedule));
   setTabVisibility('reportsView', Boolean(state.permissions.canViewReports));
+  setTabVisibility('financialModelView', Boolean(state.permissions.canViewFinancialModel));
   setTabVisibility('printFormsView', Boolean(state.permissions.canViewPrintForms));
   setTabVisibility('surveillanceView', Boolean(state.permissions.canViewSurveillance));
   setTabVisibility('tasksView', Boolean(state.permissions.canViewTasks));
@@ -2972,6 +2984,170 @@ function developmentAttachmentMime(file) {
   ) return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   if (file?.type === 'text/plain' || name.endsWith('.txt')) return 'text/plain';
   return '';
+}
+
+let financialRequestId = 0;
+async function loadFinancialModel() {
+  if (!state.permissions.canViewFinancialModel) return;
+  const requestId = ++financialRequestId;
+  const userId = state.user?.id;
+  const current = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date()).slice(0, 7);
+  els.financialToMonth.max = current;
+  if (!els.financialToMonth.value) els.financialToMonth.value = current;
+  state.financialModel = null;
+  els.financialContent.replaceChildren();
+  els.financialContent.setAttribute('aria-busy', 'true');
+  showNotice(els.financialNotice, 'Расчет финансовой модели...');
+  await runWithButton(els.refreshFinancialModel, async () => {
+    const data = await api(`/api/financial-model?to=${encodeURIComponent(els.financialToMonth.value)}`);
+    if (requestId !== financialRequestId || state.user?.id !== userId) return;
+    state.financialModel = data.model;
+    if (!data.model.months.some((month) => month.month === state.financialDetailMonth)) {
+      state.financialDetailMonth = data.model.months.filter((month) => month.current && month.month < current).at(-1)?.month
+        || data.model.months.at(-1)?.month || '';
+    }
+    showNotice(els.financialNotice, data.model.rateSource.warning || '', 'warning');
+    renderFinancialModel();
+  }, els.financialNotice);
+  if (requestId === financialRequestId) els.financialContent.setAttribute('aria-busy', 'false');
+}
+
+function financeElement(tag, text = '', className = '') {
+  const el = document.createElement(tag);
+  el.textContent = text;
+  if (className) el.className = className;
+  return el;
+}
+
+function financeValue(value, unit = 'руб.') {
+  if (value === undefined || value === null) return '—';
+  const formatted = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value);
+  return unit === '%' ? `${formatted}%` : formatted;
+}
+
+function financeTable(headers, title, className = '') {
+  const wrap = financeElement('div', '', 'table-wrap finance-table-wrap');
+  wrap.tabIndex = 0; wrap.setAttribute('role', 'region'); wrap.setAttribute('aria-label', title);
+  const table = financeElement('table', '', `finance-table ${className}`);
+  const head = document.createElement('thead'), header = document.createElement('tr');
+  for (const label of headers) { const th = financeElement('th', label); th.scope = 'col'; header.append(th); }
+  head.append(header); table.append(head);
+  const body = document.createElement('tbody'); table.append(body); wrap.append(table);
+  return { wrap, table, body };
+}
+
+function financeNumberCell(row, value, unit) {
+  const cell = financeElement('td', financeValue(value, unit), 'numeric-cell');
+  if (value < 0) cell.classList.add('finance-negative');
+  row.append(cell); return cell;
+}
+
+function renderFinancialModel() {
+  const model = state.financialModel;
+  if (!model || !els.financialContent) return;
+  const root = els.financialContent; root.replaceChildren();
+  const context = financeElement('dl', '', 'finance-context');
+  for (const [label, value] of [['Инвестировано', `${formatMoney(model.capital)} руб.`], ['Период', `С сентября 2026 по ${formatMonth(model.months.at(-1)?.month)}`],
+    ['Ставки ЦБ проверены', model.rateSource.verifiedThrough]]) {
+    const item = document.createElement('div'); item.append(financeElement('dt', label), financeElement('dd', value)); context.append(item);
+  }
+  root.append(context);
+  root.append(financeElement('h3', 'Сравнение по месяцам'));
+  const keys = ['reward', 'expenses', 'taxes', 'profit', 'capitalCost', 'netProfit', 'roi', 'payback'];
+  const summary = financeTable(['Месяц', 'Вариант', 'Вознаграждение', 'Расходы', 'Налоги с дохода', 'Прибыль до стоимости денег', 'Стоимость денег', 'Прибыль после стоимости денег', 'Доходность, %', 'Окупаемость, мес.'], 'Сравнение финансовых вариантов', 'finance-summary');
+  for (const month of model.months) {
+    for (const [id, title] of [['current', 'Текущий'], ['usn', 'УСН 6+5%']]) {
+      const row = document.createElement('tr');
+      row.className = `finance-${id}`;
+      const monthCell = financeElement('td', formatMonth(month.month));
+      if (month.status !== 'ready') monthCell.append(financeElement('small', month.current ? 'Предварительно' : 'Нет расчета'));
+      row.append(monthCell, financeElement('td', title));
+      for (const key of keys) financeNumberCell(row, month[id]?.[key], key === 'roi' ? '%' : 'руб.');
+      summary.body.append(row);
+    }
+  }
+  const foot = document.createElement('tfoot');
+  for (const [id, title] of [['current', 'Текущий'], ['usn', 'УСН 6+5%']]) {
+    const included = model.months.filter((month) => month[id]);
+    const row = document.createElement('tr'); row.append(financeElement('td', `Итого: ${included.length} мес.`), financeElement('td', title));
+    for (const key of keys) {
+      const complete = included.length > 0 && included.every((month) => month[id][key] !== null && month[id][key] !== undefined);
+      let value = complete ? included.reduce((total, month) => total + month[id][key], 0) : null;
+      if (key === 'roi') value = included.length && included.every((month) => month[id].netProfit !== null)
+        ? included.reduce((total, month) => total + month[id].netProfit, 0) / model.capital * 100 : null;
+      if (key === 'payback') value = null;
+      financeNumberCell(row, value, key === 'roi' ? '%' : 'руб.');
+    }
+    foot.append(row);
+  }
+  summary.table.append(foot); root.append(summary.wrap);
+  const warnings = model.months.flatMap((month) => month.warnings.map((warning) => `${formatMonth(month.month)}: ${warning}`));
+  if (warnings.length) {
+    const list = financeElement('ul', '', 'finance-warnings');
+    warnings.forEach((warning) => list.append(financeElement('li', warning))); root.append(list);
+  }
+
+  const toolbar = financeElement('div', '', 'finance-detail-heading');
+  toolbar.append(financeElement('h3', 'Показатели и формулы'));
+  const label = financeElement('label', 'Месяц расчета');
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', 'Месяц расчета');
+  for (const month of model.months) { const option = financeElement('option', formatMonth(month.month)); option.value = month.month; select.append(option); }
+  select.value = state.financialDetailMonth;
+  select.addEventListener('change', () => { state.financialDetailMonth = select.value; renderFinancialModel(); });
+  label.append(select); toolbar.append(label); root.append(toolbar);
+  const selected = model.months.find((month) => month.month === state.financialDetailMonth);
+  if (selected?.current) {
+    const details = financeTable(['Показатель', 'Текущий', 'УСН 6+5%', 'Формула / источник'], 'Формулы финансовой модели', 'finance-formulas');
+    for (const metric of model.metrics) {
+      const row = document.createElement('tr'); row.append(financeElement('th', `${metric.label}, ${metric.unit}`)); row.children[0].scope = 'row';
+      financeNumberCell(row, selected.current[metric.key], metric.unit); financeNumberCell(row, selected.usn[metric.key], metric.unit);
+      const formula = financeElement('td', metric.formula, 'finance-formula');
+      const substitution = financeSubstitution(metric.key, selected);
+      if (substitution) formula.append(financeElement('code', substitution));
+      row.append(formula); details.body.append(row);
+    }
+    root.append(details.wrap);
+    const rates = selected.financing.segments.map((part) => `70 000 000 × (${financeValue(part.rate)} + 2)% × ${part.days} / ${part.daysInYear}`).join(' + ');
+    root.append(financeElement('p', rates ? `Стоимость денег: ${rates} = ${financeValue(selected.financing.amount)} руб.` : 'Стоимость денег не рассчитана: ставка недоступна.', 'finance-rate-formula'));
+    const companyDetails = document.createElement('details'); companyDetails.append(financeElement('summary', 'УСН по компаниям'));
+    const companyTable = financeTable(['Компания', 'База без НДС', 'Взносы', 'УСН 6%', 'Вычет ≤ 50%', 'УСН к уплате'], 'Вычет УСН по компаниям');
+    for (const company of selected.companies) {
+      const row = document.createElement('tr'); row.append(financeElement('td', company.name));
+      for (const key of ['netReward', 'contributions', 'usnBefore', 'deduction', 'usn']) financeNumberCell(row, company[key]);
+      companyTable.body.append(row);
+    }
+    companyDetails.append(companyTable.wrap); root.append(companyDetails);
+    const pointDetails = document.createElement('details'); pointDetails.append(financeElement('summary', 'Прибыль варианта УСН по точкам'));
+    const pointTable = financeTable(['Точка', 'Вознаграждение', 'Доп. доход', 'Новые расходы', 'НДС + УСН', 'Коэффициент', 'Прибыль'], 'Расчет прибыли по точкам');
+    for (const point of selected.points) {
+      const row = document.createElement('tr'); row.append(financeElement('td', point.pointName));
+      for (const key of ['reward', 'additionalIncome', 'expenses', 'taxes']) financeNumberCell(row, point[key]);
+      financeNumberCell(row, point.coefficient * 100, '%'); financeNumberCell(row, point.profit); pointTable.body.append(row);
+    }
+    pointDetails.append(pointTable.wrap); root.append(pointDetails);
+  } else root.append(financeElement('p', 'Для этого месяца нет расчета. Причина указана выше.', 'notice warning'));
+
+  const assumptions = document.createElement('details'); assumptions.append(financeElement('summary', 'Допущения и источники'));
+  const list = document.createElement('ul'); model.assumptions.forEach((text) => list.append(financeElement('li', text))); assumptions.append(list);
+  const sources = financeElement('div', '', 'finance-sources');
+  for (const source of model.sources) { const a = financeElement('a', source.title); a.href = source.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; sources.append(a); }
+  assumptions.append(sources); root.append(assumptions);
+}
+
+function financeSubstitution(key, month) {
+  const v = month.usn, n = (field) => financeValue(v[field]);
+  const expressions = {
+    officialNet: `${n('payroll')} × 60%`, officialGross: `${n('officialNet')} / 0,87`, ndfl: `${n('officialGross')} × 13%`,
+    contributions: `${n('officialGross')} × 30,2%`, expenses: `${financeValue(month.current.expenses)} − ${n('replacedExpenses')} + ${n('ndfl')} + ${n('contributions')}`,
+    netReward: `${n('reward')} / 1,05`, vat: `${n('reward')} × 5 / 105`, usnBefore: `${n('netReward')} × 6%`,
+    usn: `${n('usnBefore')} − ${n('deduction')}`, taxes: `${n('vat')} + ${n('usn')}`,
+    netProfit: v.capitalCost === null ? '' : `${n('profit')} − ${n('capitalCost')}`,
+    roi: v.netProfit === null ? '' : `${n('netProfit')} / 70 000 000 × 100%`,
+    margin: v.margin === null ? '' : `${n('netProfit')} / (${n('reward')} + ${n('additionalIncome')}) × 100%`,
+    payback: v.payback === null ? '' : `70 000 000 / ${n('netProfit')}`,
+  };
+  return expressions[key] ? `${expressions[key]} = ${financeValue(v[key])}` : '';
 }
 
 async function loadConstants() {
