@@ -49,6 +49,10 @@
 #financialContent summary { cursor: pointer; font-weight: 600; font-size: 13px; padding: 5px 0 14px; }
 #financialContent details ul { padding-left: 20px; font-size: 12px; line-height: 1.6; }
 .finance-sources { display: flex; gap: 12px 20px; flex-wrap: wrap; font-size: 12px; }
+.finance-forecast { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; border-top: 1px solid var(--line); padding-top: 24px; min-width: 0; }
+.finance-forecast-table { min-width: 1760px; }
+.finance-forecast-table td:first-child { min-width: 90px; }
+.finance-forecast-table th, .finance-forecast-table td { padding: 9px 10px; }
 @media (max-width: 760px) { .finance-context { grid-template-columns: minmax(0,1fr); gap: 14px; } .finance-context dd { font-size: 16px; } .finance-detail-heading label { width: 100%; } }
 
 .print-context, .print-employee-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }

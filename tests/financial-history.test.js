@@ -166,6 +166,17 @@ test('historical API is owner-only, separate from live reports, and reports miss
   assert.equal(mixed.months[0].current.reward, 2100000);
   assert.equal(mixed.months[1].current.reward, 777);
   assert.equal(mixed.months[1].historical, false);
+  const projected = (await (await fetch(`${base}?from=2024-01&to=2024-01&forecast=1`, { headers: owner })).json()).model;
+  assert.equal(projected.months.length, 1, 'History selection must not restrict the forecast base');
+  assert.equal(projected.forecast.months.length, 24);
+  assert.equal(projected.forecast.base[8].reward, 777);
+  assert.equal(projected.forecast.months[9].status, 'missing', 'October report is not saved');
+  assert.equal(projected.forecast.years[0].scenarios.current, null);
+  assert.ok(store.readAudit().some((event) => event.action === 'finance.forecast_calculated'));
+  for (const role of ['admin', 'partner']) assert.equal((await fetch(`${base}?forecast=1`, { headers: headers(role) })).status, 403);
+  for (const key of protectedKeys) {
+    if (key !== 'users.json') assert.equal(JSON.stringify(store.loadJson(key, null)), before[key]);
+  }
   store.saveJson(KEY, null);
   const missing = (await (await fetch(`${base}?from=2024-01&to=2024-01`, { headers: owner })).json()).model.months[0];
   assert.equal(missing.status, 'missing'); assert.equal(missing.current, undefined);
