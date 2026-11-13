@@ -166,6 +166,21 @@ GOOGLE_DRIVE_EXPENSES_FOLDER_NAME=Хозрасходы
 
 ## Проверка
 
+### История финансовой модели
+
+Январь 2024 — август 2026 хранятся отдельно в `app_kv`, ключ `financial_history.json`.
+Источник — месячные итоги Excel с проверкой сумм и долей прибыли. Данные не импортируются в графики,
+справочники, хозрасходы или управленческие отчеты. С сентября 2026 источник остается прежним.
+Варианты 2–4 для истории — оценка по сети, без разбивки по ИП; АУСН всегда использует 6 × 5 × 60 000 руб. на руки.
+
+`scripts/extract-financial-history.py` читает кешированные результаты Excel, проверяет все 32 месяца и сохраняет
+промежуточный JSON. Его следует хранить только в игнорируемой папке `work/`, не в Git.
+`scripts/import-financial-history.js <payload.json>` проверяет архив и базу без записи; `--apply` вставляет
+только новый ключ, сверяет результат, логирует импорт и отказывается перезаписывать другой архив.
+Серверные настройки Supabase передаются через окружение или `--env-stdin`, не через аргументы командной строки.
+История ключевой ставки ЦБ находится в `lib/financial-key-rate-history.json`; обновление —
+`node scripts/refresh-financial-rate-seed.js YYYY-MM-DD`. При недоступном источнике приложение явно показывает предупреждение.
+
 ```powershell
 & "C:\Users\Аман\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" --test tests\run-tests.js
 & "C:\Users\Аман\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe" tests\smoke.js

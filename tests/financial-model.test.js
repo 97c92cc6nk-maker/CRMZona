@@ -215,12 +215,12 @@ function xml(rows) {
 
 test('CBR rates validate SOAP data, cache successful history and clearly signal unavailable coverage', async () => {
   const daily = [];
-  for (let date = Date.parse('2026-08-31'); date <= Date.parse('2026-11-16'); date += 86400000) {
+  for (let date = Date.parse('2023-12-20'); date <= Date.parse('2026-11-16'); date += 86400000) {
     const day = new Date(date).toISOString().slice(0, 10); daily.push([day, day === '2026-11-16' ? 13 : 14]);
   }
   const payload = xml(daily.reverse());
   const result = parseRates(payload, '2026-11-16');
-  assert.deepEqual(result.entries, [{ date: '2026-08-31', rate: 14 }, { date: '2026-11-16', rate: 13 }]);
+  assert.deepEqual(result.entries, [{ date: '2023-12-20', rate: 14 }, { date: '2026-11-16', rate: 13 }]);
   for (const bad of ['<html>Failure</html>', '<!DOCTYPE x><x/>', xml([['2026-11-16', 'bad']]), xml([['2026-11-16', 14]]), xml([['2026-08-31', 14]])]) {
     assert.throws(() => parseRates(bad, '2026-11-16'));
   }

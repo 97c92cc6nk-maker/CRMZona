@@ -370,6 +370,7 @@ function bindElements() {
     refreshConstants: document.getElementById('refreshConstants'),
     constantsBody: document.getElementById('constantsBody'),
     constantsNotice: document.getElementById('constantsNotice'),
+    financialFromMonth: document.getElementById('financialFromMonth'),
     financialToMonth: document.getElementById('financialToMonth'),
     refreshFinancialModel: document.getElementById('refreshFinancialModel'),
     financialNotice: document.getElementById('financialNotice'),
@@ -2995,13 +2996,15 @@ async function loadFinancialModel() {
   const userId = state.user?.id;
   const current = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Moscow' }).format(new Date()).slice(0, 7);
   els.financialToMonth.max = current;
+  els.financialFromMonth.max = current;
+  if (!els.financialFromMonth.value) els.financialFromMonth.value = '2024-01';
   if (!els.financialToMonth.value) els.financialToMonth.value = current;
   state.financialModel = null;
   els.financialContent.replaceChildren();
   els.financialContent.setAttribute('aria-busy', 'true');
   showNotice(els.financialNotice, 'Расчет финансовой модели...');
   await runWithButton(els.refreshFinancialModel, async () => {
-    const data = await api(`/api/financial-model?to=${encodeURIComponent(els.financialToMonth.value)}`);
+    const data = await api(`/api/financial-model?from=${encodeURIComponent(els.financialFromMonth.value)}&to=${encodeURIComponent(els.financialToMonth.value)}`);
     if (requestId !== financialRequestId || state.user?.id !== userId) return;
     state.financialModel = data.model;
     if (!data.model.months.some((month) => month.month === state.financialDetailMonth)) {
@@ -3050,7 +3053,7 @@ function renderFinancialModel() {
   const scenarios = model.scenarios || [{ id: 'current', title: 'Текущий' }, { id: 'usn', title: 'УСН 6+5%' }];
   const root = els.financialContent; root.replaceChildren();
   const context = financeElement('dl', '', 'finance-context');
-  for (const [label, value] of [['Инвестировано', `${formatMoney(model.capital)} руб.`], ['Период', `С сентября 2026 по ${formatMonth(model.months.at(-1)?.month)}`],
+  for (const [label, value] of [['Инвестировано', `${formatMoney(model.capital)} руб.`], ['Период', `${formatMonth(model.startMonth)} — ${formatMonth(model.months.at(-1)?.month)}`],
     ['Ставки ЦБ проверены', model.rateSource.verifiedThrough]]) {
     const item = document.createElement('div'); item.append(financeElement('dt', label), financeElement('dd', value)); context.append(item);
   }
@@ -3063,7 +3066,8 @@ function renderFinancialModel() {
       const row = document.createElement('tr');
       row.className = `finance-${id}`;
       const monthCell = financeElement('td', formatMonth(month.month));
-      if (month.status !== 'ready' || !month[id]) monthCell.append(financeElement('small', month[id] ? 'Предварительно' : 'Нет расчета'));
+      if (month.historical && month[id]) monthCell.append(financeElement('small', id === 'current' ? 'Факт · Excel' : 'Оценка · Excel'));
+      else if (month.status !== 'ready' || !month[id]) monthCell.append(financeElement('small', month[id] ? 'Предварительно' : 'Нет расчета'));
       row.append(monthCell, financeElement('td', title));
       for (const key of keys) financeNumberCell(row, month[id]?.[key], key === 'roi' ? '%' : 'руб.');
       summary.body.append(row);
@@ -3088,7 +3092,9 @@ function renderFinancialModel() {
   const warnings = model.months.flatMap((month) => month.warnings.map((warning) => `${formatMonth(month.month)}: ${warning}`));
   if (warnings.length) {
     const list = financeElement('ul', '', 'finance-warnings');
-    warnings.forEach((warning) => list.append(financeElement('li', warning))); root.append(list);
+    warnings.forEach((warning) => list.append(financeElement('li', warning)));
+    const disclosure = document.createElement('details');
+    disclosure.append(financeElement('summary', `Замечания к исходным данным: ${warnings.length}`), list); root.append(disclosure);
   }
 
   const toolbar = financeElement('div', '', 'finance-detail-heading');
@@ -3112,11 +3118,24 @@ function renderFinancialModel() {
   scenarioLabel.append(scenarioSelect); toolbar.append(scenarioLabel); root.append(toolbar);
   const selected = model.months.find((month) => month.month === state.financialDetailMonth);
   if (selected?.current) {
+    if (selected.historical) {
+      root.append(financeElement('p', 'История Excel. Варианты 2–4 оценочные: налоги по общим суммам сети, доли прибыли из файла. АУСН: всегда 6 ИП × 5 × 60 000 руб. на руки; при меньшей исходной ЗП разница добавляется к расходам.', 'finance-model-caveat'));
+      const source = document.createElement('details');
+      source.append(financeElement('summary', `Источник: ${selected.source.name}, лист «${selected.source.sheet}»`));
+      const sourceTable = financeTable(['Показатель', 'Ячейка', 'Формула Excel', 'Сумма'], 'Исходные итоги Excel');
+      const labels = { salary: 'ЗП', reward: 'Вознаграждение', totalExpenses: 'Итого расходов', taxes: 'Налоги', profit: 'Прибыль с учетом долей', revenue: 'Выручка', issued: 'Посылок выдано', accountingPayrollTaxesOther: 'Бух, ЗП налоги, др.' };
+      for (const [key, value] of Object.entries(selected.source.cells)) {
+        const row = document.createElement('tr');
+        row.append(financeElement('th', labels[key] || key), financeElement('td', value.cell || 'Нет столбца'), financeElement('td', value.formula || '—'));
+        financeNumberCell(row, value.value); sourceTable.body.append(row);
+      }
+      source.append(sourceTable.wrap); root.append(source);
+    }
     const details = financeTable(['Показатель', ...scenarios.map((scenario) => scenario.title), 'Формула / источник'], 'Формулы финансовой модели', 'finance-formulas');
     for (const metric of model.metrics) {
       const row = document.createElement('tr'); row.append(financeElement('th', `${metric.label}, ${metric.unit}`)); row.children[0].scope = 'row';
       for (const { id } of scenarios) financeNumberCell(row, selected[id]?.[metric.key], metric.unit);
-      const formula = financeElement('td', metric.formulas?.[scenarioId] || metric.formula, 'finance-formula');
+      const formula = financeElement('td', financeFormula(metric, selected, scenarioId), 'finance-formula');
       const substitution = financeSubstitution(metric.key, selected, scenarioId);
       if (substitution) formula.append(financeElement('code', substitution));
       row.append(formula); details.body.append(row);
@@ -3125,7 +3144,7 @@ function renderFinancialModel() {
     const rates = selected.financing.segments.map((part) => `70 000 000 × (${financeValue(part.rate)} + 2)% × ${part.days} / ${part.daysInYear}`).join(' + ');
     root.append(financeElement('p', rates ? `Стоимость денег: ${rates} = ${financeValue(selected.financing.amount)} руб.` : 'Стоимость денег не рассчитана: ставка недоступна.', 'finance-rate-formula'));
     const scenarioTitle = scenarios.find((scenario) => scenario.id === scenarioId)?.title || '';
-    const companyDetails = document.createElement('details'); companyDetails.append(financeElement('summary', `Налог по компаниям: ${scenarioTitle}`));
+    const companyDetails = document.createElement('details'); companyDetails.append(financeElement('summary', `${selected.historical ? 'Налог по сети (оценка)' : 'Налог по компаниям'}: ${scenarioTitle}`));
     const incomeOnly = scenarioId === 'usn';
     const companyHeaders = incomeOnly ? ['Компания', 'База без НДС', 'Взносы', 'УСН 6%', 'Вычет ≤ 50%', 'УСН к уплате']
       : ['Компания', 'Налоговый доход', 'Офиц. ЗП на руки', 'Начислено ЗП', 'НДФЛ', 'Взносы', 'Налоговые расходы', 'Доходы − расходы', 'Налог по ставке', 'Минимум', 'К уплате'];
@@ -3141,8 +3160,8 @@ function renderFinancialModel() {
     if (!selected[scenarioId]) companyDetails.append(financeElement('p', 'Этот вариант не рассчитан. Причина указана в предупреждениях выше.', 'notice warning'));
     else companyDetails.append(companyTable.wrap);
     root.append(companyDetails);
-    const pointDetails = document.createElement('details'); pointDetails.append(financeElement('summary', `Прибыль по точкам: ${scenarioTitle}`));
-    const pointTable = financeTable(['Точка', 'Вознаграждение', 'Доп. доход', 'Факт. расходы', 'Налоги', 'Коэффициент', 'Прибыль'], 'Расчет прибыли по точкам');
+    const pointDetails = document.createElement('details'); pointDetails.append(financeElement('summary', `${selected.historical ? 'Прибыль по долям Excel' : 'Прибыль по точкам'}: ${scenarioTitle}`));
+    const pointTable = financeTable([selected.historical ? 'Группа долей' : 'Точка', 'Вознаграждение', 'Доп. доход', 'Факт. расходы', 'Налоги', 'Коэффициент', 'Прибыль'], 'Расчет прибыли по долям');
     const pointRows = incomeOnly ? selected.points : selected[`${scenarioId}Points`];
     for (const point of pointRows || []) {
       const row = document.createElement('tr'); row.append(financeElement('td', point.pointName));
@@ -3157,6 +3176,30 @@ function renderFinancialModel() {
   const sources = financeElement('div', '', 'finance-sources');
   for (const source of model.sources) { const a = financeElement('a', source.title); a.href = source.url; a.target = '_blank'; a.rel = 'noopener noreferrer'; sources.append(a); }
   assumptions.append(sources); root.append(assumptions);
+}
+
+function financeFormula(metric, month, scenarioId) {
+  let text = metric.formulas?.[scenarioId] || metric.formula;
+  if (!month.historical) return text;
+  const overrides = {
+    reward: 'Вознаграждение из Excel. УСН: сумма включает НДС 5%. АУСН: НДС не выделяется.',
+    payroll: 'Исходная ЗП на руки из Excel; фактический вариант не меняется.',
+    additionalIncome: 'В источнике нет отдельного дополнительного дохода. Формулы прибыли сверены: вознаграждение − расходы − налоги, с учетом долей.',
+    deduction: 'Минимум (взносы сети; 50% УСН сети до уменьшения). Оценка без разбивки по ИП.',
+    calculatedTax: `Максимум (налоговые доходы сети − налоговые расходы сети; 0) × ${scenarioId === 'ausn' ? '20' : '15'}%. Оценка без разбивки по ИП.`,
+    businessTax: 'Максимум (налог по обычной ставке по сети; минимальный налог по сети).',
+    profit: 'Текущий: точный итог «Прибыль» из Excel. Другие варианты: сумма по группам долей ((вознаграждение − новые расходы − новые налоги) × доля 50% или 100%). Налог распределен пропорционально вознаграждению.',
+    taxBase: 'Доходы сети минус налоговые расходы сети. Оценка без разбивки по ИП.',
+  };
+  if (scenarioId === 'ausn') Object.assign(overrides, {
+    officialNet: '6 ИП × 5 работников × 60 000 руб. = 1 800 000 руб. на руки ежемесячно, независимо от исходной ЗП.',
+    officialGross: '1 800 000 / 0,87. Распределение между долями прибыли пропорционально исходной ЗП; если ЗП нулевая — вознаграждению.',
+    payrollTopUp: 'Максимум (1 800 000 − исходная ЗП сети; 0). Добавляется к фактическим расходам только в варианте АУСН.',
+    excludedPayroll: 'Максимум (исходная ЗП сети − 1 800 000; 0).',
+    deductibleExpenses: 'Исходные расходы − «Бух, ЗП налоги, др.» − исходная ЗП + 1 800 000 / 0,87.',
+    expenses: 'Исходные расходы − «Бух, ЗП налоги, др.» + НДФЛ + дополнение ЗП до 1 800 000 руб.',
+  });
+  return overrides[metric.key] || text.replaceAll('из управленческого отчета', 'из Excel').replaceAll('По каждому ИП', 'По сети (оценка)').replaceAll('по каждому ИП', 'по сети (оценка)');
 }
 
 function financeSubstitution(key, month, scenarioId = 'usn') {
