@@ -649,9 +649,10 @@
             <fieldset class="access-fieldset retail-point-wide">
               <legend>Документы по торговой точке</legend>
               <div class="retail-point-document-upload">
-                <label>Файл изображения/PDF<input id="retailPointDocumentFile" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"></label>
+                <label>Документы (изображения/PDF)<input id="retailPointDocumentFile" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"></label>
                 <button class="secondary" type="button" id="uploadRetailPointDocument">Загрузить</button>
               </div>
+              <div class="notice" id="retailPointDocumentsNotice" role="status" aria-live="polite"></div>
               <div class="retail-point-documents-list" id="retailPointDocumentsList"></div>
             </fieldset>
 

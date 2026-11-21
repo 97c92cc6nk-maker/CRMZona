@@ -142,6 +142,7 @@ const state = {
   expensePoints: [],
   users: [],
   retailPoints: [],
+  retailPointDocumentUploading: false,
   retailPointPaymentMethods: [],
   retailPointAdminOptions: [],
   retailPointCompanyOptions: [],
@@ -350,6 +351,7 @@ function bindElements() {
     retailPointDocumentFile: document.getElementById('retailPointDocumentFile'),
     uploadRetailPointDocument: document.getElementById('uploadRetailPointDocument'),
     retailPointDocumentsList: document.getElementById('retailPointDocumentsList'),
+    retailPointDocumentsNotice: document.getElementById('retailPointDocumentsNotice'),
     closeRetailPointCard: document.getElementById('closeRetailPointCard'),
     refreshRetailPoints: document.getElementById('refreshRetailPoints'),
     retailPointsBody: document.getElementById('retailPointsBody'),
@@ -1415,6 +1417,7 @@ function setRetailPointFormValue(name, value) {
 }
 
 function setRetailPointCardEditable(editable) {
+  editable = editable && !state.retailPointDocumentUploading;
   Array.from(els.retailPointCardForm.elements).forEach((field) => {
     field.disabled = !editable;
   });
@@ -1529,25 +1532,53 @@ async function handleRetailPointSave(event) {
 
 async function handleRetailPointDocumentUpload() {
   const pointId = els.retailPointCardForm.dataset.pointId;
-  if (!pointId) return;
-  const file = els.retailPointDocumentFile.files[0];
+  if (!pointId || state.retailPointDocumentUploading) return;
+  const files = Array.from(els.retailPointDocumentFile.files || []);
+  const notice = els.retailPointDocumentsNotice;
   await runWithButton(els.uploadRetailPointDocument, async () => {
-    const payload = await retailPointDocumentPayloadFromFile(file);
-    const data = await api(`/api/retail-points/${encodeURIComponent(pointId)}/documents`, {
-      method: 'POST',
-      body: { file: payload },
-    });
-    replaceRetailPointInState(data.point);
-    state.selectedRetailPointId = data.point.id;
-    els.retailPointDocumentFile.value = '';
-    renderRetailPoints();
-    renderRetailPointCard();
-    showNotice(
-      els.retailPointsNotice,
-      ['Документ загружен в Google Drive.', storageWarningText(data.storage)].filter(Boolean).join(' '),
-      data.storage?.persistent === false ? 'warning' : 'success',
-    );
-  }, els.retailPointsNotice);
+    if (!files.length) throw new Error('Выберите документы для загрузки.');
+    state.retailPointDocumentUploading = true;
+    setRetailPointCardEditable(false);
+    let uploaded = 0;
+    const failures = [];
+    const warnings = new Set();
+    try {
+      // Send files separately: a batch must not exceed the API's per-request size limit.
+      for (const [index, file] of files.entries()) {
+        els.uploadRetailPointDocument.textContent = `Загрузка ${index + 1}/${files.length}`;
+        showNotice(notice, `Загружается ${file.name} (${index + 1}/${files.length})`);
+        try {
+          const payload = await retailPointDocumentPayloadFromFile(file);
+          const data = await api(`/api/retail-points/${encodeURIComponent(pointId)}/documents`, {
+            method: 'POST',
+            body: { file: payload },
+          });
+          replaceRetailPointInState(data.point);
+          uploaded += 1;
+          const warning = storageWarningText(data.storage);
+          if (warning) warnings.add(warning);
+          if (els.retailPointCardForm.dataset.pointId === pointId) {
+            renderRetailPointDocuments(data.point.documents || [], false);
+          }
+        } catch (error) {
+          failures.push(`${file.name}: ${error.message}`);
+        }
+      }
+      showNotice(notice, [
+        `Загружено документов: ${uploaded} из ${files.length}.`,
+        ...warnings,
+        failures.length ? `Не загружены: ${failures.join('; ')}.` : '',
+      ].filter(Boolean).join(' '), failures.length ? (uploaded ? 'warning' : 'error') : warnings.size ? 'warning' : 'success');
+    } finally {
+      // Clear the selection so retrying cannot duplicate files already uploaded successfully.
+      els.retailPointDocumentFile.value = '';
+      state.retailPointDocumentUploading = false;
+      const editable = Boolean(state.permissions.canManageRetailPoints);
+      setRetailPointCardEditable(editable);
+      const point = selectedRetailPoint();
+      if (point) renderRetailPointDocuments(point.documents || [], editable);
+    }
+  }, notice);
 }
 
 async function handleRetailPointDocumentClick(event) {
