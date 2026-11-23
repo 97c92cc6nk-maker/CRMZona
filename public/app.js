@@ -1672,9 +1672,20 @@ function replaceRetailPointInState(point) {
   }
 }
 
-async function retailPointDocumentPayloadFromFile(file) {
+async function retailPointDocumentPayloadFromFile(file, { allowOffice = true, maxBytes = 10 * 1024 * 1024 } = {}) {
   if (!file) throw new Error('Выберите файл документа.');
   const lowerName = String(file.name || '').toLowerCase();
+  const officeTypes = {
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+  const extension = lowerName.split('.').pop();
+  const officeMime = allowOffice && (Object.values(officeTypes).includes(file.type)
+    ? file.type : (Object.hasOwn(officeTypes, extension) ? officeTypes[extension] : ''));
+  const sizeError = `Файл документа слишком большой. Максимум ${maxBytes / (1024 * 1024)} МБ.`;
+  if (allowOffice && file.size > maxBytes) throw new Error(sizeError);
   const isPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf');
   const isImage = (
     ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
@@ -1683,26 +1694,25 @@ async function retailPointDocumentPayloadFromFile(file) {
     || lowerName.endsWith('.png')
     || lowerName.endsWith('.webp')
   );
-  if (!isPdf && !isImage) {
-    throw new Error('Поддерживаются изображения JPG, PNG, WebP или PDF.');
+  if (!isPdf && !isImage && !officeMime) {
+    throw new Error(allowOffice
+      ? 'Поддерживаются JPG, PNG, WebP, PDF, DOC, DOCX, XLS или XLSX.'
+      : 'Поддерживаются изображения JPG, PNG, WebP или PDF.');
   }
 
-  if (isPdf) {
-    if (file.size > 5 * 1024 * 1024) {
-      throw new Error('PDF документа слишком большой. Максимум 5 МБ.');
-    }
+  if (isPdf || officeMime) {
+    if (file.size > maxBytes) throw new Error(sizeError);
+    const mimeType = isPdf ? 'application/pdf' : officeMime;
     return {
       fileName: file.name,
-      mimeType: 'application/pdf',
+      mimeType,
       size: file.size,
-      dataUrl: await readFileAsDataUrlWithMime(file, 'application/pdf'),
+      dataUrl: await readFileAsDataUrlWithMime(file, mimeType),
     };
   }
 
   const compressed = await compressReceiptImage(file);
-  if (compressed.size > 5 * 1024 * 1024) {
-    throw new Error('Файл документа слишком большой. Максимум 5 МБ.');
-  }
+  if (compressed.size > maxBytes) throw new Error(sizeError);
   return {
     fileName: file.name,
     mimeType: 'image/jpeg',
@@ -2015,7 +2025,7 @@ async function handleCompanyDocumentUpload() {
   if (!companyId) return;
   const file = els.companyDocumentFile.files[0];
   await runWithButton(els.uploadCompanyDocument, async () => {
-    const payload = await retailPointDocumentPayloadFromFile(file);
+    const payload = await retailPointDocumentPayloadFromFile(file, { allowOffice: false, maxBytes: 5 * 1024 * 1024 });
     const data = await api(`/api/companies/${encodeURIComponent(companyId)}/documents`, {
       method: 'POST',
       body: { file: payload },

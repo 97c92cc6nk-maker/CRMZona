@@ -6,7 +6,16 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
-const { Store, SupabaseStore } = require('../lib/app');
+const http = require('node:http');
+const { Store, SupabaseStore, createRequestHandler } = require('../lib/app');
+
+const OFFICE_TYPES = {
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 function functionSource(name) {
@@ -53,6 +62,46 @@ test('point document picker accepts multiple files and has its own accessible re
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   assert.match(html, /<input[^>]*id="retailPointDocumentFile"[^>]*\bmultiple\b/);
   assert.match(html, /id="retailPointDocumentsNotice"[^>]*role="status"/);
+  const picker = html.match(/<input[^>]*id="retailPointDocumentFile"[^>]*>/)[0];
+  for (const ext of Object.keys(OFFICE_TYPES)) assert.ok(picker.includes(`.${ext}`));
+});
+
+function payloadUI() {
+  const context = vm.createContext({
+    readFileAsDataUrlWithMime: async (_file, mime) => `data:${mime};base64,dGVzdA==`,
+    compressReceiptImage: async (file) => ({ size: file.size, dataUrl: 'data:image/jpeg;base64,dGVzdA==' }),
+  });
+  vm.runInContext(functionSource('retailPointDocumentPayloadFromFile'), context);
+  return context.retailPointDocumentPayloadFromFile;
+}
+
+test('UI accepts Office documents with native, generic and missing MIME types up to 10 MiB', async () => {
+  const payload = payloadUI();
+  for (const [ext, mime] of Object.entries(OFFICE_TYPES)) {
+    for (const type of [mime, '', 'application/octet-stream']) {
+      const file = { name: `document.${ext.toUpperCase()}`, type, size: MAX_FILE_SIZE };
+      const result = await payload(file);
+      assert.equal(result.mimeType, mime);
+      assert.equal(result.fileName, file.name);
+      assert.equal(result.size, MAX_FILE_SIZE);
+      assert.ok(result.dataUrl.startsWith(`data:${mime};base64,`));
+    }
+  }
+  for (const [name, type] of [['document.pdf', 'application/pdf'], ['photo.jpg', 'image/jpeg']]) {
+    assert.equal((await payload({ name, type, size: MAX_FILE_SIZE })).size, MAX_FILE_SIZE);
+    await assert.rejects(payload({ name, type, size: MAX_FILE_SIZE + 1 }), /10 МБ/);
+  }
+  await assert.rejects(payload({ name: 'large.xlsx', type: '', size: MAX_FILE_SIZE + 1 }), /10 МБ/);
+  for (const name of ['file.exe', 'file.docm', 'file.xlsm', 'file.zip', 'file.constructor']) {
+    await assert.rejects(payload({ name, type: 'application/octet-stream', size: 5 }), /Поддерживаются/);
+  }
+});
+
+test('company document helper keeps the existing formats and 5 MiB limit', async () => {
+  const payload = payloadUI();
+  const options = { allowOffice: false, maxBytes: 5 * 1024 * 1024 };
+  await assert.rejects(payload({ name: 'doc.docx', type: OFFICE_TYPES.docx, size: 10 }, options), /Поддерживаются/);
+  await assert.rejects(payload({ name: 'doc.pdf', type: 'application/pdf', size: options.maxBytes + 1 }, options), /5 МБ/);
 });
 
 test('UI uploads every selected document sequentially, preserves existing files and supports another batch', async () => {
@@ -101,7 +150,7 @@ test('UI does not switch back or render wrong documents when a different point i
   assert.deepEqual(ui.rendered(), [{ id: 'another-document' }]);
 });
 
-for (const mode of ['local', 'supabase']) test(`${mode}: multiple point documents survive reload, card edits and a failed upload`, async (t) => {
+for (const mode of ['local', 'supabase']) test(`${mode}: multiple point documents, Office formats and size limits persist correctly`, async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'crm-point-docs-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const local = new Store(dir);
@@ -151,4 +200,46 @@ for (const mode of ['local', 'supabase']) test(`${mode}: multiple point document
   const reopened = new Store(dir).listRetailPoints(owner).find(p => p.id === point.id);
   assert.deepEqual(reopened.documents, saved);
   assert.equal(driveRequests.filter(r => r.url.includes('/permissions?')).length, 3);
+
+  fail = false;
+  for (const [ext, mimeType] of Object.entries(OFFICE_TYPES)) {
+    for (const incomingType of [mimeType, 'application/octet-stream']) {
+      const result = await store.addRetailPointDocument(owner, point.id, { file: {
+        fileName: `document.${ext.toUpperCase()}`, dataUrl: `data:${incomingType};base64,dGVzdA==`,
+      } });
+      assert.equal(result.document.mimeType, mimeType);
+      assert.ok(result.document.fileName.endsWith(`.${ext}`));
+      const request = driveRequests.filter(r => r.url.includes('/upload/drive/')).at(-1);
+      assert.ok(request.options.body.toString().includes(`Content-Type: ${mimeType}\r\n`));
+    }
+  }
+  const largeFile = { fileName: 'large.xlsx', dataUrl: `data:${OFFICE_TYPES.xlsx};base64,${Buffer.alloc(MAX_FILE_SIZE, 65).toString('base64')}` };
+  if (mode === 'local') {
+    const server = http.createServer(createRequestHandler(local));
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
+    const response = await originalFetch(`http://127.0.0.1:${server.address().port}/api/retail-points/${point.id}/documents`, {
+      method: 'POST', headers: { Cookie: `session=${local.createSession(owner.id)}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file: largeFile }),
+    });
+    const result = await response.json();
+    assert.equal(response.status, 201, JSON.stringify(result));
+    assert.equal(result.document.size, MAX_FILE_SIZE);
+  } else {
+    assert.equal((await store.addRetailPointDocument(owner, point.id, { file: largeFile })).document.size, MAX_FILE_SIZE);
+  }
+  const beforeRejected = uploadCount;
+  for (const rejected of [
+    { fileName: 'too-large.pdf', dataUrl: `data:application/pdf;base64,${Buffer.alloc(MAX_FILE_SIZE + 1, 65).toString('base64')}` },
+    { fileName: 'script.docx', dataUrl: 'data:text/html;base64,dGVzdA==' },
+    { fileName: 'file.exe', dataUrl: 'data:application/octet-stream;base64,dGVzdA==' },
+    { fileName: 'file.docm', dataUrl: 'data:application/vnd.ms-word.document.macroEnabled.12;base64,dGVzdA==' },
+  ]) {
+    await assert.rejects(store.addRetailPointDocument(owner, point.id, { file: rejected }), /10 МБ|Поддерживаются/);
+  }
+  assert.equal(uploadCount, beforeRejected, 'Rejected uploads must not reach Google Drive');
+  const restored = new Store(dir).listRetailPoints(owner).find(p => p.id === point.id).documents;
+  assert.equal(restored.length, 12);
+  assert.equal(restored.at(-1).size, MAX_FILE_SIZE);
+  assert.equal(restored.at(-1).mimeType, OFFICE_TYPES.xlsx);
 });
