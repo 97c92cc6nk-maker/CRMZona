@@ -27,7 +27,7 @@ function sources() {
 }
 const forecast = (values = sources(), rates = SEED) => buildFinancialForecast({ sources: values, rates, asOf: '2026-11-13' });
 
-test('forecast maps twelve seasonal source months, retains reward, and compounds operating costs without mutating history', () => {
+test('forecast maps seasonal months, adjusts only USN reward and compounds costs without mutating history', () => {
   const input = sources(), before = JSON.stringify(input), f = forecast(input);
   assert.deepEqual(BASE_MONTHS, ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2025-11', '2025-12']);
   assert.equal(f.months.length, 24);
@@ -39,7 +39,9 @@ test('forecast maps twelve seasonal source months, retains reward, and compounds
       const original = input.find((s) => s.month === month.baseMonth).report.rows[0];
       assert.equal(month.expenseFactor, factor);
       for (const id of ['current', 'usn', 'usn15', 'ausn']) {
-        assert.equal(month[id].reward, original.reward);
+        if (['usn', 'usn15'].includes(id)) {
+          near(month[id].reward, original.reward / input.reduce((sum, s) => sum + s.report.rows[0].reward, 0) * 150589002);
+        } else assert.equal(month[id].reward, original.reward);
         assert.equal(month[id].additionalIncome, 50000);
         near(month[id].payroll, original.salary * factor);
       }
@@ -60,10 +62,11 @@ test('forecast recalculates all taxes from inflated inputs, indexes six-IP AUSN 
     const taxableCosts = cashCosts - netSalary * 0.4;
     near(m.usn.expenses, cashCosts);
     near(m.usn.ndfl, ndfl); near(m.usn.contributions, contributions);
-    near(m.usn.vat, 600000); near(m.usn.usn, 720000 - Math.min(360000, contributions));
+    const netReward = m.usn.reward / 1.05, vat = m.usn.reward - netReward, usnBefore = netReward * 0.06;
+    near(m.usn.vat, vat); near(m.usn.usn, usnBefore - Math.min(usnBefore / 2, contributions));
     near(m.usn15.deductibleExpenses, taxableCosts);
-    near(m.usn15.businessTax, Math.max(Math.max(12000000 - taxableCosts, 0) * 0.15, 120000));
-    near(m.usn15.taxes, m.usn15.businessTax + 600000);
+    near(m.usn15.businessTax, Math.max(Math.max(netReward - taxableCosts, 0) * 0.15, netReward * 0.01));
+    near(m.usn15.taxes, m.usn15.businessTax + vat);
     near(m.ausn.officialNet, 1800000 * factor);
     near(m.ausn.officialGross, 1800000 * factor / 0.87);
     near(m.ausn.expenses, 3900000 * factor + 1800000 * factor / 0.87 * 0.13);
@@ -101,7 +104,7 @@ test('forecast tops up AUSN wages when lower than the indexed official fund and 
   near(m.ausn.businessTax, 2100000 * 0.03);
   input[0].report.rows = [row({ salary: 3000000, totalExpenses: 30000000 })];
   const loss = forecast(input).months[0];
-  assert.equal(loss.usn15.businessTax, 120000);
+  near(loss.usn15.businessTax, loss.usn15.reward / 1.05 * 0.01);
   assert.equal(loss.ausn.businessTax, 378000);
   assert.equal(loss.ausn.payback, null);
 });
@@ -119,6 +122,58 @@ test('annual figures sum twelve months while rates/ROI are not summed and 2028 u
   }
   near(f.months[13].current.capitalCost, 70000000 * 0.16 * 29 / 366);
   assert.equal(f.years[0].scenarios.current.ndfl, null);
+});
+
+test('USN annual reward is exactly 150589002 in both years, without changing current/AUSN or any cost inputs', () => {
+  const input = sources();
+  const originalAnnual = 138556467.98;
+  let allocated = 0;
+  for (const [index, source] of input.entries()) {
+    const cumulative = Math.round(originalAnnual * 100 * (index + 1) / 12);
+    source.report.rows[0].reward = (cumulative - allocated) / 100;
+    allocated = cumulative;
+  }
+  // Mixed owner shares must keep their relative reward weights, not distribute growth equally.
+  input[1].report.rows = [row({ reward: 5000000, profitDistributionRate: 50 }), row({ reward: input[1].report.rows[0].reward - 5000000 })];
+  const before = JSON.stringify(input), f = forecast(input);
+  for (const year of f.years) {
+    assert.equal(year.scenarios.usn.reward, 150589002);
+    assert.equal(year.scenarios.usn15.reward, 150589002);
+    assert.equal(year.scenarios.current.reward, originalAnnual);
+    assert.equal(year.scenarios.ausn.reward, originalAnnual);
+  }
+  for (const month of f.months) {
+    const base = input.find(s => s.month === month.baseMonth);
+    const rows = base.report.rows.map(r => ({ ...r, companyId: 'forecast-network', companyShortName: 'Сеть: 6 ИП',
+      salary: r.salary * month.expenseFactor, totalExpenses: r.totalExpenses * month.expenseFactor,
+      accountingPayrollTaxesOther: r.accountingPayrollTaxesOther * month.expenseFactor,
+      profit: (r.reward + r.additionalIncome - r.totalExpenses * month.expenseFactor - r.taxes) * r.profitDistributionRate / 100 }));
+    const baseline = calculateMonth({ rows }, month.financing, { ausnCompanyMultiplier: 6, ausnSalaryFactor: month.expenseFactor });
+    assert.deepEqual(month.current, baseline.current);
+    assert.deepEqual(month.ausn, baseline.ausn);
+    for (const id of ['usn', 'usn15']) {
+      for (const field of ['additionalIncome', 'payroll', 'officialNet', 'officialGross', 'ndfl', 'contributions', 'replacedExpenses', 'expenses', 'excludedPayroll', 'deductibleExpenses', 'capitalCost']) {
+        assert.equal(month[id][field], baseline[id][field], `${id}.${field} must stay unchanged`);
+      }
+      assert.notEqual(month[id].taxes, baseline[id].taxes);
+      assert.notEqual(month[id].profit, baseline[id].profit);
+    }
+  }
+  assert.equal(JSON.stringify(input), before);
+  assert.deepEqual(forecast([...input].reverse()).years, f.years);
+});
+
+test('USN override handles zero reward months and does not invent weights for missing or zero annual sources', () => {
+  const input = sources(); input[0].report.rows[0].reward = 0;
+  const f = forecast(input);
+  assert.equal(f.months[0].usn.reward, 0);
+  assert.equal(f.years[0].scenarios.usn.reward, 150589002);
+  for (const incomplete of [input.slice(1), input.map(s => ({ ...s, report: { rows: [row({ reward: 0 })] } }))]) {
+    const result = forecast(incomplete);
+    assert.equal(result.years[0].scenarios.usn, null);
+    assert.equal(result.years[1].scenarios.usn15, null);
+    assert.ok(result.warnings.some(text => text.includes('150 589 002')));
+  }
 });
 
 test('missing sources or stale rates are explicit, never fabricated zero months or complete annual totals', () => {
@@ -153,6 +208,7 @@ test('forecast UI shows only annual totals for both years and preserves formulas
   const text = all(root).map((el) => el.textContent || '').join(' ');
   assert.match(text, /Прогноз на 2027–2028/); assert.doesNotMatch(text, /Помесячный прогноз/);
   assert.match(text, /ноябрь–декабрь 2025/); assert.match(text, /66 150/);
+  assert.match(text, /150 589 002/);
   const tables = all(root).filter((el) => el.tagName === 'table');
   assert.equal(tables.length, 1);
   assert.equal(tables[0].children[0].children[0].children[0].textContent, 'Год');
