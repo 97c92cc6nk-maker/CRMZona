@@ -1005,6 +1005,35 @@ tbody tr:last-child td {
   overflow-wrap: anywhere;
 }
 
+.repairs-table .repair-status {
+  font-weight: 600;
+}
+
+.repairs-table span.repair-status {
+  display: inline-block;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.repairs-table .repair-status[data-status="in_progress"],
+.repairs-table select[name="repairStatus"] option[value="in_progress"] {
+  color: #9f1d1d;
+  background-color: #fee2e2;
+  border-color: #dc8a8a;
+}
+
+.repairs-table .repair-status[data-status="done"],
+.repairs-table select[name="repairStatus"] option[value="done"] {
+  color: #166534;
+  background-color: #dcfce7;
+  border-color: #86c99e;
+}
+
+.repairs-table .repair-status:disabled {
+  opacity: 1;
+}
+
 .point-cost-history table {
   width: 100%;
   table-layout: fixed;

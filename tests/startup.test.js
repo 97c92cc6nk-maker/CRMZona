@@ -241,6 +241,57 @@ test('repair rows show a plain-text point address after the point and a missing-
   assert.equal(vm.runInContext('buildRepairRow(repair).children[2].textContent', context), 'Адрес не указан');
 });
 
+test('repair status colours follow the value for editors and read-only users', () => {
+  const context = apiFixture(async () => {});
+  context.document.createElement = (tagName) => ({ tagName, dataset: {}, attributes: {}, children: [],
+    append(child) { this.children.push(child); }, setAttribute(key, value) { this.attributes[key] = value; } });
+  vm.runInContext(`state.repairStatuses = [
+    { value: 'new', label: 'Новая' }, { value: 'in_progress', label: 'В работе' },
+    { value: 'done', label: 'Выполнена' }, { value: 'canceled', label: 'Отменена' }
+  ];`, context);
+  for (const editable of [true, false]) {
+    context.editable = editable;
+    vm.runInContext('state.permissions.canManageRepairs = editable;', context);
+    for (const status of ['new', 'in_progress', 'done', 'canceled']) {
+      context.repair = { id: 'test', title: 'Test repair', status, statusLabel: status };
+      const control = vm.runInContext('repairStatusCell(repair).children[0]', context);
+      assert.equal(control.tagName, editable ? 'select' : 'span');
+      assert.equal(control.className, 'repair-status');
+      assert.equal(control.dataset.status, status);
+      if (editable) {
+        assert.equal(control.children.find(option => option.selected).value, status);
+        assert.equal(control.attributes['aria-label'], 'Статус заявки: Test repair');
+      } else assert.equal(control.textContent, status);
+    }
+  }
+});
+
+test('repair status colour changes immediately and restores saved status if saving fails', async () => {
+  let fail = false;
+  const context = apiFixture(async (_url, options) => {
+    const status = JSON.parse(options.body).status;
+    assert.equal(context.select.dataset.status, status);
+    assert.equal(context.select.disabled, true);
+    return { ok: !fail, status: fail ? 503 : 200,
+      text: async () => JSON.stringify(fail ? { error: 'Save failed' } : { repair: { id: 'test', status } }) };
+  });
+  context.select = { value: 'done', dataset: { status: 'in_progress' },
+    closest: () => ({ dataset: { repairId: 'test' } }) };
+  context.event = { target: { closest: () => context.select } };
+  vm.runInContext(`state.repairs = [{ id: 'test', status: 'in_progress' }];
+    els.repairsNotice = {}; renderRepairs = () => {}; loadAudit = async () => {}; loadRepairs = async () => {};`, context);
+  await vm.runInContext('handleRepairStatusChange(event)', context);
+  assert.equal(context.select.dataset.status, 'done');
+  assert.equal(vm.runInContext('state.repairs[0].status', context), 'done');
+  assert.equal(context.select.disabled, false);
+  fail = true;
+  context.select.value = 'in_progress';
+  await vm.runInContext('handleRepairStatusChange(event)', context);
+  assert.equal(context.select.dataset.status, 'done');
+  assert.equal(context.select.value, 'done');
+  assert.equal(context.select.disabled, false);
+});
+
 test('repair deletion requires its own permission and confirmation; failed deletes preserve the row', async () => {
   const requests = [];
   let fail = false, confirmed = false, prompts = 0;

@@ -4800,13 +4800,20 @@ function repairAttachmentsCell(repair) {
 function repairStatusCell(repair) {
   const cell = document.createElement('td');
   if (!state.permissions.canManageRepairs) {
-    cell.textContent = repair.statusLabel;
+    const label = document.createElement('span');
+    label.className = 'repair-status';
+    label.dataset.status = repair.status;
+    label.textContent = repair.statusLabel;
+    cell.append(label);
     return cell;
   }
 
   const select = document.createElement('select');
   select.name = 'repairStatus';
+  select.className = 'repair-status';
+  select.dataset.status = repair.status;
   select.dataset.field = 'repairStatus';
+  select.setAttribute('aria-label', `Статус заявки: ${repair.title || repair.id}`);
   for (const status of state.repairStatuses) {
     const option = document.createElement('option');
     option.value = status.value;
@@ -4882,6 +4889,7 @@ async function handleRepairStatusChange(event) {
   if (!select) return;
   const row = select.closest('tr[data-repair-id]');
   if (!row) return;
+  select.dataset.status = select.value;
   select.disabled = true;
   try {
     const data = await api(`/api/repairs/${encodeURIComponent(row.dataset.repairId)}`, {
@@ -4898,6 +4906,11 @@ async function handleRepairStatusChange(event) {
       storageWarning ? 'warning' : 'success',
     );
   } catch (error) {
+    const savedRepair = state.repairs.find((repair) => repair.id === row.dataset.repairId);
+    if (savedRepair) {
+      select.value = savedRepair.status;
+      select.dataset.status = savedRepair.status;
+    }
     showNotice(els.repairsNotice, error.message, 'error');
     await loadRepairs();
   } finally {
